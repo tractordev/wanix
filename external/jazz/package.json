@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "jazz-browser": "^0.3.5",
+    "jazz-browser-auth-local": "^0.3.5"
+  }
+}

@@ -1,0 +1,5 @@
+/bin
+/TODO
+.DS_Store
+external/jazz/node_modules
+/local

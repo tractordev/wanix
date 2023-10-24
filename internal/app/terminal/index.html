@@ -1,0 +1,118 @@
+<html>
+<head>
+  <link rel="stylesheet" href="/~dev/kernel/web/vnd/xterm/xterm-5.3.0.min.css" />
+  <script src="/~dev/kernel/web/vnd/xterm/xterm-5.3.0.min.js"></script>
+  <script src="/~dev/kernel/web/vnd/xterm/xterm-fit-0.8.0.min.js"></script>
+  <style>
+    .xterm .xterm-viewport {
+      /* On OS X this is required in order for the scroll bar to appear fully opaque */
+      background: transparent !important;
+      overflow-y: auto;
+      cursor: default;
+      position: absolute;
+      margin-right: -20px; /* hack to hide scrollbar area */
+      right: 0;
+      left: 0;
+      top: 0;
+      bottom: 0;
+    }
+    .xterm-bg-236 {
+      background-color: rgba(150,150,150,0.2) !important;
+    }
+    .xterm-bg-236.xterm-cursor {
+      background-color: rgba(230,230,230,0.5) !important;
+    }
+    .xterm-bg-235 {
+      background-color: transparent !important;
+    }
+    .xterm-bg-15 {
+      background-color: rgba(230,230,230,0.8) !important
+    }
+  </style>
+</head>
+<body style="margin: 0; background: transparent; overflow: hidden; height: 100%;">
+<script type="module">
+  const sys = parent.sys;
+
+  const terminal = new Terminal({
+    scrollback: 0,
+    convertEol: true,
+    fontSize: 20,
+    fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+    theme: {
+      background: "transparent",
+      // foreground: "#000",
+      // white: "#000",
+      // brightWhite: "#000",
+      // black: "#fff",
+      // brightBlack: "#fff"
+    },
+    allowTransparency: true,
+  });
+  
+  const fitAddon = new FitAddon.FitAddon();
+  terminal.loadAddon(fitAddon);
+  terminal.open(document.body);
+
+  window.onresize = () => fitAddon.fit();
+  window.onfocus = () => terminal.focus();
+
+  (async () => {
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+
+    const resp = await sys.call("tty.open", ["shell", []]); //{ Term: "xterm-256color", Rows: 10, Cols: 80 });
+    const ch = resp.channel;
+    //parent.wanix.termCh = ch;
+    
+    terminal.onData(async (data) => {
+      ch.write(enc.encode(data));
+    });
+    terminal.onResize((size) => {
+      //wanix.call("terminal.Resize", [{ Rows: size.rows, Cols: size.cols }]);
+    })
+    terminal.attachCustomKeyEventHandler((e) => {
+      // if (visorKeydown(e)) {
+      //     return;
+      // }
+
+      if (e.type === "keydown") {
+        // not sure why we need a custom handler for
+        // backspace, but here we are. without this,
+        // xterm throws JSON parsing exception.
+        if (e.key === "Backspace") {
+          ch.write(enc.encode("\b"));
+          return false;
+        }
+
+        // xterm only wants to send \r on return but
+        // most things want \n so we'll do that.
+        if (e.key === "Enter") {
+          ch.write(enc.encode("\n"));
+          return true;
+        }
+      }
+    });
+
+    fitAddon.fit();
+
+    // duplex.copy({write: (p) => {
+    //   const dec = new TextDecoder();
+    //   console.log(dec.decode(p));
+    // }}, stdout);
+    const b = new Uint8Array(512);
+    let gotEOF = false;
+    while (gotEOF === false) {
+      const n = await ch.read(b);
+      if (n === null) {
+        gotEOF = true;
+      } else {
+        terminal.write(dec.decode(b.subarray(0, n)));
+      }
+    }
+
+  })();
+
+</script>
+</body>
+</html>

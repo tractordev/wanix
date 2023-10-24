@@ -1,0 +1,158 @@
+<html>
+
+<head>
+    <script src="wasm_exec.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+    <script src="jquery.min.js"></script>
+    <script src="lz-string.min.js"></script>
+    <script src="jquery-linedtextarea.js"></script>
+    <script src="playground.js"></script>
+
+    <script>
+        const decoder = new TextDecoder('utf-8');
+        const encoder = new TextEncoder('utf-8');
+
+        // This imports the main wanix & fs objects into the editor's globalThis
+        globalThis.wanix = parent.wanix;
+        globalThis.fs = new parent.FS()
+
+        var openFile = location.hash.slice(1) || "main.go";
+        parent.wanix.edit = (filename) => {
+            openFile = filename;
+            $('#head').text(filename);
+            const data = fs.readFileSync(filename);
+            $('#code').val(decoder.decode(data));
+            location.hash = filename
+        }
+
+
+
+        $(document).ready(function() {
+            parent.wanix.edit(openFile);
+
+            $('#code').linedtextarea();
+            $('#code').attr('wrap', 'off');
+
+            // if (!WebAssembly || !WebAssembly.instantiate) {
+            //     $('#run').val('Unsupported Browser');
+            //     $('#controls input').attr('disabled', true);
+            //     return;
+            // }
+
+            let cmds = {};
+
+            Promise.all(
+                ['build']
+                .map((cmd) => fetch('/-/cmd/' + cmd + '.wasm')
+                    .then(async (response) => {
+                        const buf = await response.arrayBuffer()
+                        //console.log("loaded", cmd, buf.byteLength, response.headers.get('Content-Length'));
+                        return buf;
+                    })
+                    .then((buf) => {
+                        cmds[cmd] = new Uint8Array(buf);
+
+                    })
+                )
+            ).then(() => {
+
+
+                playground({
+                    codeEl: '#code',
+                    outputEl: '#output',
+                    runEl: '#run',
+                    enableHistory: false,
+                    enableShortcuts: true,
+                    transport: {
+                        Run: (body, output) => {
+                            $('#controls input').attr('disabled', true);
+
+                            fs.writeFile(openFile, body);
+                            output({
+                                Kind: 'start',
+                            });
+                            let goStderr = (buf) => {
+                                output({
+                                    Kind: 'stderr',
+                                    Body: decoder.decode(buf),
+                                });
+                            };
+                            let goStdout = (buf) => {
+                                output({
+                                    Kind: 'stdout',
+                                    Body: decoder.decode(buf),
+                                });
+                            };
+
+                            console.time('build');
+                            wanix.exec(cmds['build'], [openFile])
+                                .then((code) => { console.timeEnd('build'); return code; })
+                                .then(async (code) => code || wanix.exec(fs.readFileSync('main'), undefined, undefined, goStdout, goStderr))
+                                .then((code) => {
+                                    output({
+                                        Kind: 'end',
+                                        Body: code ? 'status ' + code + '.' : undefined,
+                                    });
+                                })
+                                .catch((err) => {
+                                    output({
+                                        Kind: 'end',
+                                        Body: 'wasm error: ' + (err.message || 'unknown'),
+                                    });
+                                })
+                                .finally(() => $('#controls input').attr('disabled', false));
+
+                            return {
+                                Kill: () => {},
+                            };
+                        },
+                    },
+                });
+
+                $('#run').val('Run');
+
+                $('#share').click(() => {
+                    fs.writeFile(openFile, $('#code').val());
+                });
+
+                $('#fmt').show();
+                $('#fmt').click(() => {
+                    // TODO: fix panics here!
+                    $('#controls input').attr('disabled', true);
+
+                    fs.writeFileSync(openFile, encoder.encode($('#code').val()));
+                    // parent.goStderr = (buf) => console.log(decoder.decode(buf));
+                    // parent.goStdout = parent.goStderr;
+                    wanix.exec(cmds['gofmt'], ['-w', openFile])
+                        .then((code) => {
+                            if (!code) {
+                                $('#code').val(decoder.decode(fs.readFileSync(openFile)));
+                            }
+                        })
+                        .finally(() => $('#controls input').attr('disabled', false));
+                });
+
+                $('#controls input').attr('disabled', false);
+            });
+        });
+    </script>
+</head>
+
+<body>
+    <div id="banner">
+        <div id="head" itemprop="name" style="float: right;">Playground</div>
+        <div id="controls">
+            <input type="button" value="Loading..." id="run" disabled style="padding-left: 4px; padding-right: 4px;"/>
+            <!-- <input type="button" value="Format" id="fmt" style="display:none;" disabled> -->
+            <!-- <input type="button" value="Save" id="share"> -->
+            <!-- <input type="text" id="shareURL" style="display:none;"> -->
+        </div>
+    </div>
+    <div id="wrap">
+        <textarea itemprop="description" id="code" name="code" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+    </div>
+    <div id="output"></div>
+</body>
+
+</html>

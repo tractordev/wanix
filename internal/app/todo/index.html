@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link href="./vnd/tailwind-2.2.16.min.css" rel="stylesheet" />
+    <script src="./vnd/mithril-2.0.3.min.js"></script>
+    <title>Todos</title>
+  </head>
+  <body class="h-full font-mono font-semibold bg-gray-300">
+    <script type="module">
+      import {Store} from "./model.ts";
+      import Todos from "./view.jsx";
+      
+      const store = new Store();
+      
+      m.mount(document.body, {
+        view: () => {
+          return m(Todos, {store})
+        }
+      });
+
+    </script>
+  </body>
+</html>

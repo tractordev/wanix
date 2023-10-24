@@ -1,0 +1,23 @@
+:root {
+  --visor-height: 75%;
+}
+body { margin: 0; height: 100%; background: blue; }
+iframe { position: absolute; width: 100%; height: 100%; border: 0; background: #222222; }
+#main { background: white; }
+#terminal { z-index: 1000; padding: 0px; box-sizing: border-box;}
+iframe:has(+ #main) { background: rgba(34,34,34,0.9); }
+iframe:has(+ #main).visor { animation: visor 0.25s; animation-fill-mode: forwards; }
+iframe:has(+ #main).visor.closed { animation: visor-close 0.25s; animation-fill-mode: forwards; }
+iframe:has(+ #main).visor.open { animation: visor-open 0.25s; animation-fill-mode: forwards; }
+@keyframes visor {
+  from  {height: 100%;} 
+  to    {height: var(--visor-height);} 
+}
+@keyframes visor-open {
+  from  {margin-top: -100%;} 
+  to    {margin-top: 0; height: var(--visor-height); }
+}
+@keyframes visor-close {
+  from  {margin-top: 0; height: var(--visor-height);} 
+  to    {margin-top: -100%;} 
+}
