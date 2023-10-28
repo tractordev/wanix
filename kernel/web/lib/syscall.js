@@ -110,6 +110,7 @@ function marshalizeStat(stat) {
   return stat;
 }
 
+// error handler callback
 function cb(ok, err) {
   return (e, ret) => {
     if (e !== null) {
