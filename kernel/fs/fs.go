@@ -14,14 +14,14 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/wanix/internal/indexedfs"
 
 	"tractor.dev/toolkit-go/engine/fs/fsutil"
-	"tractor.dev/toolkit-go/engine/fs/memfs"
 	"tractor.dev/toolkit-go/engine/fs/mountablefs"
 )
 
 func log(args ...any) {
-	// js.Global().Get("console").Call("log", args...)
+	js.Global().Get("console").Call("log", args...)
 }
 
 type Service struct {
@@ -41,7 +41,11 @@ type fd struct {
 func (s *Service) Initialize() {
 	s.fds = make(map[int]*fd)
 	s.nextFd = 1000
-	s.fsys = mountablefs.New(memfs.New())
+	if ifs, err := indexedfs.Initalize(); err != nil {
+		panic(err)
+	} else {
+		s.fsys = mountablefs.New(ifs)
+	}
 
 	fsutil.MkdirAll(s.fsys, "debug", 0755)
 	fsutil.WriteFile(s.fsys, "debug/hello.txt", []byte("Hello world"), 0644)

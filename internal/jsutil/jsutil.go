@@ -14,6 +14,23 @@ func Await(promise js.Value) js.Value {
 	return <-ch
 }
 
+func AwaitAll(promise js.Value) (resolved, rejected js.Value) {
+	ch := make(chan js.Value, 2)
+	promise.Call("then",
+		js.FuncOf(func(this js.Value, args []js.Value) any {
+			ch <- args[0] // resolve
+			ch <- js.Null()
+			return nil
+		}),
+		js.FuncOf(func(this js.Value, args []js.Value) any {
+			ch <- js.Null()
+			ch <- args[0] // reject
+			return nil
+		}),
+	)
+	return <-ch, <-ch
+}
+
 func Promise(fn func() (any, error)) any {
 	return js.Global().Get("Promise").New(js.FuncOf(func(this js.Value, args []js.Value) any {
 		resolve := args[0]
@@ -32,6 +49,10 @@ func Promise(fn func() (any, error)) any {
 
 func Log(args ...any) {
 	js.Global().Get("console").Call("log", args...)
+}
+
+func Err(args ...any) {
+	js.Global().Get("console").Call("error", args...)
 }
 
 func HasProp(jsObj js.Value, prop string) bool {
@@ -72,6 +93,25 @@ func ToGoStringSlice(jsArray js.Value) []string {
 
 	for i := 0; i < length; i++ {
 		result[i] = jsArray.Index(i).String()
+	}
+
+	return result
+}
+
+func ToGoByteSlice(jsArray js.Value) []byte {
+	if jsArray.Type() != js.TypeObject || !jsArray.InstanceOf(js.Global().Get("Uint8Array")) {
+		panic("provided js.Value is not a JavaScript Uint8Array")
+	}
+
+	length := jsArray.Length()
+	result := make([]byte, length)
+
+	if length == 0 {
+		return result
+	}
+
+	for i := 0; i < length; i++ {
+		result[i] = byte(jsArray.Index(i).Int())
 	}
 
 	return result
