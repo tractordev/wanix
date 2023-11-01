@@ -1,9 +1,4 @@
 // path, perms, size, isdir, ctime (create time), mtime (modified), atime (last accessed), blob
-
-// only implement MutableFS
-// don't try to stream blobs (you can't lol)
-// use jazzFS as a reference
-
 const fileData = [
 	{ path: ".", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: null },
 	{ path: "home", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: null },

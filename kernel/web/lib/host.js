@@ -40,7 +40,7 @@ globalThis.sys.pipe.handle("host.loadApp", duplex.handlerFrom((target, path, foc
 
 const visorKeydown = (e) => {
   const el = document.querySelector("#terminal");
-  if (e.code === "Backquote" && (e.ctrlKey || e.altKey) && el.classList.contains("visor")) {   
+  if (e.code === "Backquote" && e.ctrlKey && el.classList.contains("visor")) {   
       if (el.classList.contains("open")) {
           el.classList.replace("open", "closed");
           const app = document.querySelector("#main");
