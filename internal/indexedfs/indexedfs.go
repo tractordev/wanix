@@ -1,9 +1,9 @@
 package indexedfs
 
 import (
-	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"syscall/js"
 	"time"
 
@@ -16,16 +16,18 @@ type FS struct {
 }
 
 func Initalize() (*FS, error) {
-	// import dbhelper.js
-	blob := js.Global().Get("initfs").Get("dbhelper.js")
-	url := js.Global().Get("URL").Call("createObjectURL", blob)
-	_dbhelper = jsutil.Await(js.Global().Call("import", url))
+	if dbhelper.IsUndefined() {
+		// import dbhelper.js
+		blob := js.Global().Get("initfs").Get("dbhelper.js")
+		url := js.Global().Get("URL").Call("createObjectURL", blob)
+		dbhelper = jsutil.Await(js.Global().Call("import", url))
+	}
 
-	db := jsutil.Await(callHelper("initialize"))
-	if db.Truthy() {
-		return &FS{db: db}, nil
+	db, err := jsutil.AwaitAll(callHelper("initialize"))
+	if err.Truthy() {
+		return nil, js.Error{err}
 	} else {
-		return nil, errors.New("Unable to open IndexedDB")
+		return &FS{db: db}, nil
 	}
 }
 
@@ -57,12 +59,12 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 
-	// look for file in database
+	// TODO:
 	// make sure we're using the right permissions
-	// create a transaction using the appropriate flags
-	// store the transaction in the file?
+	// implement flags
 	// profit?
 
+	// store flags and db-key in File
 	key, err := jsutil.AwaitAll(callHelper("getFileKey", ifs.db, name))
 	if err.Truthy() {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: js.Error{err}}
@@ -80,8 +82,19 @@ func (ifs *FS) RemoveAll(path string) error {
 func (ifs *FS) Rename(oldname, newname string) error {
 	panic("Rename unimplemented")
 }
+
 func (ifs *FS) Stat(name string) (fs.FileInfo, error) {
-	panic("Stat unimplemented")
+	f, err := jsutil.AwaitAll(callHelper("getFileByPath", ifs.db, name))
+	if err.Truthy() {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: js.Error{err}}
+	}
+
+	return &indexedInfo{
+		name:    filepath.Base(f.Get("path").String()),
+		size:    int64(f.Get("size").Int()),
+		isDir:   f.Get("isdir").Bool(),
+		modTime: int64(f.Get("mtime").Int()),
+	}, nil
 }
 
 type indexedFile struct {
@@ -145,12 +158,43 @@ func (f *indexedFile) Stat() (fs.FileInfo, error) {
 	panic("Stat unimplemented")
 }
 
-var _dbhelper js.Value = js.Undefined()
+type indexedInfo struct {
+	name    string
+	size    int64
+	isDir   bool
+	modTime int64
+}
+
+func (i *indexedInfo) Name() string {
+	return i.name
+}
+
+func (i *indexedInfo) Size() int64 {
+	return i.size
+}
+
+func (i *indexedInfo) Mode() fs.FileMode {
+	if i.isDir {
+		return 0755 | fs.ModeDir
+	}
+	return 0644
+}
+
+func (i *indexedInfo) ModTime() time.Time {
+	return time.Unix(i.modTime, 0)
+}
+
+func (i *indexedInfo) IsDir() bool {
+	return i.isDir
+}
+
+func (i *indexedInfo) Sys() any {
+	return nil
+}
+
+var dbhelper js.Value = js.Undefined()
 
 func callHelper(name string, args ...any) js.Value {
-	// if _dbhelper.IsUndefined() {
-	// 	_dbhelper = js.Global().Get("indexedfsHelper")
-	// }
 	jsutil.Log(name, args)
-	return _dbhelper.Call(name, args)
+	return dbhelper.Call(name, args...)
 }

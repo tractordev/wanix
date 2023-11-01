@@ -47,8 +47,8 @@ func (s *Service) Initialize() {
 		s.fsys = mountablefs.New(ifs)
 	}
 
-	fsutil.MkdirAll(s.fsys, "debug", 0755)
-	fsutil.WriteFile(s.fsys, "debug/hello.txt", []byte("Hello world"), 0644)
+	// fsutil.MkdirAll(s.fsys, "debug", 0755)
+	fsutil.WriteFile(s.fsys, "debug.txt", []byte("Hello world"), 0644)
 }
 
 func (s *Service) InitializeJS() {

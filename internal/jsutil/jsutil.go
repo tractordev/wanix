@@ -18,17 +18,22 @@ func AwaitAll(promise js.Value) (resolved, rejected js.Value) {
 	ch := make(chan js.Value, 2)
 	promise.Call("then",
 		js.FuncOf(func(this js.Value, args []js.Value) any {
+			Log("AwaitAll.resolved", ToJSArray(args))
 			ch <- args[0] // resolve
-			ch <- js.Null()
+			ch <- js.Undefined()
 			return nil
 		}),
 		js.FuncOf(func(this js.Value, args []js.Value) any {
-			ch <- js.Null()
+			Log("AwaitAll.rejected", ToJSArray(args))
+			ch <- js.Undefined()
 			ch <- args[0] // reject
 			return nil
 		}),
 	)
-	return <-ch, <-ch
+
+	resolved = <-ch
+	rejected = <-ch
+	return
 }
 
 func Promise(fn func() (any, error)) any {
