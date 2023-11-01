@@ -5,10 +5,10 @@
 // use jazzFS as a reference
 
 const fileData = [
-	{ path: ".", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: 0 },
-	{ path: "home", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: 0 },
-	{ path: "home/hello.txt", perms: 0, size: 0, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: 1 },
-	{ path: "home/goodbye.txt", perms: 0, size: 0, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: 2 },
+	{ path: ".", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: null },
+	{ path: "home", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: null },
+	{ path: "home/hello.txt", perms: 0, size: 0, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: new Blob(["Hello World!"], {type: "text/plain"}) },
+	{ path: "home/goodbye.txt", perms: 0, size: 0, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: new Blob(["Sayonara Suckers!"], {type: "text/plain"}) },
 ];
 
 export function initialize() {
@@ -110,6 +110,7 @@ export function readFile(db, key) {
 
 		getRequest.onsuccess = (event) => {
 			if(event.target.result) {
+				console.log(event.target.result)
 				resolve(blobToUint8Array(event.target.result.blob));
 			} else {
 				reject(new Error(`Failed to read file with key ${key}`))

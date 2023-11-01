@@ -15,6 +15,7 @@ import (
 
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/internal/indexedfs"
+	"tractor.dev/wanix/internal/jsutil"
 
 	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/toolkit-go/engine/fs/mountablefs"
@@ -48,6 +49,27 @@ func (s *Service) Initialize() {
 	}
 
 	// fsutil.MkdirAll(s.fsys, "debug", 0755)
+
+	if f, err := s.fsys.Open("home/hello.txt"); err == nil {
+		data := make([]byte, 32)
+		if n, err := f.Read(data); err == nil {
+			fmt.Printf("%s\n", data[:n])
+		} else {
+			jsutil.Err(err)
+		}
+	} else {
+		jsutil.Err(err)
+	}
+	if f, err := s.fsys.Open("home/goodbye.txt"); err == nil {
+		data := make([]byte, 32)
+		if n, err := f.Read(data); err == nil {
+			fmt.Printf("%s\n", data[:n])
+		} else {
+			jsutil.Err(err)
+		}
+	} else {
+		jsutil.Err(err)
+	}
 	fsutil.WriteFile(s.fsys, "debug.txt", []byte("Hello world"), 0644)
 }
 
