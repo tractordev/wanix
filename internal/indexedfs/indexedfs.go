@@ -1,9 +1,12 @@
 package indexedfs
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall/js"
 	"time"
 
@@ -41,7 +44,7 @@ func (ifs *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	panic("Chtimes unimplemented")
 }
 func (ifs *FS) Create(name string) (fs.File, error) {
-	panic("Create unimplemented")
+	return ifs.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 }
 func (ifs *FS) Mkdir(name string, perm fs.FileMode) error {
 	panic("Mkdir unimplemented")
@@ -59,18 +62,51 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 
-	// TODO:
-	// make sure we're using the right permissions
-	// implement flags
-	// profit?
-
-	// store flags and db-key in File
-	key, err := jsutil.AwaitAll(callHelper("getFileKey", ifs.db, name))
-	if err.Truthy() {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: js.Error{err}}
+	if flag&os.O_SYNC > 0 {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fmt.Errorf("%w O_SYNC", errors.ErrUnsupported)}
 	}
 
-	return &indexedFile{key: key.Int(), ifs: ifs, flags: flag}, nil
+	// TODO:
+	// make sure we're using the right permissions
+	// profit?
+
+	var file fs.File = nil
+	var err error = nil
+
+	if key, jsErr := jsutil.AwaitAll(callHelper("getFileKey", ifs.db, name)); jsErr.Truthy() {
+		err = js.Error{jsErr}
+	} else {
+		file = &indexedFile{key: key.Int(), ifs: ifs, flags: flag}
+	}
+
+	if err == nil && (flag&(os.O_EXCL|os.O_CREATE) == (os.O_EXCL | os.O_CREATE)) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrExist}
+	}
+
+	// TODO: figure out a better way of signaling error type from javascript
+	if err != nil && strings.Contains(err.Error(), "ErrNotExist") && (flag&os.O_CREATE > 0) {
+		if key, jsErr := jsutil.AwaitAll(callHelper("addFile", ifs.db, name, uint32(perm), perm.IsDir())); jsErr.Truthy() {
+			err = js.Error{jsErr}
+		} else {
+			file = &indexedFile{key: key.Int(), ifs: ifs, flags: flag}
+			err = nil
+		}
+	}
+
+	// TODO: fully convert js errors to Go errors
+	if err != nil {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+	}
+
+	if flag&os.O_APPEND > 0 {
+		file.(*indexedFile).Seek(0, io.SeekEnd)
+	}
+	if flag&os.O_TRUNC > 0 {
+		// TODO: proper Truncate implementation
+		file.(*indexedFile).Seek(0, io.SeekStart)
+	}
+
+	return file, nil
 }
 
 func (ifs *FS) Remove(name string) error {
@@ -98,10 +134,11 @@ func (ifs *FS) Stat(name string) (fs.FileInfo, error) {
 }
 
 type indexedFile struct {
-	key       int
-	ifs       *FS
-	flags     int
-	offset    int64
+	key    int
+	ifs    *FS
+	flags  int
+	offset int64
+	// used internally by data()
 	readCache []byte
 }
 
@@ -156,6 +193,27 @@ func (f *indexedFile) Read(b []byte) (int, error) {
 // Stat implements fs.File.
 func (f *indexedFile) Stat() (fs.FileInfo, error) {
 	panic("Stat unimplemented")
+}
+
+// Stat implements fs.File.
+func (f *indexedFile) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+		f.offset = offset
+	case io.SeekCurrent:
+		f.offset += offset
+	case io.SeekEnd:
+		if d, err := f.data(); err == nil {
+			f.offset = int64(len(d)) + offset
+		} else {
+			return 0, err
+		}
+	}
+	if f.offset < 0 {
+		f.offset = 0
+		return 0, fmt.Errorf("Seek: resultant offset cannot be negative")
+	}
+	return f.offset, nil
 }
 
 type indexedInfo struct {
