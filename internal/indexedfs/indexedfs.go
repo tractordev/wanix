@@ -41,7 +41,20 @@ func (ifs *FS) Chown(name string, uid, gid int) error {
 	panic("Chown unimplemented")
 }
 func (ifs *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
-	panic("Chtimes unimplemented")
+	updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
+		file := args[0]
+		file.Set("atime", atime.Unix())
+		file.Set("mtime", mtime.Unix())
+		return file
+	})
+	defer updateFunc.Release()
+
+	err := jsutil.Await(callHelper("updateFile", ifs.db, name, updateFunc))
+	if err.Truthy() {
+		return js.Error{err}
+	} else {
+		return nil
+	}
 }
 func (ifs *FS) Create(name string) (fs.File, error) {
 	return ifs.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -138,17 +151,28 @@ type indexedFile struct {
 	ifs    *FS
 	flags  int
 	offset int64
+	// TODO: see if read/write caches can be merged
 	// used internally by data()
-	readCache []byte
+	readCache    []byte
+	outdatedRead bool
+	// used internally by Write() and Sync()
+	writeCache []byte
+	dirty      bool
 }
 
 func (f *indexedFile) data() ([]byte, error) {
-	if f.readCache == nil {
+	if f.outdatedRead || f.readCache == nil {
 		array, err := jsutil.AwaitAll(callHelper("readFile", f.ifs.db, f.key))
 		if err.Truthy() {
 			return nil, js.Error{err}
 		}
-		f.readCache = jsutil.ToGoByteSlice(array)
+
+		f.outdatedRead = false
+		if array.IsNull() {
+			f.readCache = []byte{}
+		} else {
+			f.readCache = jsutil.ToGoByteSlice(array)
+		}
 	}
 
 	return f.readCache, nil
@@ -156,14 +180,19 @@ func (f *indexedFile) data() ([]byte, error) {
 
 // Close implements fs.File.
 func (f *indexedFile) Close() error {
-	f.readCache = nil
-	f.ifs = nil
-	f = nil
+	f.offset = 0
+
+	if f.dirty {
+		return f.Sync()
+	}
+	// f.readCache = nil
+	// f.ifs = nil
+	// f = nil
 	return nil
 }
 
 // Read implements fs.File.
-func (f *indexedFile) Read(b []byte) (int, error) {
+func (f *indexedFile) Read(p []byte) (n int, err error) {
 	if f.flags&os.O_WRONLY > 0 {
 		return 0, fs.ErrPermission
 	}
@@ -178,16 +207,71 @@ func (f *indexedFile) Read(b []byte) (int, error) {
 	}
 
 	rest := data[f.offset:]
-	n := 0
-	if len(rest) < len(b) {
+	if len(rest) < len(p) {
 		n = len(rest)
 	} else {
-		n = len(b)
+		n = len(p)
 	}
 
-	copy(b, rest[:n])
+	copy(p, rest[:n])
 	f.offset += int64(n)
 	return n, nil
+}
+
+func (f *indexedFile) Write(p []byte) (n int, err error) {
+	if f.writeCache == nil {
+		if f.writeCache, err = f.data(); err != nil {
+			return 0, err
+		}
+	}
+
+	writeEnd := f.offset + int64(len(p))
+
+	if writeEnd > int64(cap(f.writeCache)) {
+		newCapacity := cap(f.writeCache)*2 + 1
+		for ; writeEnd > int64(newCapacity); newCapacity *= 2 {
+		}
+
+		newCache := make([]byte, len(f.writeCache), newCapacity)
+		copy(newCache, f.writeCache)
+		f.writeCache = newCache
+	}
+
+	copy(f.writeCache[f.offset:writeEnd], p)
+	f.writeCache = f.writeCache[:writeEnd]
+	f.dirty = true
+	jsutil.Log("Write:", jsutil.ToJSArray(f.writeCache))
+	return len(p), nil
+}
+
+func (f *indexedFile) Sync() error {
+	jsutil.Log("Sync")
+	if !f.dirty {
+		return nil
+	}
+
+	updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
+		file := args[0]
+
+		mime := map[string]interface{}{
+			"type": "application/octet-stream",
+		}
+
+		file.Set("blob", js.Global().Get("Blob").New(jsutil.ToJSArray(f.writeCache), mime))
+		file.Set("size", len(f.writeCache))
+		// TODO: set mtime
+		return file
+	})
+	defer updateFunc.Release()
+
+	err := jsutil.Await(callHelper("updateFile", f.ifs.db, f.key, updateFunc))
+	if err.Truthy() {
+		return js.Error{err}
+	}
+
+	f.dirty = false
+	f.outdatedRead = true
+	return nil
 }
 
 // Stat implements fs.File.

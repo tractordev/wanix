@@ -72,6 +72,17 @@ func (s *Service) Initialize() {
 	if err := fsutil.WriteFile(s.fsys, "debug.txt", []byte("Hello world"), 0644); err != nil {
 		fmt.Println("WriteFile debug.txt", err)
 	}
+
+	if f, err := s.fsys.Open("debug.txt"); err == nil {
+		data := make([]byte, 32)
+		if n, err := f.Read(data); err == nil {
+			fmt.Printf("%s\n", data[:n])
+		} else {
+			fmt.Println(err)
+		}
+	} else {
+		fmt.Println(err)
+	}
 }
 
 func (s *Service) InitializeJS() {

@@ -2,8 +2,8 @@
 const fileData = [
 	{ path: ".", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: null },
 	{ path: "home", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: null },
-	{ path: "home/hello.txt", perms: 0, size: 12, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: new Blob(["Hello World!"], {type: "text/plain"}) },
-	{ path: "home/goodbye.txt", perms: 0, size: 17, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: new Blob(["Sayonara Suckers!"], {type: "text/plain"}) },
+	{ path: "home/hello.txt", perms: 0, size: 12, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: new Blob(["Hello World!"], {type: "application/octet-stream"}) },
+	{ path: "home/goodbye.txt", perms: 0, size: 17, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: new Blob(["Sayonara Suckers!"], {type: "application/octet-stream"}) },
 ];
 
 export function initialize() {
@@ -11,7 +11,7 @@ export function initialize() {
 		const OpenDBRequest = indexedDB.open("indexedDBFS");
 
 		OpenDBRequest.onerror = (event) => {
-			reject(new Error(`Unable to open IndexedDB: ${event.target.errorCode}`));
+			reject(new Error(`Unable to open IndexedDB: ${event.target.error}`));
 		};
 		OpenDBRequest.onsuccess = (reqEvent) => {
 			console.log("OpenDBRequest.onsuccess");
@@ -20,7 +20,7 @@ export function initialize() {
 			db.onerror = (dbEvent) => {
 				// Generic error handler for all errors targeted at this database's
 				// requests!
-				console.error(`Unhandled IndexedDB error: ${dbEvent.target.errorCode}`);
+				console.error(`Unhandled IndexedDB error: ${dbEvent.target.error}`);
 			};
 			resolve(db)
 		};
@@ -53,8 +53,9 @@ export function addFile(db, path, perms, isdir) {
 	return new Promise((resolve, reject) => {
 		const transaction = db.transaction("files", "readwrite");
 
-		transaction.onerror = () => {
-			reject(new Error(`addFile transaction failed: ${transaction.error}`));
+		transaction.onerror = (event) => {
+			event.stopPropagation();
+			reject(new Error(`addFile transaction failed: ${event.target.error}`));
 		};
 
 		const fileStore = transaction.objectStore("files");
@@ -73,6 +74,37 @@ export function addFile(db, path, perms, isdir) {
 
 		addRequest.onsuccess = (event) => {
 			resolve(event.target.result) // return key
+		};
+	});
+}
+
+// updateCallback takes a file object, modifies, and returns it.
+export function updateFile(db, pathOrKey, updateCallback) {
+	return new Promise((reject) => {
+		const transaction = db.transaction("files", "readwrite");
+
+		// any errors should bubble up to this handler
+		transaction.onerror = (event) => {
+			event.stopPropagation();
+			reject(new Error(`updateFile transaction failed: ${event.target.error}`));
+		};
+
+		const fileStore = transaction.objectStore("files");
+		const cursorRequest =
+			typeof pathOrKey === "string" ?
+			fileStore.index("path").openCursor(pathOrKey) :
+			fileStore.openCursor(pathOrKey);
+
+		cursorRequest.onsuccess = (event) => {
+			const cursor = event.target.result;
+			if(cursor) {
+				const file = updateCallback(cursor.value);
+				cursor.update(file).onsuccess = () => {
+					reject(null);
+				};
+			} else {
+				reject(new Error(`Couldn't find file with key ${pathOrKey}`));
+			}
 		};
 	});
 }
@@ -96,8 +128,8 @@ export function getFileKey(db, path) {
 			}
 		};
 
-		getRequest.onerror = () => {
-			reject(new Error(`Failed to find file at path ${path}: ${getRequest.error}`));
+		getRequest.onerror = (event) => {
+			reject(new Error(`Failed to find file at path ${path}: ${event.target.error}`));
 		};
 	});
 }
@@ -118,8 +150,8 @@ export function getFileByPath(db, path) {
 			}
 		};
 
-		getRequest.onerror = () => {
-			reject(new Error(`Failed to find file at path ${path}: ${getRequest.error}`));
+		getRequest.onerror = (event) => {
+			reject(new Error(`Failed to find file at path ${path}: ${event.target.error}`));
 		};
 	});
 }
@@ -139,8 +171,8 @@ export function readFile(db, key) {
 			}
 		};
 
-		getRequest.onerror = () => {
-			reject(new Error(`Failed to read file with key ${key}: ${getRequest.error}`))
+		getRequest.onerror = (event) => {
+			reject(new Error(`Failed to read file with key ${key}: ${event.target.error}`))
 		};
 	})
 }
