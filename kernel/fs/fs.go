@@ -181,7 +181,7 @@ func (s *Service) read(this js.Value, args []js.Value) any {
 		// 	buf := make([]byte, length)
 		// 	n, err := StdinBuf.Read(buf)
 		// 	if err != nil {
-		// 		cb.Invoke(jsError(err))
+		// 		cb.Invoke(jsError(err), 0)
 		// 		return
 		// 	}
 		// 	js.CopyBytesToJS(jsbuf, buf[:n])
@@ -196,26 +196,26 @@ func (s *Service) read(this js.Value, args []js.Value) any {
 		f, ok := s.fds[fd]
 		s.mu.Unlock()
 		if !ok {
-			cb.Invoke(jsError(syscall.EBADF))
+			cb.Invoke(jsError(syscall.EBADF), 0)
 			return
 		}
 
 		if rs, ok := f.File.(io.ReadSeeker); ok && !pos.IsNull() {
 			_, err := rs.Seek(int64(pos.Int()), 0)
 			if err != nil {
-				cb.Invoke(jsError(err))
+				cb.Invoke(jsError(err), 0)
 				return
 			}
 		}
 
 		buf := make([]byte, length)
 		n, err := f.Read(buf)
-		if err != nil && err != io.EOF {
-			cb.Invoke(jsError(err))
-			return
-		}
 		if n > 0 {
 			js.CopyBytesToJS(jsbuf, buf[:n])
+		}
+		if err != nil && err != io.EOF {
+			cb.Invoke(jsError(err), n)
+			return
 		}
 
 		cb.Invoke(nil, n)

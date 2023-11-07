@@ -58,12 +58,8 @@ globalThis.api = {
     // only significant signature change
     read(fd, bufsize, offset, length, position) {
       const buf = new Uint8Array(bufsize);
-      return new Promise((ok, err) => globalThis.fs.read(fd, buf, offset, length, position, (e) => {
-        if (e !== null) {
-          err(e);
-        } else {
-          ok(buf);
-        }
+      return new Promise(resolve => globalThis.fs.read(fd, buf, offset, length, position, (err, n) => {
+        resolve({err, buf, n});
       }));
     },
     readdir(path) { 
