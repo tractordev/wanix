@@ -132,10 +132,9 @@
         }
 				globalThis.sys.call("fs.read", [fd, buffer.length, offset, length, position])
 					.then(res => {
-						buffer.set(res.value);
-						callback(null, res.value.length);
-					})
-					.catch(err => callback(err));
+						buffer.set(res.value.buf);
+						callback(res.value.err, res.value.n);
+					});
       },
 			readdir(path, callback) {
 				globalThis.sys.call("fs.readdir", [path])
