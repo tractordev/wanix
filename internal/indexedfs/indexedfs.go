@@ -49,6 +49,10 @@ func (ifs *FS) Chown(name string, uid, gid int) error {
 	return fs.ErrPermission // TODO: maybe just a no-op?
 }
 func (ifs *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	if !fs.ValidPath(name) {
+		return &fs.PathError{Op: "chtimes", Path: name, Err: fs.ErrInvalid}
+	}
+
 	updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
 		file := args[0]
 		file.Set("atime", atime.Unix())
@@ -81,6 +85,10 @@ func (ifs *FS) Mkdir(name string, perm fs.FileMode) error {
 	return err
 }
 func (ifs *FS) MkdirAll(path string, perm fs.FileMode) error {
+	if !fs.ValidPath(path) {
+		return &fs.PathError{Op: "mkdirAll", Path: path, Err: fs.ErrInvalid}
+	}
+
 	var pp []string
 	for _, p := range strings.Split(path, "/") {
 		if p == "" {
@@ -156,6 +164,9 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 }
 
 func (ifs *FS) Remove(name string) error {
+	if !fs.ValidPath(name) {
+		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
+	}
 	key, err := jsutil.AwaitErr(callHelper("getFileKey", ifs.db, name))
 	if err != nil {
 		return err
@@ -165,11 +176,21 @@ func (ifs *FS) Remove(name string) error {
 }
 
 func (ifs *FS) RemoveAll(path string) error {
+	if !fs.ValidPath(path) {
+		return &fs.PathError{Op: "removeAll", Path: path, Err: fs.ErrInvalid}
+	}
 	_, err := jsutil.AwaitErr(callHelper("deleteAll", ifs.db, path))
 	return err
 }
 
 func (ifs *FS) Rename(oldname, newname string) error {
+	if !fs.ValidPath(oldname) {
+		return &fs.PathError{Op: "rename", Path: oldname, Err: fs.ErrInvalid}
+	}
+	if !fs.ValidPath(newname) {
+		return &fs.PathError{Op: "rename", Path: newname, Err: fs.ErrInvalid}
+	}
+
 	key, err := jsutil.AwaitErr(callHelper("getFileKey", ifs.db, oldname))
 	if err != nil {
 		return err
@@ -188,6 +209,10 @@ func (ifs *FS) Rename(oldname, newname string) error {
 }
 
 func (ifs *FS) Stat(name string) (fs.FileInfo, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrInvalid}
+	}
+
 	f, err := jsutil.AwaitErr(callHelper("getFileByPath", ifs.db, name))
 	if err != nil {
 		return nil, fs.ErrNotExist
@@ -202,6 +227,10 @@ func (ifs *FS) Stat(name string) (fs.FileInfo, error) {
 }
 
 func (ifs *FS) ReadDir(name string) ([]fs.DirEntry, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "readDir", Path: name, Err: fs.ErrInvalid}
+	}
+
 	entries, err := jsutil.AwaitErr(callHelper("getDirEntries", ifs.db, name))
 	if err != nil {
 		return nil, &fs.PathError{Op: "readdir", Path: name, Err: err}
