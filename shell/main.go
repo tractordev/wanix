@@ -115,7 +115,9 @@ func (m *Shell) Run(ctx context.Context) error {
 
 		args, err := shlex.Split(l, true)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Fprintln(t, err)
+			fmt.Fprintln(t)
+			continue
 		}
 
 		// how will terminal notify size changes?
