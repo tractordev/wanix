@@ -200,9 +200,11 @@ func runScript(rpcChannel io.Reader, t *term.Terminal, fs afero.Fs, path string,
 		}
 
 		// io.WriteString(t, line+"\n")
-
-		if cmd, ok := commands[lArgs[0]]; ok {
-			cmd(t, fs, lArgs[1:])
+		if true {
+			io.WriteString(t, "TODO: Implement shell scripting\n")
+			return
+			// if cmd, ok := commands[lArgs[0]]; ok {
+			// cmd(t, fs, lArgs[1:])
 		} else if exe, found, isScript := findExecutable(t, fs, lArgs[0], true); found {
 			if isScript {
 				runScript(rpcChannel, t, fs, exe, lArgs[1:])

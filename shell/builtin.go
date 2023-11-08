@@ -5,12 +5,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	// "reflect"
 	"strings"
 	"syscall/js"
 
-	"github.com/spf13/afero"
-	"golang.org/x/term"
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
@@ -491,32 +488,21 @@ func exportCmd() *cli.Command {
 // 	return cmd
 // }
 
-// deprecated
-type Command func(t *term.Terminal, fs afero.Fs, args []string)
+// TODO: port these debug commands to cli.Commands like above
+// "resetfs": func(t *term.Terminal, _ afero.Fs, args []string) {
+// 	fs.Reset(nil)
+// },
+// "fsdata": func(t *term.Terminal, fs afero.Fs, args []string) {
+// 	// watchFS := fs.(*watchfs.FS)
+// 	// watched := GetUnexportedField(reflect.ValueOf(watchFS).Elem().FieldByIndex([]int{0}))
+// 	cowFS := fs.(*afero.CopyOnWriteFs)
+// 	layer := GetUnexportedField(reflect.ValueOf(cowFS).Elem().FieldByName("layer"))
+// 	memFS := layer.(*afero.MemMapFs)
+// 	data := GetUnexportedField(reflect.ValueOf(memFS).Elem().FieldByName("data"))
+// 	fdata := data.(map[string]*mem.FileData)
 
-// deprecated
-var commands map[string]Command
-
-func initCommands() {
-	// TODO: port these to cli.Commands like above
-	commands = map[string]Command{
-		// for debugging
-		// "resetfs": func(t *term.Terminal, _ afero.Fs, args []string) {
-		// 	//fs.Reset(nil)
-		// },
-		// "fsdata": func(t *term.Terminal, fs afero.Fs, args []string) {
-		// 	// watchFS := fs.(*watchfs.FS)
-		// 	// watched := GetUnexportedField(reflect.ValueOf(watchFS).Elem().FieldByIndex([]int{0}))
-		// 	cowFS := fs.(*afero.CopyOnWriteFs)
-		// 	layer := GetUnexportedField(reflect.ValueOf(cowFS).Elem().FieldByName("layer"))
-		// 	memFS := layer.(*afero.MemMapFs)
-		// 	data := GetUnexportedField(reflect.ValueOf(memFS).Elem().FieldByName("data"))
-		// 	fdata := data.(map[string]*mem.FileData)
-
-		// 	for name, fd := range fdata {
-		// 		memDir := GetUnexportedField(reflect.ValueOf(fd).Elem().FieldByName("memDir"))
-		// 		fmt.Printf("%s:\nFileData:%+v\nDirMap:%+v\n", name, *fd, memDir)
-		// 	}
-		// },
-	}
-}
+// 	for name, fd := range fdata {
+// 		memDir := GetUnexportedField(reflect.ValueOf(fd).Elem().FieldByName("memDir"))
+// 		fmt.Printf("%s:\nFileData:%+v\nDirMap:%+v\n", name, *fd, memDir)
+// 	}
+// },
