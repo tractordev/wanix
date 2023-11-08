@@ -31,6 +31,17 @@ func (m *Shell) Initialize() {
 	m.Root.AddCommand(lsCmd())
 	m.Root.AddCommand(cdCmd())
 	m.Root.AddCommand(catCmd())
+	m.Root.AddCommand(reloadCmd())
+	m.Root.AddCommand(downloadCmd())
+	m.Root.AddCommand(touchCmd())
+	m.Root.AddCommand(removeCmd())
+	m.Root.AddCommand(mkdirCmd())
+	m.Root.AddCommand(moveCmd())
+	m.Root.AddCommand(copyCmd())
+	m.Root.AddCommand(pwdCmd())
+	m.Root.AddCommand(writeCmd())
+	m.Root.AddCommand(printEnvCmd())
+	m.Root.AddCommand(exportCmd())
 }
 
 func (m *Shell) Run(ctx context.Context) error {

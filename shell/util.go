@@ -284,6 +284,7 @@ func absPath(path string) string {
 }
 
 // Convert a Unix path to an io/fs path (See `io/fs.ValidPath()`)
+// Use `absPath()` instead if passing result to OS functions
 func unixToFsPath(path string) string {
 	if !filepath.IsAbs(path) {
 		// Join calls Clean internally
@@ -292,7 +293,7 @@ func unixToFsPath(path string) string {
 	} else {
 		path = filepath.Clean(path)
 	}
-	return path //strings.TrimLeft(path, "/") <-- with os calls we dont do this
+	return strings.TrimLeft(path, "/")
 }
 
 func checkErr(w io.Writer, err error) (hadError bool) {

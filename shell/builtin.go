@@ -5,14 +5,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
+	// "reflect"
 	"strings"
 	"syscall/js"
 
 	"github.com/spf13/afero"
-	"github.com/spf13/afero/mem"
 	"golang.org/x/term"
 	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
 )
 
@@ -29,17 +29,15 @@ func echoCmd() *cli.Command {
 func openCmd() *cli.Command {
 	var openWatch *watchfs.Watch
 	cmd := &cli.Command{
-		Usage: "open <path>",
+		Usage: "open <appname>",
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			var path string
-			if exists, _ := afero.Exists(afero.NewOsFs(), fmt.Sprintf("app/%s", args[0])); exists {
-				path = fmt.Sprintf("app/%s", args[0])
-			}
-			if exists, _ := afero.Exists(afero.NewOsFs(), fmt.Sprintf("sys/app/%s", args[0])); exists {
+			if exists, _ := fsutil.Exists(os.DirFS("/"), fmt.Sprintf("sys/app/%s", args[0])); exists {
 				path = fmt.Sprintf("sys/app/%s", args[0])
-			}
-			if path == "" {
+			} else if exists, _ := fsutil.Exists(os.DirFS("/"), fmt.Sprintf("app/%s", args[0])); exists {
+				path = fmt.Sprintf("app/%s", args[0])
+			} else {
 				fmt.Fprintln(ctx, "app not found")
 				return
 			}
@@ -137,9 +135,7 @@ func cdCmd() *cli.Command {
 		Usage: "cd <path>",
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
-			fsPath := unixToFsPath(args[0])
-
-			exists, err := afero.DirExists(afero.NewOsFs(), fsPath)
+			exists, err := fsutil.DirExists(os.DirFS("/"), unixToFsPath(args[0]))
 			if checkErr(ctx, err) {
 				return
 			}
@@ -168,7 +164,7 @@ func catCmd() *cli.Command {
 		Args:  cli.MinArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			// todo: multiple files
-			d, err := os.ReadFile(unixToFsPath(args[0]))
+			d, err := os.ReadFile(absPath(args[0]))
 			if checkErr(ctx, err) {
 				return
 			}
@@ -176,6 +172,268 @@ func catCmd() *cli.Command {
 			io.WriteString(ctx, "\n")
 		},
 	}
+	return cmd
+}
+
+// TODO: does this even work anymore?
+func reloadCmd() *cli.Command {
+	return &cli.Command{
+		Usage: "reload",
+		Args:  cli.ExactArgs(0),
+		Run: func(ctx *cli.Context, args []string) {
+			js.Global().Get("wanix").Get("reload").Invoke()
+		},
+	}
+}
+
+// TODO: does this even work anymore?
+func downloadCmd() *cli.Command {
+	return &cli.Command{
+		Usage: "dl <path>",
+		Args:  cli.ExactArgs(1),
+		Run: func(ctx *cli.Context, args []string) {
+			js.Global().Get("wanix").Get("download").Invoke(args[0])
+		},
+	}
+}
+
+func touchCmd() *cli.Command {
+	return &cli.Command{
+		Usage: "touch <path>...",
+		Args:  cli.MinArgs(1),
+		Run: func(ctx *cli.Context, args []string) {
+			// TODO: multiple files, options for updating a/mtimes
+			// TODO: fix permission denied error
+			err := os.WriteFile(absPath(args[0]), []byte{}, 0644)
+			if checkErr(ctx, err) {
+				return
+			}
+		},
+	}
+}
+
+func removeCmd() *cli.Command {
+	var recursive bool
+
+	cmd := &cli.Command{
+		Usage: "rm [-r] <path>...",
+		Args:  cli.MinArgs(1),
+		Run: func(ctx *cli.Context, args []string) {
+			// TODO: multiple files
+			if recursive {
+				err := os.RemoveAll(absPath(args[0]))
+				if checkErr(ctx, err) {
+					return
+				}
+			} else {
+				if isdir, err := fsutil.IsDir(os.DirFS("/"), unixToFsPath(args[0])); isdir {
+					fmt.Fprintf(ctx, "cant remove file %s: is a directory\n(try using the `-r` flag)\n", absPath(args[0]))
+					return
+				} else if checkErr(ctx, err) {
+					return
+				}
+
+				// TODO: fs.Remove gives the wrong error if trying to delete a readonly file,
+				// (should be Operation not permitted)
+				err := os.Remove(absPath(args[0]))
+				if checkErr(ctx, err) {
+					return
+				}
+			}
+		},
+	}
+
+	cmd.Flags().BoolVar(&recursive, "r", false, "Remove recursively")
+	return cmd
+}
+
+func mkdirCmd() *cli.Command {
+	return &cli.Command{
+		Usage: "mkdir <path>",
+		Args:  cli.ExactArgs(1),
+		Run: func(ctx *cli.Context, args []string) {
+			// TODO: support MkdirAll
+			err := os.Mkdir(absPath(args[0]), 0755)
+			if checkErr(ctx, err) {
+				return
+			}
+		},
+	}
+}
+
+func moveCmd() *cli.Command {
+	return &cli.Command{
+		Usage: "mv SOURCE DEST | SOURCE... DIRECTORY",
+		Args:  cli.MinArgs(2),
+		Short: "Rename SOURCE to DEST, or move multiple SOURCE(s) to DIRECTORY.",
+		Run: func(ctx *cli.Context, args []string) {
+			// TODO: prevent file overwrite if dest file already exits (should this already be an error?)
+			// TODO: error when dest directory doesn't exist and args.len > 2
+			isdir, err := fsutil.DirExists(os.DirFS("/"), unixToFsPath(args[len(args)-1]))
+			if checkErr(ctx, err) {
+				return
+			}
+			if isdir {
+				// move all paths into this directory
+				dir := absPath(args[len(args)-1])
+				for _, path := range args[:len(args)-1] {
+					src := filepath.Base(path)
+					dest := filepath.Join(dir, src)
+					err := os.Rename(absPath(path), absPath(dest))
+					if err != nil {
+						io.WriteString(ctx, fmt.Sprintln(err))
+						continue
+					}
+				}
+			} else {
+				err := os.Rename(absPath(args[0]), absPath(args[1]))
+				if checkErr(ctx, err) {
+					return
+				}
+			}
+		},
+	}
+}
+
+func copyCmd() *cli.Command {
+	var recursive bool
+
+	cmd := &cli.Command{
+		Usage: "cp [-r] <SOURCE DEST | SOURCE... DIRECTORY> ",
+		Args:  cli.MinArgs(2),
+		Short: "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.",
+		Run: func(ctx *cli.Context, args []string) {
+			// TODO: handle copying directories
+			isdir, err := fsutil.DirExists(os.DirFS("/"), unixToFsPath(args[len(args)-1]))
+			if checkErr(ctx, err) {
+				return
+			}
+			if isdir {
+				// copy all paths to this directory
+				dir := absPath(args[len(args)-1])
+
+				for _, path := range args[:len(args)-1] {
+					srcName := filepath.Base(path)
+					dest := filepath.Join(dir, srcName)
+
+					srcIsDir, err := fsutil.IsDir(os.DirFS("/"), unixToFsPath(path))
+					if checkErr(ctx, err) {
+						continue
+					}
+
+					if srcIsDir {
+						if !recursive {
+							io.WriteString(ctx, fmt.Sprintf("-r not specified; omitting directory '%s'\n", path))
+							continue
+						}
+
+						err = os.MkdirAll(absPath(dest), 0755)
+						if checkErr(ctx, err) {
+							continue
+						}
+
+						entries, err := os.ReadDir(absPath(path))
+						if checkErr(ctx, err) {
+							continue
+						}
+
+						for _, e := range entries {
+							cli.Execute(ctx, copyCmd(), []string{"-r", filepath.Join(path, e.Name()), dest})
+							// commands["cp"](t, fs, []string{"-r", filepath.Join(path, e.Name()), dest})
+						}
+					} else {
+						content, err := os.ReadFile(absPath(path))
+						if checkErr(ctx, err) {
+							continue
+						}
+						err = os.WriteFile(absPath(dest), content, 0644)
+						if checkErr(ctx, err) {
+							continue
+						}
+					}
+				}
+			} else {
+				content, err := os.ReadFile(absPath(args[0]))
+				if checkErr(ctx, err) {
+					return
+				}
+
+				err = os.WriteFile(absPath(args[1]), content, 0644)
+				if checkErr(ctx, err) {
+					return
+				}
+			}
+		},
+	}
+
+	cmd.Flags().BoolVar(&recursive, "r", false, "Copy recursively")
+	return cmd
+}
+
+func pwdCmd() *cli.Command {
+	return &cli.Command{
+		Usage: "pwd",
+		Args:  cli.ExactArgs(0),
+		Run: func(ctx *cli.Context, args []string) {
+			wd, err := os.Getwd()
+			if checkErr(ctx, err) {
+				return
+			}
+			io.WriteString(ctx, fmt.Sprintln(wd))
+		},
+	}
+}
+
+func writeCmd() *cli.Command {
+	return &cli.Command{
+		Usage: "write <filepath> [text]...",
+		Args:  cli.MinArgs(1),
+		Run: func(ctx *cli.Context, args []string) {
+			err := os.WriteFile(absPath(args[0]), []byte(strings.Join(args[1:], " ")), 0644)
+			if checkErr(ctx, err) {
+				return
+			}
+		},
+	}
+}
+
+func printEnvCmd() *cli.Command {
+	return &cli.Command{
+		Usage: "env",
+		Args:  cli.ExactArgs(0),
+		Run: func(ctx *cli.Context, args []string) {
+			for _, kvp := range os.Environ() {
+				fmt.Fprintln(ctx, kvp)
+			}
+		},
+	}
+}
+
+func exportCmd() *cli.Command {
+	var remove bool
+
+	cmd := &cli.Command{
+		Usage: "export [-remove] <NAME[=VALUE]>...",
+		Args:  cli.MinArgs(1),
+		Short: "Set or remove environment variables.",
+		Run: func(ctx *cli.Context, args []string) {
+			for i, arg := range args {
+				name, value, _ := strings.Cut(arg, "=")
+				if name == "" {
+					io.WriteString(ctx, fmt.Sprintf("invalid argument (%d): missing variable name", i))
+					return
+				}
+				if remove {
+					os.Unsetenv(name)
+				} else {
+					os.Setenv(name, value)
+				}
+			}
+		},
+	}
+
+	// weird but it works
+	cmd.Flags().BoolVar(&remove, "remove", false, "Remove an environment variable")
 	return cmd
 }
 
@@ -243,197 +501,23 @@ var commands map[string]Command
 func initCommands() {
 	// TODO: port these to cli.Commands like above
 	commands = map[string]Command{
-		"reload": func(t *term.Terminal, fs afero.Fs, args []string) {
-			js.Global().Get("wanix").Get("reload").Invoke()
-		},
-		"dl": func(t *term.Terminal, fs afero.Fs, args []string) {
-			js.Global().Get("wanix").Get("download").Invoke(args[0])
-		},
 		// for debugging
-		"resetfs": func(t *term.Terminal, _ afero.Fs, args []string) {
-			//fs.Reset(nil)
-		},
-		"fsdata": func(t *term.Terminal, fs afero.Fs, args []string) {
-			// watchFS := fs.(*watchfs.FS)
-			// watched := GetUnexportedField(reflect.ValueOf(watchFS).Elem().FieldByIndex([]int{0}))
-			cowFS := fs.(*afero.CopyOnWriteFs)
-			layer := GetUnexportedField(reflect.ValueOf(cowFS).Elem().FieldByName("layer"))
-			memFS := layer.(*afero.MemMapFs)
-			data := GetUnexportedField(reflect.ValueOf(memFS).Elem().FieldByName("data"))
-			fdata := data.(map[string]*mem.FileData)
+		// "resetfs": func(t *term.Terminal, _ afero.Fs, args []string) {
+		// 	//fs.Reset(nil)
+		// },
+		// "fsdata": func(t *term.Terminal, fs afero.Fs, args []string) {
+		// 	// watchFS := fs.(*watchfs.FS)
+		// 	// watched := GetUnexportedField(reflect.ValueOf(watchFS).Elem().FieldByIndex([]int{0}))
+		// 	cowFS := fs.(*afero.CopyOnWriteFs)
+		// 	layer := GetUnexportedField(reflect.ValueOf(cowFS).Elem().FieldByName("layer"))
+		// 	memFS := layer.(*afero.MemMapFs)
+		// 	data := GetUnexportedField(reflect.ValueOf(memFS).Elem().FieldByName("data"))
+		// 	fdata := data.(map[string]*mem.FileData)
 
-			for name, fd := range fdata {
-				memDir := GetUnexportedField(reflect.ValueOf(fd).Elem().FieldByName("memDir"))
-				fmt.Printf("%s:\nFileData:%+v\nDirMap:%+v\n", name, *fd, memDir)
-			}
-		},
-		"touch": func(t *term.Terminal, fs afero.Fs, args []string) {
-			err := afero.WriteFile(fs, unixToFsPath(args[0]), []byte{}, 0644)
-			if checkErr(t, err) {
-				return
-			}
-		},
-		"cat": func(t *term.Terminal, fs afero.Fs, args []string) {
-			d, err := afero.ReadFile(fs, unixToFsPath(args[0]))
-			if checkErr(t, err) {
-				return
-			}
-			t.Write(d)
-			io.WriteString(t, "\n")
-		},
-		"rm": func(t *term.Terminal, fs afero.Fs, args []string) {
-			if args[0] == "-r" {
-				// TODO: doesn't return an error if path doesn't exist
-				err := fs.RemoveAll(unixToFsPath(args[1]))
-				if checkErr(t, err) {
-					return
-				}
-			} else {
-				path := unixToFsPath(args[0])
-				if isdir, _ := afero.IsDir(fs, path); isdir {
-					fmt.Fprintf(t, "cant remove file %s: is a directory\n(try using the `-r` flag)\n", absPath(args[0]))
-				}
-				// TODO: fs.Remove doesn't error if you pass it a directory!
-				// it also gives the wrong error if trying to delete a readonly file,
-				// (should be Operation not permitted)
-				err := fs.Remove(path)
-				if checkErr(t, err) {
-					return
-				}
-			}
-		},
-		"mkdir": func(t *term.Terminal, fs afero.Fs, args []string) {
-			err := fs.Mkdir(unixToFsPath(args[0]), 0755)
-			if checkErr(t, err) {
-				return
-			}
-		},
-		// Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
-		"mv": func(t *term.Terminal, fs afero.Fs, args []string) {
-			// TODO: prevent file overwrite if dest file already exits (should this already be an error?)
-			// TODO: error when dest directory doesn't exist and args.len > 2
-			isdir, err := afero.DirExists(fs, unixToFsPath(args[len(args)-1]))
-			if checkErr(t, err) {
-				return
-			}
-			if isdir {
-				// move all paths into this directory
-				dir := absPath(args[len(args)-1])
-				for _, path := range args[:len(args)-1] {
-					src := filepath.Base(path)
-					dest := filepath.Join(dir, src)
-					err := fs.Rename(unixToFsPath(path), unixToFsPath(dest))
-					if err != nil {
-						io.WriteString(t, fmt.Sprintln(err))
-						continue
-					}
-				}
-			} else {
-				err := fs.Rename(unixToFsPath(args[0]), unixToFsPath(args[1]))
-				if checkErr(t, err) {
-					return
-				}
-			}
-		},
-		// Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
-		"cp": func(t *term.Terminal, fs afero.Fs, args []string) {
-			// TODO: handle copying directories
-			isdir, err := afero.DirExists(fs, unixToFsPath(args[len(args)-1]))
-			if checkErr(t, err) {
-				return
-			}
-			if isdir {
-				// copy all paths to this directory
-				dir := absPath(args[len(args)-1])
-				recursive := args[0] == "-r"
-
-				start := 0
-				if recursive {
-					start = 1
-				}
-
-				for _, path := range args[start : len(args)-1] {
-					srcName := filepath.Base(path)
-					dest := filepath.Join(dir, srcName)
-
-					srcIsDir, err := afero.IsDir(fs, unixToFsPath(path))
-					if checkErr(t, err) {
-						continue
-					}
-
-					if srcIsDir {
-						if !recursive {
-							io.WriteString(t, fmt.Sprintf("-r not specified; omitting directory '%s'\n", path))
-							continue
-						}
-
-						err = fs.MkdirAll(unixToFsPath(dest), 0755)
-						if checkErr(t, err) {
-							continue
-						}
-
-						entries, err := afero.ReadDir(fs, unixToFsPath(path))
-						if checkErr(t, err) {
-							continue
-						}
-
-						for _, e := range entries {
-							commands["cp"](t, fs, []string{"-r", filepath.Join(path, e.Name()), dest})
-						}
-					} else {
-						content, err := afero.ReadFile(fs, unixToFsPath(path))
-						if checkErr(t, err) {
-							continue
-						}
-						err = afero.WriteFile(fs, unixToFsPath(dest), content, 0644)
-						if checkErr(t, err) {
-							continue
-						}
-					}
-				}
-			} else {
-				content, err := afero.ReadFile(fs, unixToFsPath(args[0]))
-				if checkErr(t, err) {
-					return
-				}
-
-				err = afero.WriteFile(fs, unixToFsPath(args[1]), content, 0644)
-				if checkErr(t, err) {
-					return
-				}
-			}
-		},
-		"pwd": func(t *term.Terminal, fs afero.Fs, args []string) {
-			wd, _ := os.Getwd()
-			io.WriteString(t, fmt.Sprintln(wd))
-		},
-		"write": func(t *term.Terminal, fs afero.Fs, args []string) {
-			afero.WriteFile(fs, args[0], []byte(strings.Join(args[1:], " ")), 0644)
-		},
-		"env": func(t *term.Terminal, fs afero.Fs, args []string) {
-			for _, kvp := range os.Environ() {
-				fmt.Fprintln(t, kvp)
-			}
-		},
-		// export [-remove] <NAME[=VALUE]>...
-		"export": func(t *term.Terminal, fs afero.Fs, args []string) {
-			remove := args[0] == "-remove"
-			if remove {
-				args = args[1:]
-			}
-
-			for i, arg := range args {
-				name, value, _ := strings.Cut(arg, "=")
-				if name == "" {
-					io.WriteString(t, fmt.Sprintf("invalid argument (%d): missing variable name", i))
-					return
-				}
-				if remove {
-					os.Setenv(name, "")
-				} else {
-					os.Setenv(name, value)
-				}
-			}
-		},
+		// 	for name, fd := range fdata {
+		// 		memDir := GetUnexportedField(reflect.ValueOf(fd).Elem().FieldByName("memDir"))
+		// 		fmt.Printf("%s:\nFileData:%+v\nDirMap:%+v\n", name, *fd, memDir)
+		// 	}
+		// },
 	}
 }
