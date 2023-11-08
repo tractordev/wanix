@@ -19,6 +19,20 @@
 		return stat;
 	}
 
+	const inflateErr = (err) => {
+		if (!err.includes(";")) {
+			return err;
+		}
+		const [msg, params] = err.split(";");
+		const obj = params.split(",").reduce((obj, pair) => {
+			const [key, value] = pair.split('=');
+			obj[key.trim()] = value.trim();
+			return obj;
+		}, {});
+		const e = new Error(msg);
+		return Object.assign(e, obj);
+	}
+
   if (!globalThis.stdin) {
     globalThis.stdin = (buf, cb) => cb(null, 0);
   }
@@ -57,73 +71,73 @@
           default:
 						globalThis.sys.call("fs.write", [fd, buf, offset, length, position])
 							.then(res => callback(null, res.value))
-							.catch(err => callback(err));
+							.catch(err => callback(inflateErr(err)));
         }
 			},
 			chmod(path, mode, callback) {
 				globalThis.sys.call("fs.chmod", [path, mode])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			chown(path, uid, gid, callback) {
 				globalThis.sys.call("fs.chown", [path, uid, gid])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			close(fd, callback) {
 				globalThis.sys.call("fs.close", [fd])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			fchmod(fd, mode, callback) {
 				globalThis.sys.call("fs.fchmod", [fd, mode])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			fchown(fd, uid, gid, callback) {
 				globalThis.sys.call("fs.fchown", [fd, uid, gid])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			fstat(fd, callback) {
 				globalThis.sys.call("fs.fstat", [fd])
 					.then(res => callback(null, inflateStat(res.value)))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			fsync(fd, callback) {
 				globalThis.sys.call("fs.fsync", [fd])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			ftruncate(fd, length, callback) {
 				globalThis.sys.call("fs.ftruncate", [fd])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			lchown(path, uid, gid, callback) {
 				globalThis.sys.call("fs.lchown", [path, uid, gid])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			link(path, link, callback) {
 				globalThis.sys.call("fs.link", [path, link])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			lstat(path, callback) {
 				globalThis.sys.call("fs.lstat", [path])
 					.then(res => callback(null, inflateStat(res.value)))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			mkdir(path, perm, callback) {
 				globalThis.sys.call("fs.mkdir", [path, perm])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			open(path, flags, mode, callback) {
 				globalThis.sys.call("fs.open", [path, flags, mode])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			read(fd, buffer, offset, length, position, callback) { 
 				if (fd === 0) {
@@ -139,47 +153,47 @@
 			readdir(path, callback) {
 				globalThis.sys.call("fs.readdir", [path])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			readlink(path, callback) {
 				globalThis.sys.call("fs.readlink", [path])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			rename(from, to, callback) {
 				globalThis.sys.call("fs.rename", [from, to])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			rmdir(path, callback) {
 				globalThis.sys.call("fs.rmdir", [path])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			stat(path, callback) {
 				globalThis.sys.call("fs.stat", [path])
 					.then(res => callback(null, inflateStat(res.value)))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			symlink(path, link, callback) {
 				globalThis.sys.call("fs.symlink", [path, link])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			truncate(path, length, callback) {
 				globalThis.sys.call("fs.truncate", [path, length])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			unlink(path, callback) {
 				globalThis.sys.call("fs.unlink", [path])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 			utimes(path, atime, mtime, callback) {
 				globalThis.sys.call("fs.utimes", [path, atime, mtime])
 					.then(res => callback(null, res.value))
-					.catch(err => callback(err));
+					.catch(err => callback(inflateErr(err)));
 			},
 		};
 	}
