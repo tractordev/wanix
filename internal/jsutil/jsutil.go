@@ -103,25 +103,6 @@ func ToGoStringSlice(jsArray js.Value) []string {
 	return result
 }
 
-func ToGoByteSlice(jsArray js.Value) []byte {
-	if jsArray.Type() != js.TypeObject || !jsArray.InstanceOf(js.Global().Get("Uint8Array")) {
-		panic("provided js.Value is not a JavaScript Uint8Array")
-	}
-
-	length := jsArray.Length()
-	result := make([]byte, length)
-
-	if length == 0 {
-		return result
-	}
-
-	for i := 0; i < length; i++ {
-		result[i] = byte(jsArray.Index(i).Int())
-	}
-
-	return result
-}
-
 func ToGoSlice(jsArray js.Value) []any {
 	if jsArray.Type() != js.TypeObject || !jsArray.InstanceOf(js.Global().Get("Array")) {
 		panic("provided js.Value is not a JavaScript array")

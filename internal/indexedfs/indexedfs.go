@@ -249,10 +249,10 @@ func (f *indexedFile) data() ([]byte, error) {
 		if data.IsNull() {
 			f.readCache = []byte{}
 		} else {
-			f.readCache = jsutil.ToGoByteSlice(data)
+			f.readCache = make([]byte, data.Length())
+			js.CopyBytesToGo(f.readCache, data)
 		}
 	}
-
 	return f.readCache, nil
 }
 
@@ -333,7 +333,9 @@ func (f *indexedFile) Sync() error {
 			"type": "application/octet-stream",
 		}
 
-		file.Set("blob", js.Global().Get("Blob").New(jsutil.ToJSArray(f.writeCache), mime))
+		buf := js.Global().Get("Uint8Array").New(len(f.writeCache))
+		js.CopyBytesToJS(buf, f.writeCache)
+		file.Set("blob", js.Global().Get("Blob").New([]any{buf}, mime))
 		file.Set("size", len(f.writeCache))
 		// TODO: set mtime
 		return file
