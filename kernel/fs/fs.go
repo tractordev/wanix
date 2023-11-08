@@ -1,7 +1,6 @@
 package fs
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -77,24 +76,7 @@ func (s *Service) InitializeJS() {
 	// symlink(path, link, callback) { callback(enosys()); },
 	// truncate(path, length, callback) { callback(enosys()); },
 
-	fsObj.Set("stdinWrite", js.FuncOf(func(this js.Value, args []js.Value) any {
-		size := args[0].Length()
-		log("stdinWrite", size)
-		// not sure why we can't just use the Uint8Array passed in,
-		// CopyBytesToGo will complain its not a Uint8Array, so we
-		// make a fresh one and copy into it and it seems to work
-		jsbuf := js.Global().Get("Uint8Array").New(size)
-		jsbuf.Call("set", args[0], 0)
-		buf := make([]byte, size)
-		js.CopyBytesToGo(buf, jsbuf)
-		if _, err := StdinBuf.Write(buf); err != nil {
-			log("stdinWrite:", err.Error())
-		}
-		return nil
-	}))
 }
-
-var StdinBuf = NewDataBuffer()
 
 func cleanPath(path string) string {
 	p := strings.TrimLeft(filepath.Clean(path), "/")
@@ -423,14 +405,18 @@ func (s *Service) chown(this js.Value, args []js.Value) any {
 	uid := args[1].Int()
 	gid := args[2].Int()
 	cb := args[3]
-	log("chown", path)
 
-	if err := s.fsys.Chown(path, uid, gid); err != nil {
-		cb.Invoke(jsError(err))
-		return nil
-	}
+	go func() {
+		log("chown", path)
 
-	cb.Invoke(nil)
+		if err := s.fsys.Chown(path, uid, gid); err != nil {
+			cb.Invoke(jsError(err))
+			return
+		}
+
+		cb.Invoke(nil)
+	}()
+
 	return nil
 }
 
@@ -440,22 +426,26 @@ func (s *Service) fchown(this js.Value, args []js.Value) any {
 	uid := args[1].Int()
 	gid := args[2].Int()
 	cb := args[3]
-	log("fchown", fd)
 
-	s.mu.Lock()
-	f, ok := s.fds[fd]
-	s.mu.Unlock()
-	if !ok {
-		cb.Invoke(jsError(syscall.EBADF))
-		return nil
-	}
+	go func() {
+		log("fchown", fd)
 
-	if err := s.fsys.Chown(f.Path, uid, gid); err != nil {
-		cb.Invoke(jsError(err))
-		return nil
-	}
+		s.mu.Lock()
+		f, ok := s.fds[fd]
+		s.mu.Unlock()
+		if !ok {
+			cb.Invoke(jsError(syscall.EBADF))
+			return
+		}
 
-	cb.Invoke(nil)
+		if err := s.fsys.Chown(f.Path, uid, gid); err != nil {
+			cb.Invoke(jsError(err))
+			return
+		}
+
+		cb.Invoke(nil)
+	}()
+
 	return nil
 }
 
@@ -465,14 +455,18 @@ func (s *Service) lchown(this js.Value, args []js.Value) any {
 	uid := args[1].Int()
 	gid := args[2].Int()
 	cb := args[3]
-	log("lchown", path)
 
-	if err := s.fsys.Chown(path, uid, gid); err != nil {
-		cb.Invoke(jsError(err))
-		return nil
-	}
+	go func() {
+		log("lchown", path)
 
-	cb.Invoke(nil)
+		if err := s.fsys.Chown(path, uid, gid); err != nil {
+			cb.Invoke(jsError(err))
+			return
+		}
+
+		cb.Invoke(nil)
+	}()
+
 	return nil
 }
 
@@ -481,14 +475,18 @@ func (s *Service) chmod(this js.Value, args []js.Value) any {
 	path := cleanPath(args[0].String())
 	mode := args[1].Int()
 	cb := args[2]
-	log("chmod", path)
 
-	if err := s.fsys.Chmod(path, fs.FileMode(mode)); err != nil {
-		cb.Invoke(jsError(err))
-		return nil
-	}
+	go func() {
+		log("chmod", path)
 
-	cb.Invoke(nil)
+		if err := s.fsys.Chmod(path, fs.FileMode(mode)); err != nil {
+			cb.Invoke(jsError(err))
+			return
+		}
+
+		cb.Invoke(nil)
+	}()
+
 	return nil
 }
 
@@ -497,22 +495,26 @@ func (s *Service) fchmod(this js.Value, args []js.Value) any {
 	fd := args[0].Int()
 	mode := args[1].Int()
 	cb := args[2]
-	log("fchmod", fd)
 
-	s.mu.Lock()
-	f, ok := s.fds[fd]
-	s.mu.Unlock()
-	if !ok {
-		cb.Invoke(jsError(syscall.EBADF))
-		return nil
-	}
+	go func() {
+		log("fchmod", fd)
 
-	if err := s.fsys.Chmod(f.Path, fs.FileMode(mode)); err != nil {
-		cb.Invoke(jsError(err))
-		return nil
-	}
+		s.mu.Lock()
+		f, ok := s.fds[fd]
+		s.mu.Unlock()
+		if !ok {
+			cb.Invoke(jsError(syscall.EBADF))
+			return
+		}
 
-	cb.Invoke(nil)
+		if err := s.fsys.Chmod(f.Path, fs.FileMode(mode)); err != nil {
+			cb.Invoke(jsError(err))
+			return
+		}
+
+		cb.Invoke(nil)
+	}()
+
 	return nil
 }
 
@@ -521,9 +523,10 @@ func (s *Service) mkdir(this js.Value, args []js.Value) any {
 	path := cleanPath(args[0].String())
 	perm := args[1].Int()
 	cb := args[2]
-	log("mkdir", path)
 
 	go func() {
+		log("mkdir", path)
+
 		if err := s.fsys.MkdirAll(path, os.FileMode(perm)); err != nil {
 			cb.Invoke(jsError(err))
 			return
@@ -539,14 +542,18 @@ func (s *Service) rename(this js.Value, args []js.Value) any {
 	from := cleanPath(args[0].String())
 	to := cleanPath(args[1].String())
 	cb := args[2]
-	log("rename", from, to)
 
-	if err := s.fsys.Rename(from, to); err != nil {
-		cb.Invoke(jsError(err))
-		return nil
-	}
+	go func() {
+		log("rename", from, to)
 
-	cb.Invoke(nil)
+		if err := s.fsys.Rename(from, to); err != nil {
+			cb.Invoke(jsError(err))
+			return
+		}
+
+		cb.Invoke(nil)
+	}()
+
 	return nil
 }
 
@@ -554,15 +561,19 @@ func (s *Service) rename(this js.Value, args []js.Value) any {
 func (s *Service) rmdir(this js.Value, args []js.Value) any {
 	path := cleanPath(args[0].String())
 	cb := args[1]
-	log("rmdir", path)
 
-	// TODO: should only remove if dir is empty i think?
-	if err := s.fsys.RemoveAll(path); err != nil {
-		cb.Invoke(jsError(err))
-		return nil
-	}
+	go func() {
+		log("rmdir", path)
 
-	cb.Invoke(nil)
+		// TODO: should only remove if dir is empty i think?
+		if err := s.fsys.RemoveAll(path); err != nil {
+			cb.Invoke(jsError(err))
+			return
+		}
+
+		cb.Invoke(nil)
+	}()
+
 	return nil
 }
 
@@ -570,14 +581,18 @@ func (s *Service) rmdir(this js.Value, args []js.Value) any {
 func (s *Service) unlink(this js.Value, args []js.Value) any {
 	path := cleanPath(args[0].String())
 	cb := args[1]
-	log("unlink", path)
 
-	if err := s.fsys.Remove(path); err != nil {
-		cb.Invoke(jsError(err))
-		return nil
-	}
+	go func() {
+		log("unlink", path)
 
-	cb.Invoke(nil)
+		if err := s.fsys.Remove(path); err != nil {
+			cb.Invoke(jsError(err))
+			return
+		}
+
+		cb.Invoke(nil)
+	}()
+
 	return nil
 }
 
@@ -656,55 +671,4 @@ func jsError(err error) js.Value {
 	}
 	//log("jserr:", err.Error(), jsErr.Get("code").String())
 	return jsErr
-}
-
-/////
-
-type DataBuffer struct {
-	buf    *bytes.Buffer
-	cond   *sync.Cond
-	closed bool
-}
-
-func NewDataBuffer() *DataBuffer {
-	return &DataBuffer{
-		buf:  &bytes.Buffer{},
-		cond: sync.NewCond(&sync.Mutex{}),
-	}
-}
-
-func (db *DataBuffer) Write(data []byte) (n int, err error) {
-	db.cond.L.Lock()
-	defer db.cond.L.Unlock()
-
-	if db.closed {
-		return 0, fmt.Errorf("buffer closed")
-	}
-
-	n, err = db.buf.Write(data)
-	db.cond.Broadcast() // Signal that data has been written
-	return
-}
-
-func (db *DataBuffer) Read(p []byte) (n int, err error) {
-	db.cond.L.Lock()
-	defer db.cond.L.Unlock()
-
-	for db.buf.Len() == 0 && !db.closed {
-		db.cond.Wait() // Wait for data to be written
-	}
-
-	if db.closed {
-		return 0, fmt.Errorf("buffer closed")
-	}
-
-	return db.buf.Read(p)
-}
-
-func (db *DataBuffer) Close() {
-	db.cond.L.Lock()
-	defer db.cond.L.Unlock()
-
-	db.closed = true
-	db.cond.Broadcast() // Signal that the buffer is closed
 }

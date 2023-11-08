@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/wanix/internal/jsutil"
 )
+
+// TODO: better fs errors
 
 var helper js.Value = js.Undefined()
 
@@ -27,7 +30,6 @@ type FS struct {
 
 func New() (*FS, error) {
 	if helper.IsUndefined() {
-		// import indexedfs.js
 		blob := js.Global().Get("initfs").Get("indexedfs.js")
 		url := js.Global().Get("URL").Call("createObjectURL", blob)
 		helper = jsutil.Await(js.Global().Call("import", url))
@@ -41,10 +43,10 @@ func New() (*FS, error) {
 }
 
 func (ifs *FS) Chmod(name string, mode fs.FileMode) error {
-	panic("Chmod unimplemented")
+	return fs.ErrPermission // TODO: maybe just a no-op?
 }
 func (ifs *FS) Chown(name string, uid, gid int) error {
-	panic("Chown unimplemented")
+	return fs.ErrPermission // TODO: maybe just a no-op?
 }
 func (ifs *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -62,10 +64,41 @@ func (ifs *FS) Create(name string) (fs.File, error) {
 	return ifs.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 }
 func (ifs *FS) Mkdir(name string, perm fs.FileMode) error {
-	panic("Mkdir unimplemented")
+	if !fs.ValidPath(name) {
+		return &fs.PathError{Op: "mkdir", Path: name, Err: fs.ErrInvalid}
+	}
+	dir := filepath.Dir(name)
+	if dir != "." && dir != "/" {
+		exists, err := fsutil.DirExists(ifs, dir)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return &fs.PathError{Op: "mkdir", Path: dir, Err: fs.ErrInvalid}
+		}
+	}
+	_, err := jsutil.AwaitErr(callHelper("addFile", ifs.db, name, uint32(perm), true))
+	return err
 }
 func (ifs *FS) MkdirAll(path string, perm fs.FileMode) error {
-	panic("MkdirAll unimplemented")
+	var pp []string
+	for _, p := range strings.Split(path, "/") {
+		if p == "" {
+			continue
+		}
+		pp = append(pp, p)
+		dir := filepath.Join(pp...)
+		exists, err := fsutil.DirExists(ifs, dir)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			if err := ifs.Mkdir(dir, perm); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (ifs *FS) Open(name string) (fs.File, error) {
@@ -85,9 +118,11 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 	// make sure we're using the right permissions
 	// profit?
 
-	var file fs.File = nil
-	var err error = nil
-	var key js.Value
+	var (
+		file fs.File = nil
+		key  js.Value
+		err  error = nil
+	)
 
 	key, err = jsutil.AwaitErr(callHelper("getFileKey", ifs.db, name))
 	if err == nil {
@@ -105,7 +140,6 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 		}
 	}
 
-	// TODO: fully convert js errors to Go errors
 	if err != nil {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
@@ -122,19 +156,41 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 }
 
 func (ifs *FS) Remove(name string) error {
-	panic("Remove unimplemented")
+	key, err := jsutil.AwaitErr(callHelper("getFileKey", ifs.db, name))
+	if err != nil {
+		return err
+	}
+	_, err = jsutil.AwaitErr(callHelper("deleteFile", ifs.db, key))
+	return err
 }
+
 func (ifs *FS) RemoveAll(path string) error {
-	panic("RemoveAll unimplemented")
+	_, err := jsutil.AwaitErr(callHelper("deleteAll", ifs.db, path))
+	return err
 }
+
 func (ifs *FS) Rename(oldname, newname string) error {
-	panic("Rename unimplemented")
+	key, err := jsutil.AwaitErr(callHelper("getFileKey", ifs.db, oldname))
+	if err != nil {
+		return err
+	}
+
+	updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
+		file := args[0]
+		file.Set("path", newname)
+		// TODO: set mtime
+		return file
+	})
+	defer updateFunc.Release()
+
+	_, err = jsutil.AwaitErr(callHelper("updateFile", ifs.db, key, updateFunc))
+	return err
 }
 
 func (ifs *FS) Stat(name string) (fs.FileInfo, error) {
 	f, err := jsutil.AwaitErr(callHelper("getFileByPath", ifs.db, name))
 	if err != nil {
-		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
+		return nil, fs.ErrNotExist
 	}
 
 	return &indexedInfo{

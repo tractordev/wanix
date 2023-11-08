@@ -115,24 +115,24 @@ export function updateFile(db, pathOrKey, updateCallback) {
 
 export function getFileKey(db, path) {
 	return new Promise((resolve, reject) => {
-		const getRequest =
+		const req =
 			db.transaction("files", "readonly")
 			.objectStore("files")
 			.index("path")
 			.getKey(path);
 
-		getRequest.onsuccess = (event) => {
+		req.onsuccess = (event) => {
 			// The success callbacks are triggered even if the function 
 			// didn't actually return any data... So we have to do error
 			// handling in here too. >:|
 			if(event.target.result) {
-				resolve(getRequest.result);
+				resolve(req.result);
 			} else {
 				reject(new Error(`ErrNotExist: Failed to find file at path: ${path}`));
 			}
 		};
 
-		getRequest.onerror = (event) => {
+		req.onerror = (event) => {
 			reject(new Error(`Failed to find file at path ${path}: ${event.target.error}`));
 		};
 	});
@@ -218,6 +218,52 @@ export function readFile(db, key) {
 			reject(new Error(`Failed to read file with key ${key}: ${event.target.error}`))
 		};
 	})
+}
+
+export function deleteFile(db, key) {
+	return new Promise((resolve, reject) => {
+		const req = 
+			db.transaction("files", "readwrite")
+			.objectStore("files")
+			.delete(key);
+
+		req.onsuccess = () => resolve();
+		req.onerror = (event) => {
+			reject(new Error(`Failed to delete file with key ${key}: ${event.target.error}`))
+		};
+	})
+}
+
+
+export function deleteAll(db, path) {
+	if (path === "." || path === "") {
+		return; // error? allow it? 
+	}
+	if (path && path[path.length - 1] !== '/') {
+		path = path + "/";
+	}
+	return new Promise((resolve, reject) => {
+		const range = IDBKeyRange.lowerBound(path);
+
+		const tx = db.transaction("files", "readwrite");
+		const req =	tx.objectStore("files").index("path").openCursor(range);
+
+		req.onsuccess = (event) => {
+			const cursor = event.target.result;
+			if (cursor) {
+				return;
+			}
+			if (cursor.key.startsWith(path) && cursor.key !== ".") {
+				tx.objectStore("files").delete(cursor.key)
+				cursor.continue();
+			}
+		};
+
+		tx.oncomplete = () => resolve();
+		tx.onerror = (event) => {
+			reject(new Error(`DeleteAll failure: ${path}: ${event.target.errorCode}`));
+		};
+	});
 }
 
 export function blobToUint8Array(blob) {
