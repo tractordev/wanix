@@ -276,7 +276,7 @@ func (cr cancelableReader) Read(p []byte) (n int, err error) {
 
 // Unix absolute path. Returns cwd if path is empty
 func absPath(path string) string {
-	if filepath.IsAbs(path) || path == "" {
+	if filepath.IsAbs(path) {
 		return filepath.Clean(path)
 	}
 	wd, _ := os.Getwd()
@@ -289,11 +289,11 @@ func unixToFsPath(path string) string {
 	if !filepath.IsAbs(path) {
 		// Join calls Clean internally
 		wd, _ := os.Getwd()
-		path = filepath.Join(wd, path)
+		path = filepath.Join(strings.TrimLeft(wd, "/"), path)
 	} else {
-		path = filepath.Clean(path)
+		path = filepath.Clean(strings.TrimLeft(path, "/"))
 	}
-	return strings.TrimLeft(path, "/")
+	return path
 }
 
 func checkErr(w io.Writer, err error) (hadError bool) {
