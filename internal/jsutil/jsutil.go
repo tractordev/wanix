@@ -14,26 +14,26 @@ func Await(promise js.Value) js.Value {
 	return <-ch
 }
 
-func AwaitAll(promise js.Value) (resolved, rejected js.Value) {
+func AwaitErr(promise js.Value) (js.Value, error) {
 	ch := make(chan js.Value, 2)
 	promise.Call("then",
 		js.FuncOf(func(this js.Value, args []js.Value) any {
-			Log("AwaitAll.resolved", ToJSArray(args))
 			ch <- args[0] // resolve
 			ch <- js.Undefined()
 			return nil
 		}),
 		js.FuncOf(func(this js.Value, args []js.Value) any {
-			Log("AwaitAll.rejected", ToJSArray(args))
 			ch <- js.Undefined()
 			ch <- args[0] // reject
 			return nil
 		}),
 	)
-
-	resolved = <-ch
-	rejected = <-ch
-	return
+	resolved := <-ch
+	rejected := <-ch
+	if rejected.Truthy() {
+		return js.Undefined(), js.Error{rejected}
+	}
+	return resolved, nil
 }
 
 func Promise(fn func() (any, error)) any {

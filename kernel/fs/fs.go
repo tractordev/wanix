@@ -16,7 +16,6 @@ import (
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/internal/indexedfs"
 
-	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/toolkit-go/engine/fs/mountablefs"
 )
 
@@ -41,48 +40,12 @@ type fd struct {
 func (s *Service) Initialize() {
 	s.fds = make(map[int]*fd)
 	s.nextFd = 1000
-	if ifs, err := indexedfs.Initalize(); err != nil {
+
+	ifs, err := indexedfs.New()
+	if err != nil {
 		panic(err)
-	} else {
-		s.fsys = mountablefs.New(ifs)
 	}
-
-	// fsutil.MkdirAll(s.fsys, "debug", 0755)
-
-	if f, err := s.fsys.Open("home/hello.txt"); err == nil {
-		data := make([]byte, 32)
-		if n, err := f.Read(data); err == nil {
-			fmt.Printf("%s\n", data[:n])
-		} else {
-			fmt.Println(err)
-		}
-	} else {
-		fmt.Println(err)
-	}
-	if f, err := s.fsys.Open("home/goodbye.txt"); err == nil {
-		data := make([]byte, 32)
-		if n, err := f.Read(data); err == nil {
-			fmt.Printf("%s\n", data[:n])
-		} else {
-			fmt.Println(err)
-		}
-	} else {
-		fmt.Println(err)
-	}
-	if err := fsutil.WriteFile(s.fsys, "debug.txt", []byte("Hello world"), 0644); err != nil {
-		fmt.Println("WriteFile debug.txt", err)
-	}
-
-	if f, err := s.fsys.Open("debug.txt"); err == nil {
-		data := make([]byte, 32)
-		if n, err := f.Read(data); err == nil {
-			fmt.Printf("%s\n", data[:n])
-		} else {
-			fmt.Println(err)
-		}
-	} else {
-		fmt.Println(err)
-	}
+	s.fsys = mountablefs.New(ifs)
 }
 
 func (s *Service) InitializeJS() {
@@ -135,8 +98,8 @@ var StdinBuf = NewDataBuffer()
 
 func cleanPath(path string) string {
 	p := strings.TrimLeft(filepath.Clean(path), "/")
-	if p == "" {
-		return "/"
+	if p == "" || p == "/" {
+		return "."
 	}
 	return p
 }

@@ -14,24 +14,30 @@ import (
 	"tractor.dev/wanix/internal/jsutil"
 )
 
+var helper js.Value = js.Undefined()
+
+func callHelper(name string, args ...any) js.Value {
+	//jsutil.Log(name, args)
+	return helper.Call(name, args...)
+}
+
 type FS struct {
 	db js.Value
 }
 
-func Initalize() (*FS, error) {
-	if dbhelper.IsUndefined() {
-		// import dbhelper.js
-		blob := js.Global().Get("initfs").Get("dbhelper.js")
+func New() (*FS, error) {
+	if helper.IsUndefined() {
+		// import indexedfs.js
+		blob := js.Global().Get("initfs").Get("indexedfs.js")
 		url := js.Global().Get("URL").Call("createObjectURL", blob)
-		dbhelper = jsutil.Await(js.Global().Call("import", url))
+		helper = jsutil.Await(js.Global().Call("import", url))
 	}
 
-	db, err := jsutil.AwaitAll(callHelper("initialize"))
-	if err.Truthy() {
-		return nil, js.Error{err}
-	} else {
-		return &FS{db: db}, nil
+	db, err := jsutil.AwaitErr(callHelper("initialize"))
+	if err != nil {
+		return nil, err
 	}
+	return &FS{db: db}, nil
 }
 
 func (ifs *FS) Chmod(name string, mode fs.FileMode) error {
@@ -49,12 +55,8 @@ func (ifs *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	})
 	defer updateFunc.Release()
 
-	err := jsutil.Await(callHelper("updateFile", ifs.db, name, updateFunc))
-	if err.Truthy() {
-		return js.Error{err}
-	} else {
-		return nil
-	}
+	_, err := jsutil.AwaitErr(callHelper("updateFile", ifs.db, name, updateFunc))
+	return err
 }
 func (ifs *FS) Create(name string) (fs.File, error) {
 	return ifs.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -85,11 +87,11 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 
 	var file fs.File = nil
 	var err error = nil
+	var key js.Value
 
-	if key, jsErr := jsutil.AwaitAll(callHelper("getFileKey", ifs.db, name)); jsErr.Truthy() {
-		err = js.Error{jsErr}
-	} else {
-		file = &indexedFile{key: key.Int(), ifs: ifs, flags: flag}
+	key, err = jsutil.AwaitErr(callHelper("getFileKey", ifs.db, name))
+	if err == nil {
+		file = &indexedFile{name: name, key: key.Int(), ifs: ifs, flags: flag}
 	}
 
 	if err == nil && (flag&(os.O_EXCL|os.O_CREATE) == (os.O_EXCL | os.O_CREATE)) {
@@ -98,11 +100,8 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 
 	// TODO: figure out a better way of signaling error type from javascript
 	if err != nil && strings.Contains(err.Error(), "ErrNotExist") && (flag&os.O_CREATE > 0) {
-		if key, jsErr := jsutil.AwaitAll(callHelper("addFile", ifs.db, name, uint32(perm), perm.IsDir())); jsErr.Truthy() {
-			err = js.Error{jsErr}
-		} else {
-			file = &indexedFile{key: key.Int(), ifs: ifs, flags: flag}
-			err = nil
+		if key, err = jsutil.AwaitErr(callHelper("addFile", ifs.db, name, uint32(perm), perm.IsDir())); err == nil {
+			file = &indexedFile{name: name, key: key.Int(), ifs: ifs, flags: flag}
 		}
 	}
 
@@ -133,9 +132,9 @@ func (ifs *FS) Rename(oldname, newname string) error {
 }
 
 func (ifs *FS) Stat(name string) (fs.FileInfo, error) {
-	f, err := jsutil.AwaitAll(callHelper("getFileByPath", ifs.db, name))
-	if err.Truthy() {
-		return nil, &fs.PathError{Op: "stat", Path: name, Err: js.Error{err}}
+	f, err := jsutil.AwaitErr(callHelper("getFileByPath", ifs.db, name))
+	if err != nil {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 	}
 
 	return &indexedInfo{
@@ -146,7 +145,26 @@ func (ifs *FS) Stat(name string) (fs.FileInfo, error) {
 	}, nil
 }
 
+func (ifs *FS) ReadDir(name string) ([]fs.DirEntry, error) {
+	entries, err := jsutil.AwaitErr(callHelper("getDirEntries", ifs.db, name))
+	if err != nil {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: err}
+	}
+	var fsEntries []fs.DirEntry
+	for i := 0; i < entries.Length(); i++ {
+		e := entries.Index(i)
+		fsEntries = append(fsEntries, &indexedInfo{
+			name:    filepath.Base(e.Get("path").String()),
+			size:    int64(e.Get("size").Int()),
+			isDir:   e.Get("isdir").Bool(),
+			modTime: int64(e.Get("mtime").Int()),
+		})
+	}
+	return fsEntries, nil
+}
+
 type indexedFile struct {
+	name   string
 	key    int
 	ifs    *FS
 	flags  int
@@ -160,18 +178,22 @@ type indexedFile struct {
 	dirty      bool
 }
 
+func (f *indexedFile) ReadDir(n int) ([]fs.DirEntry, error) {
+	return f.ifs.ReadDir(f.name)
+}
+
 func (f *indexedFile) data() ([]byte, error) {
 	if f.outdatedRead || f.readCache == nil {
-		array, err := jsutil.AwaitAll(callHelper("readFile", f.ifs.db, f.key))
-		if err.Truthy() {
-			return nil, js.Error{err}
+		data, err := jsutil.AwaitErr(callHelper("readFile", f.ifs.db, f.key))
+		if err != nil {
+			return nil, err
 		}
 
 		f.outdatedRead = false
-		if array.IsNull() {
+		if data.IsNull() {
 			f.readCache = []byte{}
 		} else {
-			f.readCache = jsutil.ToGoByteSlice(array)
+			f.readCache = jsutil.ToGoByteSlice(data)
 		}
 	}
 
@@ -240,12 +262,10 @@ func (f *indexedFile) Write(p []byte) (n int, err error) {
 	copy(f.writeCache[f.offset:writeEnd], p)
 	f.writeCache = f.writeCache[:writeEnd]
 	f.dirty = true
-	jsutil.Log("Write:", jsutil.ToJSArray(f.writeCache))
 	return len(p), nil
 }
 
 func (f *indexedFile) Sync() error {
-	jsutil.Log("Sync")
 	if !f.dirty {
 		return nil
 	}
@@ -264,9 +284,9 @@ func (f *indexedFile) Sync() error {
 	})
 	defer updateFunc.Release()
 
-	err := jsutil.Await(callHelper("updateFile", f.ifs.db, f.key, updateFunc))
-	if err.Truthy() {
-		return js.Error{err}
+	_, err := jsutil.AwaitErr(callHelper("updateFile", f.ifs.db, f.key, updateFunc))
+	if err != nil {
+		return err
 	}
 
 	f.dirty = false
@@ -276,7 +296,7 @@ func (f *indexedFile) Sync() error {
 
 // Stat implements fs.File.
 func (f *indexedFile) Stat() (fs.FileInfo, error) {
-	panic("Stat unimplemented")
+	return f.ifs.Stat(f.name)
 }
 
 // Stat implements fs.File.
@@ -317,7 +337,7 @@ func (i *indexedInfo) Size() int64 {
 
 func (i *indexedInfo) Mode() fs.FileMode {
 	if i.isDir {
-		return 0755 | fs.ModeDir
+		return 0755 | os.ModeDir
 	}
 	return 0644
 }
@@ -334,9 +354,10 @@ func (i *indexedInfo) Sys() any {
 	return nil
 }
 
-var dbhelper js.Value = js.Undefined()
-
-func callHelper(name string, args ...any) js.Value {
-	jsutil.Log(name, args)
-	return dbhelper.Call(name, args...)
+// these allow it to act as DirInfo as well
+func (i *indexedInfo) Info() (fs.FileInfo, error) {
+	return i, nil
+}
+func (i *indexedInfo) Type() fs.FileMode {
+	return i.Mode()
 }

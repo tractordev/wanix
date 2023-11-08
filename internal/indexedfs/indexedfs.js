@@ -4,18 +4,24 @@ const fileData = [
 	{ path: "home", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: null },
 	{ path: "home/hello.txt", perms: 0, size: 12, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: new Blob(["Hello World!"], {type: "application/octet-stream"}) },
 	{ path: "home/goodbye.txt", perms: 0, size: 17, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: new Blob(["Sayonara Suckers!"], {type: "application/octet-stream"}) },
+	{ path: "home/subdir", perms: 0, size: 0, isdir: true, ctime: 0, mtime: 0, atime: 0, blob: null },
+	{ path: "home/subdir/hello2.txt", perms: 0, size: 12, isdir: false, ctime: 0, mtime: 0, atime: 0, blob: new Blob(["Hello World!"], {type: "application/octet-stream"}) },
 ];
+
+export function reset() {
+	indexedDB.deleteDatabase("indexedFS");
+}
 
 export function initialize() {
 	return new Promise((resolve, reject) => {
-		const OpenDBRequest = indexedDB.open("indexedDBFS");
+		const OpenDBRequest = indexedDB.open("indexedFS");
 
 		OpenDBRequest.onerror = (event) => {
 			reject(new Error(`Unable to open IndexedDB: ${event.target.error}`));
 		};
 		OpenDBRequest.onsuccess = (reqEvent) => {
-			console.log("OpenDBRequest.onsuccess");
 			const db = reqEvent.target.result;
+			globalThis.indexedfs = db;
 
 			db.onerror = (dbEvent) => {
 				// Generic error handler for all errors targeted at this database's
@@ -27,7 +33,6 @@ export function initialize() {
 		
 		// This event is only implemented in recent browsers
 		OpenDBRequest.onupgradeneeded = (upgradeEvent) => {
-			console.log("OpenDBRequest.onupgradeneeded");
 			const db = upgradeEvent.target.result;
 
 			const objectStore = db.createObjectStore("files", {
@@ -40,6 +45,7 @@ export function initialize() {
 
 			objectStore.transaction.oncomplete = () => {
 				// TODO: fill data from disk instead of using sample data
+				console.log("Loading debug indexedfs files...");
 				const fileStore = db.transaction("files", "readwrite").objectStore("files");
 				fileData.forEach((file) => {
 					fileStore.add(file);
@@ -80,7 +86,7 @@ export function addFile(db, path, perms, isdir) {
 
 // updateCallback takes a file object, modifies, and returns it.
 export function updateFile(db, pathOrKey, updateCallback) {
-	return new Promise((reject) => {
+	return new Promise((resolve, reject) => {
 		const transaction = db.transaction("files", "readwrite");
 
 		// any errors should bubble up to this handler
@@ -99,9 +105,7 @@ export function updateFile(db, pathOrKey, updateCallback) {
 			const cursor = event.target.result;
 			if(cursor) {
 				const file = updateCallback(cursor.value);
-				cursor.update(file).onsuccess = () => {
-					reject(null);
-				};
+				cursor.update(file).onsuccess = () => resolve();
 			} else {
 				reject(new Error(`Couldn't find file with key ${pathOrKey}`));
 			}
@@ -130,6 +134,45 @@ export function getFileKey(db, path) {
 
 		getRequest.onerror = (event) => {
 			reject(new Error(`Failed to find file at path ${path}: ${event.target.error}`));
+		};
+	});
+}
+
+export function getDirEntries(db, path) {
+	if (path === ".") {
+		path = "";
+	}
+	if (path && path[path.length - 1] !== '/') {
+		path = path + "/";
+	}
+	return new Promise((resolve, reject) => {
+		const range = IDBKeyRange.bound(path, path + '\uffff', false, true);
+
+		const getRequest =
+			db.transaction("files", "readonly")
+			.objectStore("files")
+			.index("path")
+			.openCursor(range);
+
+		const entries = [];
+
+		getRequest.onsuccess = (event) => {
+			const cursor = event.target.result;
+			if (cursor) {
+				// Check if the key is directly under the path, which means it should not have any
+				// more slashes beyond the given path
+				const key = cursor.key;
+				if (key && key.startsWith(path) && key.slice(path.length).indexOf('/') === -1 && key !== ".") {
+					entries.push(cursor.value); // Store the value in the results array
+				}
+				cursor.continue();
+			} else {
+				resolve(entries);
+			}
+		};
+
+		getRequest.onerror = (event) => {
+			reject(new Error(`Failed to find dir at path ${path}: ${event.target.error}`));
 		};
 	});
 }
