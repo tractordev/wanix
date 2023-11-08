@@ -175,24 +175,24 @@ func catCmd() *cli.Command {
 	return cmd
 }
 
-// TODO: does this even work anymore?
 func reloadCmd() *cli.Command {
 	return &cli.Command{
 		Usage: "reload",
 		Args:  cli.ExactArgs(0),
 		Run: func(ctx *cli.Context, args []string) {
-			js.Global().Get("wanix").Get("reload").Invoke()
+			fmt.Println("TODO: Unimplemented")
+			// js.Global().Get("wanix").Get("reload").Invoke()
 		},
 	}
 }
 
-// TODO: does this even work anymore?
 func downloadCmd() *cli.Command {
 	return &cli.Command{
 		Usage: "dl <path>",
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
-			js.Global().Get("wanix").Get("download").Invoke(args[0])
+			fmt.Println("TODO: Unimplemented")
+			// js.Global().Get("wanix").Get("download").Invoke(args[0])
 		},
 	}
 }
@@ -203,7 +203,6 @@ func touchCmd() *cli.Command {
 		Args:  cli.MinArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			// TODO: multiple files, options for updating a/mtimes
-			// TODO: fix permission denied error
 			err := os.WriteFile(absPath(args[0]), []byte{}, 0644)
 			if checkErr(ctx, err) {
 				return
