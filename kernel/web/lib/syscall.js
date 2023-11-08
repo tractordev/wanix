@@ -22,7 +22,7 @@ globalThis.api = {
     fstat(fd) { 
       return new Promise((ok, err) => globalThis.fs.fstat(fd, (e,res) => {
         if (e !== null) {
-          err(e);
+          err(encodeErrCode(e));
         } else {
           ok(marshalizeStat(res));
         }
@@ -43,7 +43,7 @@ globalThis.api = {
     lstat(path) { 
       return new Promise((ok, err) => globalThis.fs.lstat(path, (e,res) => {
         if (e !== null) {
-          err(e);
+          err(encodeErrCode(e));
         } else {
           ok(marshalizeStat(res));
         }
@@ -77,7 +77,7 @@ globalThis.api = {
     stat(path) { 
       return new Promise((ok, err) => globalThis.fs.stat(path, (e,res) => {
         if (e !== null) {
-          err(e);
+          err(encodeErrCode(e));
         } else {
           ok(marshalizeStat(res));
         }
@@ -110,14 +110,22 @@ function marshalizeStat(stat) {
   return stat;
 }
 
+// error handler callback
 function cb(ok, err) {
   return (e, ret) => {
     if (e !== null) {
-      err(e);
+      err(encodeErrCode(e));
     } else {
       ok(ret);
     }
   }
+}
+
+function encodeErrCode(err) {
+  if (err.code) {
+    err.message += `;code=${err.code}`;
+  }
+  return err;
 }
 
 

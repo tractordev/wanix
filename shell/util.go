@@ -17,7 +17,6 @@ import (
 	"github.com/anmitsu/go-shlex"
 	"github.com/spf13/afero"
 	"golang.org/x/term"
-	"tractor.dev/wanix/kernel/fs"
 )
 
 // todo: these should all be able to be removed in place of os.Getwd, os.Getenv
@@ -127,7 +126,7 @@ func runWasm(rpc io.Reader, t *term.Terminal, afs afero.Fs, env map[string]strin
 		// Copy() blocks when reading from rpc, only stopping when cancel() is called.
 		// This lets us block and pipe stdin until the process is finished
 
-		_, err = io.Copy(fs.StdinBuf, cr)
+		_, err = io.Copy(io.Discard, cr)
 		if err != nil && err != context.Canceled {
 			panic(err) // TODO: maybe remove this?
 			exit = &ExitCode{1, err}

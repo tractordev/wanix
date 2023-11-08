@@ -12,6 +12,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
       "host.js":      await load("/~dev/kernel/web/lib/host.js"),
       "kernel":       await load("/~dev/bin/kernel"),
       "shell":        await load("/~dev/bin/shell"),
+      "indexedfs.js": await load("/~dev/internal/indexedfs/indexedfs.js"),
     };
     
     globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"]));

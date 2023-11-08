@@ -2504,7 +2504,7 @@ var Client = class {
       return resp;
     } catch (e) {
       await ch.close();
-      console.error(e, selector, args);
+      //console.error(e, selector, args);
       return Promise.reject(e);
     }
   }
