@@ -142,9 +142,15 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 	}
 
 	// TODO: figure out a better way of signaling error type from javascript
-	if err != nil && strings.Contains(err.Error(), "ErrNotExist") && (flag&os.O_CREATE > 0) {
-		if key, err = jsutil.AwaitErr(callHelper("addFile", ifs.db, name, uint32(perm), perm.IsDir())); err == nil {
-			file = &indexedFile{name: name, key: key.Int(), ifs: ifs, flags: flag}
+	if err != nil && strings.Contains(err.Error(), "ErrNotExist") {
+		if flag&os.O_CREATE > 0 {
+			if key, err = jsutil.AwaitErr(callHelper("addFile", ifs.db, name, uint32(perm), perm.IsDir())); err == nil {
+				file = &indexedFile{name: name, key: key.Int(), ifs: ifs, flags: flag}
+			} else {
+				return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+			}
+		} else {
+			return nil, fs.ErrNotExist
 		}
 	}
 
