@@ -200,9 +200,11 @@ func runScript(rpcChannel io.Reader, t *term.Terminal, fs afero.Fs, path string,
 		}
 
 		// io.WriteString(t, line+"\n")
-
-		if cmd, ok := commands[lArgs[0]]; ok {
-			cmd(t, fs, lArgs[1:])
+		if true {
+			io.WriteString(t, "TODO: Implement shell scripting\n")
+			return
+			// if cmd, ok := commands[lArgs[0]]; ok {
+			// cmd(t, fs, lArgs[1:])
 		} else if exe, found, isScript := findExecutable(t, fs, lArgs[0], true); found {
 			if isScript {
 				runScript(rpcChannel, t, fs, exe, lArgs[1:])
@@ -276,7 +278,7 @@ func (cr cancelableReader) Read(p []byte) (n int, err error) {
 
 // Unix absolute path. Returns cwd if path is empty
 func absPath(path string) string {
-	if filepath.IsAbs(path) || path == "" {
+	if filepath.IsAbs(path) {
 		return filepath.Clean(path)
 	}
 	wd, _ := os.Getwd()
@@ -284,15 +286,16 @@ func absPath(path string) string {
 }
 
 // Convert a Unix path to an io/fs path (See `io/fs.ValidPath()`)
+// Use `absPath()` instead if passing result to OS functions
 func unixToFsPath(path string) string {
 	if !filepath.IsAbs(path) {
 		// Join calls Clean internally
 		wd, _ := os.Getwd()
-		path = filepath.Join(wd, path)
+		path = filepath.Join(strings.TrimLeft(wd, "/"), path)
 	} else {
-		path = filepath.Clean(path)
+		path = filepath.Clean(strings.TrimLeft(path, "/"))
 	}
-	return path //strings.TrimLeft(path, "/") <-- with os calls we dont do this
+	return path
 }
 
 func checkErr(w io.Writer, err error) (hadError bool) {
