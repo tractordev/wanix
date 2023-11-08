@@ -1,12 +1,18 @@
-.PHONY: boot dev kernel shell
+.PHONY: boot dev kernel shell dev bundle
 
 all: kernel shell
 
-kernel: kernel/main.go bin
-	cd kernel && GOOS=js GOARCH=wasm go build -o ../bin/kernel .
+dev:
+	go run ./dev
 
-shell: shell/main.go bin
-	cd shell && GOOS=js GOARCH=wasm go build -o ../bin/shell .
+bundle: local/bin
+	go run -tags bundle ./dev
 
-bin:
-	mkdir -p bin
+kernel: kernel/main.go local/bin
+	cd kernel && GOOS=js GOARCH=wasm go build -o ../local/bin/kernel .
+
+shell: shell/main.go local/bin
+	cd shell && GOOS=js GOARCH=wasm go build -o ../local/bin/shell .
+
+local/bin:
+	mkdir -p local/bin
