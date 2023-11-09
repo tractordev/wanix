@@ -72,11 +72,20 @@ func (m *Shell) Run(ctx context.Context) error {
 	// }
 
 	m.Root.Run = func(ctx *cli.Context, args []string) {
-		if exe, found, isScript := findExecutable(t, fsys, args[0], true); found {
-			if isScript {
-				runScript(stdio, t, fsys, exe, args[1:])
-			} else {
-				exit := runWasm(stdio, t, fsys, exeEnv, exe, args[1:])
+		if cmd := searchForCommand(args[0]); cmd.found {
+			switch cmd.CmdType {
+			case CmdIsScript:
+				runScript(stdio, t, fsys, cmd.path, args[1:])
+			case CmdIsSourceDir:
+				if exe, err := buildCmdSource(cmd.path); checkErr(ctx, err) {
+					return
+				} else {
+					exit := runWasm(stdio, t, fsys, exeEnv, exe, args[1:])
+					exit.check(t)
+				}
+
+			case CmdIsWasm:
+				exit := runWasm(stdio, t, fsys, exeEnv, cmd.path, args[1:])
 				exit.check(t)
 			}
 		} else {

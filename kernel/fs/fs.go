@@ -45,6 +45,13 @@ func (s *Service) Initialize() {
 		panic(err)
 	}
 	s.fsys = mountablefs.New(ifs)
+
+	// ensure basic system tree exists
+	s.fsys.MkdirAll("app", 0755)
+	s.fsys.MkdirAll("cmd", 0755)
+	s.fsys.MkdirAll("sys/app", 0755)
+	s.fsys.MkdirAll("sys/bin", 0755)
+	s.fsys.MkdirAll("sys/cmd", 0755)
 }
 
 func (s *Service) InitializeJS() {

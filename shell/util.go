@@ -17,37 +17,108 @@ import (
 	"github.com/anmitsu/go-shlex"
 	"github.com/spf13/afero"
 	"golang.org/x/term"
+	"tractor.dev/toolkit-go/engine/fs"
 )
 
 // todo: these should all be able to be removed in place of os.Getwd, os.Getenv
 var shellEnv = map[string]string{}
 var exeEnv = map[string]string{}
 
+type CmdType int
+
+const (
+	CmdIsScript CmdType = iota
+	CmdIsSourceDir
+	CmdIsWasm
+)
+
+type CmdSearchResult struct {
+	CmdType
+	found bool
+	path  string
+}
+
 // Search environment and/or input path to find an executable
-func findExecutable(t *term.Terminal, fs afero.Fs, path string, firstAttempt bool) (exePath string, found, isScript bool) {
-	isfile, err := fileExists(fs, unixToFsPath(path))
-	if err == nil && isfile {
-		return path, true, false
+func searchForCommand(path string) (result CmdSearchResult) {
+	dfs := os.DirFS("/")
+
+	if result = getCmdByPath(dfs, path); result.found {
+		return
 	}
 
-	wasm_path := strings.Join([]string{unixToFsPath(path), ".wasm"}, "")
-	isfile, err = fileExists(fs, wasm_path)
-	if err == nil && isfile {
-		return "/" + wasm_path, true, false
+	// start searching cmd directories
+	// TODO: search for cmd directories instead of just these predefined ones.
+	// TODO: search shell env PATH for executable.
+
+	exeName := filepath.Base(path)
+	if result = getCmdByPath(dfs, filepath.Join("/cmd", exeName)); result.found {
+		return
+	}
+	if result = getCmdByPath(dfs, filepath.Join("/sys/cmd", exeName)); result.found {
+		return
+	}
+	if result = getCmdByPath(dfs, filepath.Join("/sys/bin", exeName)); result.found {
+		return
 	}
 
-	script_path := strings.Join([]string{unixToFsPath(path), ".sh"}, "")
-	isfile, err = fileExists(fs, script_path)
+	return CmdSearchResult{found: false}
+}
+
+// Checks for file at `path`, `path.wasm`, `path.sh`, and a directory at `path`.
+func getCmdByPath(iofs fs.FS, path string) CmdSearchResult {
+	path = absPath(path)
+
+	isfile, err := fileExists(iofs, unixToFsPath(path))
 	if err == nil && isfile {
-		return script_path, true, true
+		var ct CmdType
+		if strings.HasSuffix(path, ".sh") {
+			ct = CmdIsScript
+		} else {
+			ct = CmdIsWasm
+		}
+
+		return CmdSearchResult{
+			found:   true,
+			path:    path,
+			CmdType: ct,
+		}
 	}
 
-	// TODO: search shell env PATH for executable
-	if firstAttempt {
-		return findExecutable(t, fs, filepath.Join("/cmd", filepath.Base(path)), false)
-	} else {
-		return "", false, false
+	wasm_path := strings.Join([]string{path, ".wasm"}, "")
+	isfile, err = fileExists(iofs, unixToFsPath(wasm_path))
+	if err == nil && isfile {
+		return CmdSearchResult{
+			found:   true,
+			path:    wasm_path,
+			CmdType: CmdIsWasm,
+		}
 	}
+
+	script_path := strings.Join([]string{path, ".sh"}, "")
+	isfile, err = fileExists(iofs, unixToFsPath(script_path))
+	if err == nil && isfile {
+		return CmdSearchResult{
+			found:   true,
+			path:    script_path,
+			CmdType: CmdIsScript,
+		}
+	}
+
+	if isDir, _, err := dirExists(iofs, unixToFsPath(path)); err == nil && isDir {
+		return CmdSearchResult{
+			found:   true,
+			path:    path,
+			CmdType: CmdIsSourceDir,
+		}
+	}
+
+	return CmdSearchResult{found: false}
+}
+
+func buildCmdSource(path string) (exePath string, err error) {
+	// TODO: Implement
+	fmt.Println("TODO: Implement building commands from source")
+	return filepath.Join("/sys/bin", filepath.Base(path)+".wasm"), nil
 }
 
 type ExitCode struct {
@@ -198,26 +269,27 @@ func runScript(rpcChannel io.Reader, t *term.Terminal, fs afero.Fs, path string,
 			}
 		}
 
+		io.WriteString(t, "TODO: Implement shell scripting\n")
+		return
+
 		// io.WriteString(t, line+"\n")
-		if true {
-			io.WriteString(t, "TODO: Implement shell scripting\n")
-			return
-			// if cmd, ok := commands[lArgs[0]]; ok {
-			// cmd(t, fs, lArgs[1:])
-		} else if exe, found, isScript := findExecutable(t, fs, lArgs[0], true); found {
-			if isScript {
-				runScript(rpcChannel, t, fs, exe, lArgs[1:])
-			} else {
-				exit := runWasm(rpcChannel, t, fs, exeEnv, exe, lArgs[1:])
-				if exit.check(t) {
-					io.WriteString(t, fmt.Sprintf("script error on line %d\n", i))
-					return
-				}
-			}
-		} else {
-			io.WriteString(t, fmt.Sprintf("script error on line %d: command or executable not found\n", i))
-			return
-		}
+
+		// if cmd, ok := commands[lArgs[0]]; ok {
+		// 	cmd(t, fs, lArgs[1:])
+		// } else if found, exe, isScript := searchForCommand(lArgs[0]); found {
+		// 	if isScript {
+		// 		runScript(rpcChannel, t, fs, exe, lArgs[1:])
+		// 	} else {
+		// 		exit := runWasm(rpcChannel, t, fs, exeEnv, exe, lArgs[1:])
+		// 		if exit.check(t) {
+		// 			io.WriteString(t, fmt.Sprintf("script error on line %d\n", i))
+		// 			return
+		// 		}
+		// 	}
+		// } else {
+		// 	io.WriteString(t, fmt.Sprintf("script error on line %d: command or executable not found\n", i))
+		// 	return
+		// }
 	}
 
 	io.WriteString(t, "\n")
@@ -307,8 +379,8 @@ func checkErr(w io.Writer, err error) (hadError bool) {
 
 // DirExists checks if a path exists and is a directory.
 // copied from afero/util, edited to return FileInfo
-func dirExists(fs afero.Fs, path string) (bool, os.FileInfo, error) {
-	fi, err := fs.Stat(path)
+func dirExists(iofs fs.FS, path string) (bool, os.FileInfo, error) {
+	fi, err := fs.Stat(iofs, path)
 	if err == nil && fi.IsDir() {
 		return true, fi, nil
 	}
@@ -319,9 +391,9 @@ func dirExists(fs afero.Fs, path string) (bool, os.FileInfo, error) {
 }
 
 // fileExists checks if a path exists and is a file.
-func fileExists(fs afero.Fs, path string) (bool, error) {
-	fi, err := fs.Stat(path)
-	// maybe just check !fi.IsDir()?
+func fileExists(iofs fs.FS, path string) (bool, error) {
+	fi, err := fs.Stat(iofs, path)
+	// TODO: maybe just check !fi.IsDir()?
 	if err == nil && fi.Mode().IsRegular() {
 		return true, nil
 	}
