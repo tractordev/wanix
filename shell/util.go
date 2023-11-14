@@ -219,80 +219,9 @@ func runWasm(rpc io.Reader, t *term.Terminal, afs afero.Fs, env map[string]strin
 	return *exit
 }
 
-func runScript(rpcChannel io.Reader, t *term.Terminal, fs afero.Fs, path string, args []string) {
-	data, err := afero.ReadFile(fs, unixToFsPath(path))
-	if checkErr(t, err) {
-		return
-	}
-
-	data = bytes.TrimSpace(data)
-	lines := strings.Split(string(data), "\n")
-
-	for i, line := range lines {
-		// adapted from (api *terminalAPI) Open() above
-		// TODO: make an API for executing commands. This is only copied
-		// to do custom error handling.
-		if len(line) == 0 {
-			continue
-		}
-
-		lArgs, err := shlex.Split(line, true)
-		if err != nil {
-			io.WriteString(t, fmt.Sprintf("error on line %d: parsing error\n", i))
-			return
-		}
-
-		// Setup child process environment
-		ok, overrideEnv, lArgs := parseEnvVars(t, lArgs)
-		if !ok {
-			continue
-		}
-		if len(lArgs) == 0 {
-			io.WriteString(t, fmt.Sprintf("error on line %d: missing command or executable\n", i))
-			continue
-		}
-		if overrideEnv == nil {
-			exeEnv = shellEnv
-		} else {
-			exeEnv = make(map[string]string, len(shellEnv)+len(overrideEnv))
-			for k, v := range shellEnv {
-				exeEnv[k] = v
-			}
-			for k, v := range overrideEnv {
-				exeEnv[k] = v
-			}
-		}
-
-		for i, a := range lArgs {
-			if strings.Contains(a, "$1") {
-				lArgs[i] = strings.Replace(a, "$1", args[0], -1)
-			}
-		}
-
-		io.WriteString(t, "TODO: Implement shell scripting\n")
-		return
-
-		// io.WriteString(t, line+"\n")
-
-		// if cmd, ok := commands[lArgs[0]]; ok {
-		// 	cmd(t, fs, lArgs[1:])
-		// } else if found, exe, isScript := searchForCommand(lArgs[0]); found {
-		// 	if isScript {
-		// 		runScript(rpcChannel, t, fs, exe, lArgs[1:])
-		// 	} else {
-		// 		exit := runWasm(rpcChannel, t, fs, exeEnv, exe, lArgs[1:])
-		// 		if exit.check(t) {
-		// 			io.WriteString(t, fmt.Sprintf("script error on line %d\n", i))
-		// 			return
-		// 		}
-		// 	}
-		// } else {
-		// 	io.WriteString(t, fmt.Sprintf("script error on line %d: command or executable not found\n", i))
-		// 	return
-		// }
-	}
-
-	io.WriteString(t, "\n")
+func runScript(t *term.Terminal, path string, args []string) {
+	fmt.Println("TODO: run shell script in child process")
+	// exec("shell", path, args, t)
 }
 
 func parseEnvVars(t *term.Terminal, args []string) (ok bool, overrideEnv map[string]string, argsRest []string) {
