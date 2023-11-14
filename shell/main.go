@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/anmitsu/go-shlex"
@@ -20,7 +22,10 @@ func main() {
 }
 
 type Shell struct {
-	Root *cli.Command
+	Root       *cli.Command
+	stdio      iorwc
+	scriptMode bool
+	lineNum    int
 }
 
 func (m *Shell) Initialize() {
@@ -43,6 +48,26 @@ func (m *Shell) Initialize() {
 	m.Root.AddCommand(writeCmd())
 	m.Root.AddCommand(printEnvCmd())
 	m.Root.AddCommand(exportCmd())
+
+	m.stdio = iorwc{
+		ReadCloser:  os.Stdin,
+		WriteCloser: os.Stdout,
+	}
+
+	fmt.Println("Shell Args:", os.Args)
+
+	if len(os.Args) > 1 {
+		if filepath.Ext(os.Args[1]) != ".sh" {
+			fmt.Println("Script argument must be a '.sh' file")
+		} else {
+			if f, err := os.Open(os.Args[1]); err != nil {
+				fmt.Println("Couldn't open script:", err)
+			} else {
+				m.stdio.ReadCloser = f
+				m.scriptMode = true
+			}
+		}
+	}
 }
 
 func (m *Shell) Run(ctx context.Context) error {
@@ -62,12 +87,7 @@ func (m *Shell) Run(ctx context.Context) error {
 	// }
 
 	fsys := afero.NewOsFs()
-	stdio := iorwc{
-		ReadCloser:  os.Stdin,
-		WriteCloser: os.Stdout,
-	}
-
-	t := term.NewTerminal(stdio, "/ ▶ ")
+	t := term.NewTerminal(m.stdio, "/ ▶ ")
 	// if err := t.SetSize(req.Cols, req.Rows); err != nil {
 	// 	fmt.Println(err)
 	// }
@@ -76,57 +96,86 @@ func (m *Shell) Run(ctx context.Context) error {
 		if cmd := searchForCommand(args[0]); cmd.found {
 			switch cmd.CmdType {
 			case CmdIsScript:
-				runScript(stdio, t, fsys, cmd.path, args[1:])
+				runScript(t, cmd.path, args[1:])
 			case CmdIsSourceDir:
-				if exe, err := buildCmdSource(cmd.path); checkErr(ctx, err) {
+				if exe, err := buildCmdSource(cmd.path); checkErr(t, err) {
+					if m.scriptMode {
+						m.printScriptErr(t)
+					}
 					return
 				} else {
-					exit := runWasm(stdio, t, fsys, exeEnv, exe, args[1:])
-					exit.check(t)
+					exit := runWasm(m.stdio, t, fsys, exeEnv, exe, args[1:])
+					if exit.check(t) && m.scriptMode {
+						m.printScriptErr(t)
+					}
 				}
 
 			case CmdIsWasm:
-				exit := runWasm(stdio, t, fsys, exeEnv, cmd.path, args[1:])
-				exit.check(t)
+				exit := runWasm(m.stdio, t, fsys, exeEnv, cmd.path, args[1:])
+				if exit.check(t) && m.scriptMode {
+					m.printScriptErr(t)
+				}
 			}
 		} else {
-			io.WriteString(t, "command or executable not found\n")
+			m.printErrMsg(t, "command or executable not found")
 		}
 	}
 
+	var scanner *bufio.Scanner = nil
+	if m.scriptMode {
+		scanner = bufio.NewScanner(m.stdio.ReadCloser)
+	}
+
 	for {
-		wd, err := os.Getwd()
-		if err != nil {
-			panic(err)
+		if !m.scriptMode {
+			wd, err := os.Getwd()
+			if err != nil {
+				panic(err)
+			}
+			t.SetPrompt(fmt.Sprintf("%s ▶ ", wd))
 		}
-		t.SetPrompt(fmt.Sprintf("%s ▶ ", wd))
 
 		for _, kvp := range os.Environ() {
 			parts := strings.SplitN(kvp, "=", 2)
 			shellEnv[parts[0]] = parts[1]
 		}
 
-		l, err := t.ReadLine()
-		if err != nil {
-			log.Fatal(err)
-		}
-		if l == "" {
-			continue
+		var line string
+		if m.scriptMode {
+			m.lineNum++
+
+			if !scanner.Scan() {
+				if err := scanner.Err(); err != nil {
+					log.Fatal("fatal:", err)
+				}
+			}
+			line = scanner.Text()
+			if line == "" {
+				return nil
+			}
+		} else {
+			var err error
+			line, err = t.ReadLine()
+			if err != nil {
+				log.Fatal("fatal:", err)
+			}
+			if line == "" {
+				continue
+			}
 		}
 
 		// this needs to be rethought, but is left here
 		// to be re-implemented somewhere else later
 		// --
-		// if strings.HasPrefix(l, "@") && !js.Global().Get("wanix").Get("collab").IsUndefined() {
-		// 	parts := strings.SplitN(l, " ", 2)
+		// if strings.HasPrefix(line, "@") && !js.Global().Get("wanix").Get("collab").IsUndefined() {
+		// 	parts := strings.SplitN(line, " ", 2)
 		// 	js.Global().Get("wanix").Get("jazzfs").Get("sendMessage").Invoke(strings.TrimPrefix(parts[0], "@"), parts[1])
 		// 	continue
 		// }
 
-		args, err := shlex.Split(l, true)
+		args, err := shlex.Split(line, true)
 		if err != nil {
-			fmt.Fprintln(t, err)
-			fmt.Fprintln(t)
+			m.printErrMsg(t, fmt.Sprintln("shell parsing error:", err))
 			continue
 		}
 
@@ -143,7 +192,7 @@ func (m *Shell) Run(ctx context.Context) error {
 			continue
 		}
 		if len(args) == 0 {
-			io.WriteString(t, "missing command or executable\n")
+			m.printErrMsg(t, "missing command or executable")
 			continue
 		}
 		if overrideEnv == nil {
@@ -157,12 +206,23 @@ func (m *Shell) Run(ctx context.Context) error {
 				exeEnv[k] = v
 			}
 		}
-
 		if err := cli.Execute(context.Background(), m.Root, args); err != nil {
 			io.WriteString(t, err.Error())
 		}
 
 		io.WriteString(t, "\n")
+	}
+}
+
+func (m *Shell) printScriptErr(w io.Writer) {
+	io.WriteString(w, fmt.Sprintf("script error on line %d", m.lineNum))
+}
+
+func (m *Shell) printErrMsg(w io.Writer, msg string) {
+	if m.scriptMode {
+		io.WriteString(w, fmt.Sprintf("script error on line %d: %s\n", m.lineNum, msg))
+	} else {
+		io.WriteString(w, fmt.Sprintf("%s\n", msg))
 	}
 }
 
