@@ -1,7 +1,6 @@
 package fs
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +13,7 @@ import (
 
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/internal/indexedfs"
+	"tractor.dev/wanix/internal/jsutil"
 
 	"tractor.dev/toolkit-go/engine/fs/mountablefs"
 )
@@ -133,7 +133,7 @@ func (s *Service) open(this js.Value, args []js.Value) any {
 			if f != nil {
 				log("opened")
 			}
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -171,7 +171,7 @@ func (s *Service) read(this js.Value, args []js.Value) any {
 		// 	buf := make([]byte, length)
 		// 	n, err := StdinBuf.Read(buf)
 		// 	if err != nil {
-		// 		cb.Invoke(jsError(err), 0)
+		// 		cb.Invoke(jsutil.ToJSError(err), 0)
 		// 		return
 		// 	}
 		// 	js.CopyBytesToJS(jsbuf, buf[:n])
@@ -186,14 +186,14 @@ func (s *Service) read(this js.Value, args []js.Value) any {
 		f, ok := s.fds[fd]
 		s.mu.Unlock()
 		if !ok {
-			cb.Invoke(jsError(syscall.EBADF), 0)
+			cb.Invoke(jsutil.ToJSError(syscall.EBADF), 0)
 			return
 		}
 
 		if rs, ok := f.File.(io.ReadSeeker); ok && !pos.IsNull() {
 			_, err := rs.Seek(int64(pos.Int()), 0)
 			if err != nil {
-				cb.Invoke(jsError(err), 0)
+				cb.Invoke(jsutil.ToJSError(err), 0)
 				return
 			}
 		}
@@ -204,7 +204,7 @@ func (s *Service) read(this js.Value, args []js.Value) any {
 			js.CopyBytesToJS(jsbuf, buf[:n])
 		}
 		if err != nil && err != io.EOF {
-			cb.Invoke(jsError(err), n)
+			cb.Invoke(jsutil.ToJSError(err), n)
 			return
 		}
 
@@ -241,14 +241,14 @@ func (s *Service) write(this js.Value, args []js.Value) any {
 		f, ok := s.fds[fd]
 		s.mu.Unlock()
 		if !ok {
-			cb.Invoke(jsError(syscall.EBADF))
+			cb.Invoke(jsutil.ToJSError(syscall.EBADF))
 			return
 		}
 
 		if ws, ok := f.File.(io.WriteSeeker); ok && !pos.IsNull() {
 			_, err := ws.Seek(int64(pos.Int()), 0)
 			if err != nil {
-				cb.Invoke(jsError(err))
+				cb.Invoke(jsutil.ToJSError(err))
 				return
 			}
 		}
@@ -259,7 +259,7 @@ func (s *Service) write(this js.Value, args []js.Value) any {
 		if fw, ok := f.File.(io.Writer); ok {
 			n, err := fw.Write(buf)
 			if err != nil {
-				cb.Invoke(jsError(err))
+				cb.Invoke(jsutil.ToJSError(err))
 				return
 			}
 			cb.Invoke(nil, n)
@@ -279,7 +279,7 @@ func (s *Service) readdir(this js.Value, args []js.Value) any {
 
 		fi, err := fs.ReadDir(s.fsys, path)
 		if err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -297,7 +297,7 @@ func (s *Service) readdir(this js.Value, args []js.Value) any {
 func (s *Service) _stat(path string, cb js.Value) {
 	fi, err := s.fsys.Stat(path)
 	if err != nil {
-		cb.Invoke(jsError(err))
+		cb.Invoke(jsutil.ToJSError(err))
 		return
 	}
 	m := uint32(fi.Mode())
@@ -365,7 +365,7 @@ func (s *Service) fstat(this js.Value, args []js.Value) any {
 		f, ok := s.fds[fd]
 		s.mu.Unlock()
 		if !ok {
-			cb.Invoke(jsError(syscall.EBADF))
+			cb.Invoke(jsutil.ToJSError(syscall.EBADF))
 			return
 		}
 
@@ -387,12 +387,12 @@ func (s *Service) close(this js.Value, args []js.Value) any {
 		f, ok := s.fds[fd]
 		s.mu.Unlock()
 		if !ok {
-			cb.Invoke(jsError(syscall.EBADF))
+			cb.Invoke(jsutil.ToJSError(syscall.EBADF))
 			return
 		}
 
 		if err := f.Close(); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -417,7 +417,7 @@ func (s *Service) chown(this js.Value, args []js.Value) any {
 		log("chown", path)
 
 		if err := s.fsys.Chown(path, uid, gid); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -441,12 +441,12 @@ func (s *Service) fchown(this js.Value, args []js.Value) any {
 		f, ok := s.fds[fd]
 		s.mu.Unlock()
 		if !ok {
-			cb.Invoke(jsError(syscall.EBADF))
+			cb.Invoke(jsutil.ToJSError(syscall.EBADF))
 			return
 		}
 
 		if err := s.fsys.Chown(f.Path, uid, gid); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -467,7 +467,7 @@ func (s *Service) lchown(this js.Value, args []js.Value) any {
 		log("lchown", path)
 
 		if err := s.fsys.Chown(path, uid, gid); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -487,7 +487,7 @@ func (s *Service) chmod(this js.Value, args []js.Value) any {
 		log("chmod", path)
 
 		if err := s.fsys.Chmod(path, fs.FileMode(mode)); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -510,12 +510,12 @@ func (s *Service) fchmod(this js.Value, args []js.Value) any {
 		f, ok := s.fds[fd]
 		s.mu.Unlock()
 		if !ok {
-			cb.Invoke(jsError(syscall.EBADF))
+			cb.Invoke(jsutil.ToJSError(syscall.EBADF))
 			return
 		}
 
 		if err := s.fsys.Chmod(f.Path, fs.FileMode(mode)); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -535,7 +535,7 @@ func (s *Service) mkdir(this js.Value, args []js.Value) any {
 		log("mkdir", path)
 
 		if err := s.fsys.MkdirAll(path, os.FileMode(perm)); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 		cb.Invoke(nil)
@@ -554,7 +554,7 @@ func (s *Service) rename(this js.Value, args []js.Value) any {
 		log("rename", from, to)
 
 		if err := s.fsys.Rename(from, to); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -574,7 +574,7 @@ func (s *Service) rmdir(this js.Value, args []js.Value) any {
 
 		// TODO: should only remove if dir is empty i think?
 		if err := s.fsys.RemoveAll(path); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -593,7 +593,7 @@ func (s *Service) unlink(this js.Value, args []js.Value) any {
 		log("unlink", path)
 
 		if err := s.fsys.Remove(path); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -615,7 +615,7 @@ func (s *Service) fsync(this js.Value, args []js.Value) any {
 		f, ok := s.fds[fd]
 		s.mu.Unlock()
 		if !ok {
-			cb.Invoke(jsError(syscall.EBADF))
+			cb.Invoke(jsutil.ToJSError(syscall.EBADF))
 			return
 		}
 
@@ -623,7 +623,7 @@ func (s *Service) fsync(this js.Value, args []js.Value) any {
 			Sync() error
 		}); ok {
 			if err := sf.Sync(); err != nil {
-				cb.Invoke(jsError(err))
+				cb.Invoke(jsutil.ToJSError(err))
 				return
 			}
 		}
@@ -645,7 +645,7 @@ func (s *Service) utimes(this js.Value, args []js.Value) any {
 		log("utimes", path)
 
 		if err := s.fsys.Chtimes(path, atime, mtime); err != nil {
-			cb.Invoke(jsError(err))
+			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
 
@@ -653,29 +653,4 @@ func (s *Service) utimes(this js.Value, args []js.Value) any {
 	}()
 
 	return nil
-}
-
-func jsError(err error) js.Value {
-	jsErr := js.Global().Get("Error").New(err.Error())
-	if sysErr, ok := err.(syscall.Errno); ok {
-		jsErr.Set("code", errnoString(sysErr))
-	}
-	// I guess fs errors arent syscall errors
-	if errors.Is(err, fs.ErrClosed) {
-		jsErr.Set("code", "EIO") // not sure on this one
-	}
-	if errors.Is(err, fs.ErrExist) {
-		jsErr.Set("code", "EEXIST")
-	}
-	if errors.Is(err, fs.ErrInvalid) {
-		jsErr.Set("code", "EINVAL")
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		jsErr.Set("code", "ENOENT")
-	}
-	if errors.Is(err, fs.ErrPermission) {
-		jsErr.Set("code", "EPERM")
-	}
-	//log("jserr:", err.Error(), jsErr.Get("code").String())
-	return jsErr
 }

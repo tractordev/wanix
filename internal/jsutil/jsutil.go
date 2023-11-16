@@ -1,7 +1,10 @@
 package jsutil
 
 import (
+	"errors"
 	"io"
+	"io/fs"
+	"syscall"
 	"syscall/js"
 )
 
@@ -66,6 +69,30 @@ func HasProp(jsObj js.Value, prop string) bool {
 
 func CopyObj(jsObj js.Value) js.Value {
 	return js.Global().Get("Object").Call("assign", map[string]any{}, jsObj)
+}
+
+func ToJSError(err error) js.Value {
+	jsErr := js.Global().Get("Error").New(err.Error())
+	if sysErr, ok := err.(syscall.Errno); ok {
+		jsErr.Set("code", errnoString(sysErr))
+	}
+	// I guess fs errors arent syscall errors
+	if errors.Is(err, fs.ErrClosed) {
+		jsErr.Set("code", "EIO") // not sure on this one
+	}
+	if errors.Is(err, fs.ErrExist) {
+		jsErr.Set("code", "EEXIST")
+	}
+	if errors.Is(err, fs.ErrInvalid) {
+		jsErr.Set("code", "EINVAL")
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		jsErr.Set("code", "ENOENT")
+	}
+	if errors.Is(err, fs.ErrPermission) {
+		jsErr.Set("code", "EPERM")
+	}
+	return jsErr
 }
 
 func ToJSArray[S ~[]E, E any](s S) []any {
