@@ -23,7 +23,14 @@ addEventListener("message", async (e) => {
       if (params[2].env) {
         go.env = params[2].env;
       }
-      const res = await WebAssembly.instantiate(await blobToArrayBuffer(initfs[params[0]]), go.importObject);
+      let mod;
+      if (initfs[params[0]]) {
+        mod = await blobToArrayBuffer(initfs[params[0]]);
+      } else {
+        mod = await globalThis.fs.readFile(params[0]);
+      }
+      // TODO: handle params[2].stdin
+      const res = await WebAssembly.instantiate(mod, go.importObject);
       await go.run(res.instance);
       resp.return(go.exitcode);
     }))

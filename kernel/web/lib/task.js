@@ -3,10 +3,12 @@ export class Task {
   constructor(initfs, pid=0) {
     this.initfs = initfs;
     this.pid = pid;
+    this.finished = undefined;
+    this.worker = undefined;
   }
 
-  async init(path, args, opts={}) {
-    const name = `${(path || "task")}.${this.pid}`;
+  async exec(path, args, opts={}) {
+    const name = `${path.split('/').pop()}.${this.pid}`;
 
     const blob = new Blob([
       this.initfs["worker.js"], 
@@ -44,21 +46,19 @@ export class Task {
     
     await taskReady;
 
-    if (path) {
-      this.exec(path, args, opts);
-    }
+    this.finished = this.call("exec", [path, args, opts]);
   } 
 
   call(selector, args) {
     return this.pipe.call(selector, args);
   }
 
-  async exec(path, args, opts={}) {
+  async wait() {
     if (!this.worker) {
-      await this.init();
+      throw "no worker";
     }
 
-    const resp = await this.pipe.call("exec", [path, args, opts]);
+    const resp = await this.finished;
     return resp.value;
   }
 
@@ -66,7 +66,7 @@ export class Task {
     if (!this.worker) {
       throw "no worker";
     }
-    const resp = await this.pipe.call("stdout");
+    const resp = await this.call("stdout");
     return resp.channel;
   }
 
@@ -74,7 +74,7 @@ export class Task {
     if (!this.worker) {
       throw "no worker";
     }
-    const resp = await this.pipe.call("stderr");
+    const resp = await this.call("stderr");
     return resp.channel;
   }
 
@@ -82,7 +82,7 @@ export class Task {
     if (!this.worker) {
       throw "no worker";
     }
-    const resp = await this.pipe.call("output");
+    const resp = await this.call("output");
     return resp.channel;
   }
 
@@ -90,7 +90,7 @@ export class Task {
     if (!this.worker) {
       throw "no worker";
     }
-    const resp = await this.pipe.call("stdin");
+    const resp = await this.call("stdin");
     return resp.channel;
   }
 }

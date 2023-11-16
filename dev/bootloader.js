@@ -107,7 +107,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     
     // start kernel
     console.log("Staring kernel...")
-    await sys.init("kernel");
+    await sys.exec("kernel");
 
     // load host API
     await import(URL.createObjectURL(initfs["host.js"]));
