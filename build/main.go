@@ -167,7 +167,7 @@ func mainWithExitCode() int {
 		defer os.Remove(embedcfgPath) // defer applies to function scope!
 	}
 
-	importcfgPath := filepath.Join(src_info.dir_path, strings.Join([]string{"importcfg", target.os, target.arch}, "_"))
+	importcfgPath := strings.Join([]string{"/tmp/build/importcfg", target.os, target.arch}, "_")
 
 	importcfg, err := os.Create(importcfgPath)
 	if err != nil {
@@ -182,7 +182,7 @@ func mainWithExitCode() int {
 
 	bw := bufio.NewWriter(importcfg)
 	for _, i := range ast.Imports {
-		fmt.Fprintf(bw, "packagefile %s=/sys/pkg/%s_%s/%[1]s.a\n", strings.Trim(i.Path.Value, "\""), target.os, target.arch)
+		fmt.Fprintf(bw, "packagefile %s=/tmp/build/pkg/%s_%s/%[1]s.a\n", strings.Trim(i.Path.Value, "\""), target.os, target.arch)
 	}
 	if err := bw.Flush(); err != nil {
 		fmt.Println("unable to write to importcfg:", err)
@@ -190,12 +190,21 @@ func mainWithExitCode() int {
 	}
 	importcfg.Close()
 
-	env := mapEnv()
+	objPath := fmt.Sprintf("/tmp/build/%s.a", strings.TrimSuffix(src_info.file_name, ".go"))
 
-	compileArgs := []string{"-p", "main", "-complete", "-dwarf=false", "-pack", "-importcfg", importcfgPath, src_info.filePath()}
+	compileArgs := []string{
+		"-p", "main",
+		"-complete",
+		"-dwarf=false",
+		"-pack",
+		"-o", objPath,
+		"-importcfg", importcfgPath,
+		src_info.filePath(),
+	}
 	if hasEmbeds {
 		compileArgs = append([]string{"-embedcfg", embedcfgPath}, compileArgs...)
 	}
+	env := mapEnv()
 
 	fmt.Println("Compiling", args[0])
 	// run compile.wasm
@@ -207,18 +216,16 @@ func mainWithExitCode() int {
 		return exitcode.code
 	}
 
-	// TODO: compile.wasm dumps the obj file in the cwd instead of src_info.dir_path
-	obj_path := fmt.Sprintf("%s.a", strings.TrimSuffix(src_info.file_name, ".go"))
 	defer func() {
-		if err := os.Remove(obj_path); err != nil {
+		if err := os.Remove(objPath); err != nil {
 			fmt.Println("unable to remove build artifact:", err)
 		}
 	}()
 
-	fmt.Println("Linking", obj_path)
+	fmt.Println("Linking", objPath)
 	// run link.wasm using importcfg_$GOOS_$GOARCH.link
-	linkcfg := fmt.Sprintf("/sys/pkg/importcfg_%s_%s.link", target.os, target.arch)
-	exitcode = runWasm("/cmd/link.wasm", []string{"-importcfg", linkcfg, "-buildmode=exe", obj_path}, env)
+	linkcfg := fmt.Sprintf("/tmp/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
+	exitcode = runWasm("/cmd/link.wasm", []string{"-importcfg", linkcfg, "-buildmode=exe", objPath}, env)
 	if exitcode.code != 0 {
 		if exitcode.err != nil {
 			fmt.Println(exitcode.err)
@@ -306,7 +313,7 @@ func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err
 		}
 	}
 
-	cfgPath = filepath.Join(src_dir, "embedcfg")
+	cfgPath = "/tmp/build/embedcfg"
 	cfg, err := os.Create(cfgPath)
 	if err != nil {
 		return cfgPath, err
