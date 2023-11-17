@@ -38,16 +38,42 @@ func Command(name string, arg ...string) *Cmd {
 }
 
 func (c *Cmd) Start() error {
-	menv := map[string]string{}
+	menv := map[string]any{}
 	for _, kvp := range c.Env {
 		parts := strings.Split(kvp, "=")
 		menv[parts[0]] = parts[1]
 	}
-	resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.spawn", []any{c.Path, c.Args[1:], menv, c.Dir}))
+	resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.spawn", []any{c.Path, jsutil.ToJSArray(c.Args[1:]), menv, c.Dir}))
 	if err != nil {
 		return err
 	}
+
 	c.PID = resp.Get("value").Int()
+
+	if c.Stdin != nil {
+		resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.stdin", []any{c.PID}))
+		if err != nil {
+			// TODO: cancel/kill process
+			return err
+		}
+		go io.Copy(&jsutil.Writer{resp.Get("channel")}, c.Stdin)
+	}
+	if c.Stdout != nil {
+		resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.stdout", []any{c.PID}))
+		if err != nil {
+			// TODO: cancel/kill process
+			return err
+		}
+		go io.Copy(c.Stdout, &jsutil.Reader{resp.Get("channel")})
+	}
+	if c.Stderr != nil {
+		resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.stderr", []any{c.PID}))
+		if err != nil {
+			// TODO: cancel/kill process
+			return err
+		}
+		go io.Copy(c.Stderr, &jsutil.Reader{resp.Get("channel")})
+	}
 	return nil
 }
 

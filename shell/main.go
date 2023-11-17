@@ -11,10 +11,10 @@ import (
 	"strings"
 
 	"github.com/anmitsu/go-shlex"
-	"github.com/spf13/afero"
 	"golang.org/x/term"
 	"tractor.dev/toolkit-go/engine"
 	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/wanix/kernel/proc/exec"
 )
 
 func main() {
@@ -86,7 +86,6 @@ func (m *Shell) Run(ctx context.Context) error {
 	// 	fmt.Fprintf(ch, "Signed in as %s.\n\n", js.Global().Get("account").Get("profile").Get("name").String())
 	// }
 
-	fsys := afero.NewOsFs()
 	t := term.NewTerminal(m.stdio, "/ ▶ ")
 	// if err := t.SetSize(req.Cols, req.Rows); err != nil {
 	// 	fmt.Println(err)
@@ -94,27 +93,43 @@ func (m *Shell) Run(ctx context.Context) error {
 
 	m.Root.Run = func(ctx *cli.Context, args []string) {
 		if cmd := searchForCommand(args[0]); cmd.found {
+			var exeCmd *exec.Cmd
+
 			switch cmd.CmdType {
 			case CmdIsScript:
-				runScript(t, cmd.path, args[1:])
+				execArgs := append([]string{cmd.path}, args[1:]...)
+				// TODO: shell is currently only available in the initfs,
+				// but the process worker is able to exec it from there anyway.
+				// We should really mount the shell exe in /sys/bin though.
+				exeCmd = exec.Command("shell", execArgs...)
+
 			case CmdIsSourceDir:
-				if exe, err := buildCmdSource(cmd.path); checkErr(t, err) {
-					if m.scriptMode {
-						m.printScriptErr(t)
-					}
+				if path, err := buildCmdSource(cmd.path); checkErr(t, err) {
+					m.ifScriptPrintErr(t)
 					return
 				} else {
-					exit := runWasm(m.stdio, t, fsys, exeEnv, exe, args[1:])
-					if exit.check(t) && m.scriptMode {
-						m.printScriptErr(t)
-					}
+					exeCmd = exec.Command(path, args[1:]...)
 				}
 
 			case CmdIsWasm:
-				exit := runWasm(m.stdio, t, fsys, exeEnv, cmd.path, args[1:])
-				if exit.check(t) && m.scriptMode {
-					m.printScriptErr(t)
+				if wasm, err := isWasmFile(cmd.path); err != nil {
+					m.printErrMsg(t, fmt.Sprintf("can't exec %s: %v", cmd.path, err))
+					return
+				} else if !wasm {
+					m.printErrMsg(t, fmt.Sprintf("can't exec %s: non-WASM file", cmd.path))
+					return
 				}
+
+				exeCmd = exec.Command(cmd.path, args[1:]...)
+			}
+
+			exeCmd.Env = unpackMap2(exeEnv) // TODO: avoid repacking env map since exec.Start just uses a map[string]string anyway
+			exeCmd.Stdin = m.stdio.ReadCloser
+			exeCmd.Stdout = t
+			exeCmd.Stderr = t
+
+			if _, err := exeCmd.Run(); err != nil {
+				m.printErrMsg(t, err.Error())
 			}
 		} else {
 			m.printErrMsg(t, "command or executable not found")
@@ -214,8 +229,10 @@ func (m *Shell) Run(ctx context.Context) error {
 	}
 }
 
-func (m *Shell) printScriptErr(w io.Writer) {
-	io.WriteString(w, fmt.Sprintf("script error on line %d", m.lineNum))
+func (m *Shell) ifScriptPrintErr(w io.Writer) {
+	if m.scriptMode {
+		io.WriteString(w, fmt.Sprintf("script error on line %d", m.lineNum))
+	}
 }
 
 func (m *Shell) printErrMsg(w io.Writer, msg string) {
