@@ -1,8 +1,8 @@
 package proc
 
 import (
+	"fmt"
 	"io"
-	"os"
 	"sync"
 	"syscall/js"
 
@@ -19,36 +19,25 @@ func (s *Service) Initialize() {
 	s.running = make(map[int]*Process)
 }
 
-func (s *Service) InitializeJS() {
-	// expose to subtasks
-	js.Global().Get("api").Set("proc", map[string]any{
-		"spawn": js.FuncOf(s.spawn),
-	})
-}
-
-func (s *Service) spawn(this js.Value, args []js.Value) any {
-	var (
-		path  = args[0].String()
-		args_ = jsutil.ToGoStringSlice(args[1])
-		env   = jsutil.ToGoStringMap(args[2])
-		dir   = args[3].String()
-	)
-	s.Spawn(path, args_, env, dir)
-	return nil
-}
-
-func (s *Service) Spawn(path string, args []string, env map[string]string, dir string) *Process {
-	initfs := jsutil.CopyObj(js.Global().Get("initfs"))
-	if !jsutil.HasProp(initfs, path) {
-		// TODO: read from osfs into new blob
+func (s *Service) Get(pid int) (*Process, error) {
+	s.mu.Lock()
+	p, ok := s.running[pid]
+	s.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("no running process with PID %d", pid)
 	}
+	return p, nil
+}
+
+func (s *Service) Spawn(path string, args []string, env map[string]string, dir string) (*Process, error) {
+	// TODO: check path exists, execute bit
 
 	if env == nil {
 		// TODO: set from os.Environ()
 	}
 
 	if dir == "" {
-		dir, _ = os.Getwd()
+		dir = "/"
 	}
 
 	s.mu.Lock()
@@ -63,22 +52,21 @@ func (s *Service) Spawn(path string, args []string, env map[string]string, dir s
 	s.running[s.nextPID] = p
 	s.mu.Unlock()
 
-	t := js.Global().Get("task").Get("Task").New(initfs, p.PID)
-	jsutil.Await(t.Call("init", p.Path, jsutil.ToJSArray(p.Args), map[string]any{
+	p.Task = js.Global().Get("task").Get("Task").New(js.Global().Get("initfs"), p.PID)
+	_, err := jsutil.AwaitErr(p.Task.Call("exec", p.Path, jsutil.ToJSArray(p.Args), map[string]any{
 		"env": jsutil.ToJSMap(p.Env),
 		"dir": p.Dir,
 	}))
+	if err != nil {
+		return nil, err
+	}
 
-	p.Task = t
-	p.Worker = t.Get("worker")
-
-	return p
+	return p, nil
 }
 
 type Process struct {
-	PID    int
-	Worker js.Value
-	Task   js.Value
+	PID  int
+	Task js.Value
 
 	Path string
 	Args []string
@@ -111,7 +99,7 @@ func (p *Process) Kill() error {
 	return nil
 }
 
-func (p *Process) Wait() error {
-	// todo
-	return nil
+func (p *Process) Wait() (int, error) {
+	v, err := jsutil.AwaitErr(p.Task.Call("wait"))
+	return v.Int(), err
 }

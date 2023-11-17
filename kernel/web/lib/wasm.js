@@ -49,6 +49,43 @@
 		let outputBuf = "";
 		globalThis.fs = {
 			constants: { O_WRONLY: 1, O_RDWR: 2, O_CREAT: 64, O_TRUNC: 512, O_APPEND: 1024, O_EXCL: 128 },
+			// writeFile helper for working with fs in js
+			writeFile(path, buf, perm) {
+				return new Promise((resolve, reject) => {
+					fs.open(path, fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_TRUNC, perm, (err, fd) => {
+						if (err) return reject(err);
+						fs.write(fd, buf, 0, buf.byteLength, 0, (err, n) => {
+							if (err) return reject(err);
+							// TODO: dont assume full buf was written
+							fs.close(fd, (err) => {
+								if (err) return reject(err);
+								resolve();
+							});
+						});
+					});
+				});
+			},
+			// readFile helper for working with fs in js
+			readFile(path) {
+				return new Promise((resolve, reject) => {
+					fs.stat(path, (err, stat) => {
+						if (err) return reject(err);
+						const buf = new Uint8Array(stat.size);
+						fs.open(path, 0, 0, (err, fd) => {
+							if (err) return reject(err);
+							fs.read(fd, buf, 0, buf.byteLength, 0, (err, n) => {
+								if (err) return reject(err);
+								// TODO: dont assume full buf was read
+								fs.close(fd, (err) => {
+									if (err) return reject(err);
+									resolve(buf);
+								});
+							});
+						});
+					});
+				});
+			},
+			// writeSync used by runtime.wasmWrite
 			writeSync(fd, buf) {
 				outputBuf += decoder.decode(buf);
 				const nl = outputBuf.lastIndexOf("\n");
@@ -58,6 +95,7 @@
 				}
 				return buf.length;
 			},
+			// the actual fs api
 			write(fd, buf, offset, length, position, callback) {
         switch (fd) {
           case 1:
