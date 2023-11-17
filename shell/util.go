@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +13,7 @@ import (
 
 	"golang.org/x/term"
 	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/wanix/kernel/proc/exec"
 )
 
 // todo: these should all be able to be removed in place of os.Getwd, os.Getenv
@@ -112,9 +112,9 @@ func getCmdByPath(iofs fs.FS, path string) CmdSearchResult {
 }
 
 func buildCmdSource(path string) (exePath string, err error) {
-	return "", errors.New("TODO: Implement building commands from source")
-	// TODO: Implement
-	// return filepath.Join("/sys/bin", filepath.Base(path)+".wasm"), nil
+	cmd := exec.Command("build", "-output", "/sys/bin/", path)
+	_, err = cmd.Run()
+	return filepath.Join("/sys/bin", filepath.Base(path)+".wasm"), err
 }
 
 var WASM_MAGIC = []byte{0, 'a', 's', 'm'}

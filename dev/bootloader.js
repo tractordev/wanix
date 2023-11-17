@@ -98,6 +98,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
       load("/~dev/internal/indexedfs/indexedfs.js"), // maybe load from kernel?
       load("/~dev/local/bin/kernel"),
       load("/~dev/local/bin/shell"),
+      load("/~dev/local/bin/build"),
     ]);
     
     globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"]));

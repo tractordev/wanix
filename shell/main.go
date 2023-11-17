@@ -124,8 +124,8 @@ func (m *Shell) Run(ctx context.Context) error {
 
 			exeCmd.Env = unpackMap2(exeEnv) // TODO: avoid repacking env map since exec.Start just uses a map[string]string anyway
 			exeCmd.Stdin = m.stdio.ReadCloser
-			exeCmd.Stdout = t
-			exeCmd.Stderr = t
+			exeCmd.Stdout = m.stdio.WriteCloser
+			exeCmd.Stderr = m.stdio.WriteCloser
 
 			if _, err := exeCmd.Run(); err != nil {
 				m.printErrMsg(t, err.Error())
