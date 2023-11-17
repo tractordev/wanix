@@ -24,7 +24,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Serving WANIX dev server at http://localhost:8080 ...")
+	log.Println("Serving WANIX dev server at http://localhost:7777 ...")
+
 	mux := http.NewServeMux()
 	mux.Handle("/~dev/", http.StripPrefix("/~dev", http.FileServer(http.Dir(dir))))
 	mux.Handle("/wanix-bootloader.js", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,5 +49,7 @@ func main() {
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./dev/index.html")
 	}))
-	http.ListenAndServe(":8080", loggerMiddleware(mux))
+	if err := http.ListenAndServe(":7777", loggerMiddleware(mux)); err != nil {
+		log.Fatal(err)
+	}
 }
