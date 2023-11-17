@@ -10,12 +10,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"syscall/js"
-	"time"
 	"unsafe"
 
-	"github.com/anmitsu/go-shlex"
-	"github.com/spf13/afero"
 	"golang.org/x/term"
 	"tractor.dev/toolkit-go/engine/fs"
 )
@@ -116,112 +112,24 @@ func getCmdByPath(iofs fs.FS, path string) CmdSearchResult {
 }
 
 func buildCmdSource(path string) (exePath string, err error) {
+	return "", errors.New("TODO: Implement building commands from source")
 	// TODO: Implement
-	fmt.Println("TODO: Implement building commands from source")
-	return filepath.Join("/sys/bin", filepath.Base(path)+".wasm"), nil
-}
-
-type ExitCode struct {
-	code int
-	err  error
-}
-
-func (e ExitCode) check(w io.Writer) bool {
-	if e.code != 0 {
-		if e.err != nil {
-			io.WriteString(w, fmt.Sprintln(e.err))
-		}
-	}
-	return e.code != 0
+	// return filepath.Join("/sys/bin", filepath.Base(path)+".wasm"), nil
 }
 
 var WASM_MAGIC = []byte{0, 'a', 's', 'm'}
 
-func runWasm(rpc io.Reader, t *term.Terminal, afs afero.Fs, env map[string]string, path string, args []string) ExitCode {
-	fsPath := unixToFsPath(path)
-	data, err := afero.ReadFile(afs, fsPath)
-	if err != nil {
-		return ExitCode{1, err}
-	}
-
-	if !bytes.HasPrefix(data, WASM_MAGIC) {
-		return ExitCode{1, errors.New(fmt.Sprintf("cant exec %s: non WASM file", absPath(path)))}
-	}
-
-	buf := js.Global().Get("Uint8Array").New(len(data))
-	js.CopyBytesToJS(buf, data)
-
-	var stdout = js.FuncOf(func(this js.Value, args []js.Value) any {
-		buf := make([]byte, args[0].Length())
-		js.CopyBytesToGo(buf, args[0])
-		go t.Write(buf)
-		return nil
-	})
-	defer stdout.Release()
-
-	// more micro hardcoding:
-	// resolve the path if given file to open,
-	// otherwise it can't seem to find files in
-	// the wd for some reason
-	if fsPath == "cmd/micro.wasm" && len(args) > 0 {
-		args[0] = unixToFsPath(args[0])
-	}
-
-	// TODO: these unpack functions are dumb. Why don't types coerce to any?
-	// wanix.exec(wasm, args, env, stdout, stderr)
-	promise := js.Global().Get("wanix").Call("exec", buf, unpackArray(args), unpackMap(env), stdout, stdout)
-
-	// wait for process to finish
-	wait := make(chan *ExitCode)
-	var exit *ExitCode
-	if fsPath == "cmd/micro.wasm" {
-		// pipe rpc input to stdin global
-		// it's all smoke 'n' mirrors baby
-		ctx, cancel := context.WithCancel(context.Background())
-		promise.Call("then", js.FuncOf(func(this js.Value, args []js.Value) any {
-			cancel()
-			go func() {
-				// send a byte over js side of rpc channel to cancel the copy
-				<-time.After(500 * time.Millisecond)
-				buf := js.Global().Get("Uint8Array").New(1)
-				js.CopyBytesToJS(buf, []byte{' '})
-				js.Global().Get("wanix").Get("termCh").Call("write", buf)
-			}()
-			return nil
-		}))
-
-		cr := cancelableReader{
-			r:   rpc,
-			ctx: ctx,
-		}
-		// Copy() blocks when reading from rpc, only stopping when cancel() is called.
-		// This lets us block and pipe stdin until the process is finished
-
-		_, err = io.Copy(io.Discard, cr)
-		if err != nil && err != context.Canceled {
-			panic(err) // TODO: maybe remove this?
-			exit = &ExitCode{1, err}
-		} else {
-			exit = &ExitCode{0, nil}
-		}
+func isWasmFile(name string) (bool, error) {
+	if f, err := os.Open(name); err != nil {
+		return false, err
 	} else {
-		then := js.FuncOf(func(this js.Value, args []js.Value) any {
-			wait <- &ExitCode{args[0].Int(), nil}
-			return nil
-		})
-		defer then.Release()
-		promise.Call("then", then)
-	}
-	if exit == nil {
-		exit = <-wait
-	}
-	fmt.Println("Program exited", exit.code)
-	return *exit
-}
+		magic := make([]byte, 4)
+		if _, err := f.Read(magic); err != nil {
+			return false, err
+		}
 
-func runScript(t *term.Terminal, path string, args []string) {
-	fmt.Println("TODO: run shell script in child process")
-	// exec("shell", path, args, t)
+		return bytes.Equal(magic, WASM_MAGIC), nil
+	}
 }
 
 func parseEnvVars(t *term.Terminal, args []string) (ok bool, overrideEnv map[string]string, argsRest []string) {
@@ -257,6 +165,14 @@ func unpackMap(m map[string]string) map[string]any {
 	r := make(map[string]any, len(m))
 	for k, v := range m {
 		r[k] = v
+	}
+	return r
+}
+
+func unpackMap2(m map[string]string) []string {
+	r := make([]string, len(m))
+	for k, v := range m {
+		r = append(r, strings.Join([]string{k, v}, "="))
 	}
 	return r
 }
