@@ -15,7 +15,7 @@ import (
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
 
-	"tractor.dev/toolkit-go/engine/fs/mountablefs"
+	"tractor.dev/wanix/internal/mountablefs"
 )
 
 func log(args ...any) {
