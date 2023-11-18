@@ -140,7 +140,8 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
       url.pathname === "/" ||
       url.pathname === "/wanix-bootloader.js" ||
       url.pathname === "/favicon.ico" || 
-      url.pathname.startsWith("/~dev") || 
+      url.pathname.startsWith("/~dev") || // deprecated
+      url.pathname.startsWith("/sys/dev") || 
       url.pathname.startsWith("/bootloader") || 
       url.pathname.startsWith("/index.html") ||
       !host) return;
