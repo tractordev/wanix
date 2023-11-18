@@ -2,8 +2,8 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -13,21 +13,10 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"syscall/js"
+
+	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/wanix/kernel/proc/exec"
 )
-
-func Usage() string {
-	return `Compiles a go file.
-Usage: build <-targets|source file>
-
-Outputs the compiled binary next to the input source file, 
-using the name of the containing directory if possible.
-
-GOOS and GOARCH match the host values by default,
-but can be overridden by environment variables.
-
--targets flag prints the supported build targets.`
-}
 
 type Target struct {
 	os   string
@@ -38,35 +27,23 @@ var supportedTargets = []Target{
 	{"js", "wasm"}, {"darwin", "amd64"},
 }
 
-func getBuildTarget() (target Target, valid bool) {
-	target.os = os.Getenv("GOOS")
-	if target.os == "" {
-		target.os = runtime.GOOS
-	}
-
-	target.arch = os.Getenv("GOARCH")
-	if target.arch == "" {
-		target.arch = runtime.GOARCH
-	}
-
-	valid = false
+func isValidBuildTarget(os, arch string) bool {
+	target := Target{os: os, arch: arch}
 	for _, t := range supportedTargets {
 		if target == t {
-			valid = true
-			break
+			return true
 		}
 	}
-
-	return target, valid
+	return false
 }
 
 type SourceInfo struct {
-	dir_path  string
-	file_name string
+	dirPath  string
+	filename string
 }
 
 func (si SourceInfo) filePath() string {
-	return filepath.Join(si.dir_path, si.file_name)
+	return filepath.Join(si.dirPath, si.filename)
 }
 
 func getSourceInfo(path string) (SourceInfo, error) {
@@ -83,7 +60,6 @@ func getSourceInfo(path string) (SourceInfo, error) {
 
 	// if path is a directory, search dir for main.go
 	// if path is a go file, get parent dir
-	// TODO: user created directories show up as files for some reason.
 	if fstat.IsDir() {
 		entries, err := f.Readdirnames(-1)
 		if err != nil {
@@ -99,50 +75,71 @@ func getSourceInfo(path string) (SourceInfo, error) {
 		}
 
 		if !found {
-			return SourceInfo{}, errors.New("input directory missing a main.go")
+			return SourceInfo{}, fmt.Errorf("%w: missing main.go in directory %s", os.ErrNotExist, path)
 		} else {
-			return SourceInfo{dir_path: filepath.Clean(path), file_name: "main.go"}, nil
+			return SourceInfo{dirPath: filepath.Clean(path), filename: "main.go"}, nil
 		}
 	} else {
-		return SourceInfo{dir_path: filepath.Dir(path), file_name: filepath.Base(path)}, nil
+		return SourceInfo{dirPath: filepath.Dir(path), filename: filepath.Base(path)}, nil
 	}
+}
+
+type BuildFlags struct {
+	Os, Arch, Output *string
+	PrintTargets     *bool
+}
+
+func setupCLI() *cli.Command {
+	cmd := &cli.Command{
+		Usage: "build [options] <srcPath>",
+		Args:  cli.MinArgs(1),
+		Short: "Compiles a go file or source directory.",
+	}
+
+	cFlags := cmd.Flags()
+	inFlags := BuildFlags{
+		Os:           cFlags.String("os", runtime.GOOS, "Sets the target OS (defaults to the host OS)"),
+		Arch:         cFlags.String("arch", runtime.GOARCH, "Sets the target architecture (defaults to the host architecture)"),
+		PrintTargets: cFlags.Bool("targets", false, "Print the supported build targets"),
+		Output:       cFlags.String("output", "", "Outputs an executable to the given filepath or directory (defaults to cwd)"),
+	}
+
+	cmd.Run = func(ctx *cli.Context, args []string) {
+		os.Exit(mainWithExitCode(inFlags, args))
+	}
+
+	return cmd
 }
 
 func main() {
-	os.Exit(mainWithExitCode())
+	if err := cli.Execute(context.Background(), setupCLI(), os.Args[1:]); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
-func mainWithExitCode() int {
-	args := os.Args[1:]
-
-	if len(args) != 1 {
-		fmt.Println(Usage())
-		return 1
-	}
-
-	if args[0] == "-targets" {
+func mainWithExitCode(flags BuildFlags, args []string) int {
+	if *flags.PrintTargets {
 		fmt.Println("Supported targets:")
 		for _, t := range supportedTargets {
-			fmt.Printf("GOOS=%s GOARCH=%s\n", t.os, t.arch)
+			fmt.Printf("OS=%s ARCH=%s\n", t.os, t.arch)
 		}
 		return 0
 	}
 
-	// verify valid GOOS and GOARCH targets
-	target, valid := getBuildTarget()
-	if !valid {
-		fmt.Printf("unsupported build target GOOS=%s GOARCH=%s\n", target.os, target.arch)
+	if !isValidBuildTarget(*flags.Os, *flags.Arch) {
+		fmt.Printf("unsupported build target OS=%s ARCH=%s\n", *flags.Os, *flags.Arch)
 		fmt.Println("use -targets flag to see supported targets")
 		return 1
 	}
 
-	src_info, err := getSourceInfo(args[0])
+	srcInfo, err := getSourceInfo(args[0])
 	if err != nil {
 		fmt.Println(err)
 		return 1
 	}
 
-	src, err := os.ReadFile(src_info.filePath())
+	src, err := os.ReadFile(srcInfo.filePath())
 	if err != nil {
 		fmt.Println("unable to read source file:", err)
 		return 1
@@ -156,33 +153,36 @@ func mainWithExitCode() int {
 		return 1
 	}
 
+	// TODO: Unpack/mount go zip-pkg
+
+	// TODO: maybe use file hash to prevent path conflicts?
+	// Ensure we clean up all build artifacts from here on
+	defer func() {
+		if err := os.RemoveAll("/tmp/build"); err != nil {
+			fmt.Println("unable to clean build artifacts:", err)
+		}
+	}()
+
 	embedPatterns, hasEmbeds := findEmbedDirectives(src)
 	var embedcfgPath string = ""
 	if hasEmbeds {
-		embedcfgPath, err = generateEmbedConfig(embedPatterns, src_info.dir_path)
+		embedcfgPath, err = generateEmbedConfig(embedPatterns, srcInfo.dirPath)
 		if err != nil {
 			fmt.Println("unable to generate embedcfg:", err)
 			return 1
 		}
-		defer os.Remove(embedcfgPath) // defer applies to function scope!
 	}
 
-	importcfgPath := strings.Join([]string{"/tmp/build/importcfg", target.os, target.arch}, "_")
-
+	importcfgPath := strings.Join([]string{"/tmp/build/importcfg", *flags.Os, *flags.Arch}, "_")
 	importcfg, err := os.Create(importcfgPath)
 	if err != nil {
 		fmt.Println("unable to create importcfg:", err)
 		return 1
 	}
-	defer func() {
-		if err := os.Remove(importcfgPath); err != nil {
-			fmt.Println("unable to remove importcfg:", err)
-		}
-	}()
 
 	bw := bufio.NewWriter(importcfg)
 	for _, i := range ast.Imports {
-		fmt.Fprintf(bw, "packagefile %s=/tmp/build/pkg/%s_%s/%[1]s.a\n", strings.Trim(i.Path.Value, "\""), target.os, target.arch)
+		fmt.Fprintf(bw, "packagefile %s=/tmp/build/pkg/%s_%s/%[1]s.a\n", strings.Trim(i.Path.Value, "\""), flags.Os, flags.Arch)
 	}
 	if err := bw.Flush(); err != nil {
 		fmt.Println("unable to write to importcfg:", err)
@@ -190,7 +190,7 @@ func mainWithExitCode() int {
 	}
 	importcfg.Close()
 
-	objPath := fmt.Sprintf("/tmp/build/%s.a", strings.TrimSuffix(src_info.file_name, ".go"))
+	objPath := fmt.Sprintf("/tmp/build/%s.a", strings.TrimSuffix(srcInfo.filename, ".go"))
 
 	compileArgs := []string{
 		"-p", "main",
@@ -199,51 +199,56 @@ func mainWithExitCode() int {
 		"-pack",
 		"-o", objPath,
 		"-importcfg", importcfgPath,
-		src_info.filePath(),
+		srcInfo.filePath(),
 	}
 	if hasEmbeds {
 		compileArgs = append([]string{"-embedcfg", embedcfgPath}, compileArgs...)
 	}
-	env := mapEnv()
 
 	fmt.Println("Compiling", args[0])
 	// run compile.wasm
-	exitcode := runWasm("/cmd/compile.wasm", compileArgs, env)
-	if exitcode.code != 0 {
-		if exitcode.err != nil {
-			fmt.Println(exitcode.err)
+	// TODO: use zip-pkg compile.wasm
+	if exitcode, err := run("compile.wasm", compileArgs...); exitcode != 0 {
+		if err != nil {
+			fmt.Println(err)
 		}
-		return exitcode.code
+		return exitcode
 	}
 
-	defer func() {
-		if err := os.Remove(objPath); err != nil {
-			fmt.Println("unable to remove build artifact:", err)
-		}
-	}()
+	linkcfg := fmt.Sprintf("/tmp/build/pkg/importcfg_%s_%s.link", flags.Os, flags.Arch)
+
+	var output string
+	if *flags.Output != "" {
+		output = *flags.Output
+	} else if srcInfo.dirPath == "." || srcInfo.dirPath == "/" {
+		output, _, _ = strings.Cut(srcInfo.filename, ".")
+	} else {
+		output = filepath.Base(srcInfo.dirPath)
+	}
 
 	fmt.Println("Linking", objPath)
 	// run link.wasm using importcfg_$GOOS_$GOARCH.link
-	linkcfg := fmt.Sprintf("/tmp/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
-	exitcode = runWasm("/cmd/link.wasm", []string{"-importcfg", linkcfg, "-buildmode=exe", objPath}, env)
-	if exitcode.code != 0 {
-		if exitcode.err != nil {
-			fmt.Println(exitcode.err)
+	// TODO: use zip-pkg link.wasm
+	if exitcode, err := run(
+		"link.wasm",
+		"-importcfg", linkcfg,
+		"-buildmode=exe", objPath,
+		"-o", output,
+	); exitcode != 0 {
+		if err != nil {
+			fmt.Println(err)
 		}
-		return exitcode.code
+		return exitcode
 	}
 
-	var output_name string
-	if src_info.dir_path == "." || src_info.dir_path == "/" {
-		output_name, _, _ = strings.Cut(src_info.file_name, ".")
-	} else {
-		output_name = filepath.Base(src_info.dir_path)
-	}
-	// TODO: link.wasm dumps a.out in the cwd instead of src_info.dir_path
-	os.Rename("a.out", filepath.Join(src_info.dir_path, output_name))
-
-	// profit
 	return 0
+}
+
+func run(name string, args ...string) (int, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func findEmbedDirectives(src []byte) (patterns []string, ok bool) {
@@ -327,67 +332,4 @@ func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err
 	cfg.Close()
 
 	return cfgPath, nil
-}
-
-type ExitCode struct {
-	code int
-	err  error
-}
-
-func runWasm(path string, args []string, env map[string]any) ExitCode {
-	wasm, err := os.ReadFile(path)
-	if err != nil {
-		return ExitCode{1, err}
-	}
-
-	buf := js.Global().Get("Uint8Array").New(len(wasm))
-	js.CopyBytesToJS(buf, wasm)
-
-	var stdout = js.FuncOf(func(this js.Value, args []js.Value) any {
-		buf := make([]byte, args[0].Length())
-		js.CopyBytesToGo(buf, args[0])
-		os.Stdout.Write(buf)
-		return nil
-	})
-	defer stdout.Release()
-
-	// wanix.exec(wasm, args, env, stdout, stderr)
-	promise := js.Global().Get("wanix").Call("exec", buf, unpackArray(args), env, stdout, stdout)
-
-	wait := make(chan ExitCode)
-	then := js.FuncOf(func(this js.Value, args []js.Value) any {
-		wait <- ExitCode{args[0].Int(), nil}
-		return nil
-	})
-	defer then.Release()
-
-	// TODO: not sure this is necessary
-	catch := js.FuncOf(func(this js.Value, args []js.Value) any {
-		wait <- ExitCode{1, errors.New(args[0].Get("message").String())}
-		return nil
-	})
-	defer catch.Release()
-
-	promise.Call("then", then).Call("catch", catch)
-	return <-wait
-}
-
-func mapEnv() map[string]any {
-	env := os.Environ()
-	var result = make(map[string]any, len(env))
-
-	for _, envVar := range env {
-		k, v, _ := strings.Cut(envVar, "=")
-		result[k] = v
-	}
-
-	return result
-}
-
-func unpackArray[S ~[]E, E any](s S) []any {
-	r := make([]any, len(s))
-	for i, e := range s {
-		r[i] = e
-	}
-	return r
 }

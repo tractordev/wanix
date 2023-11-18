@@ -113,8 +113,17 @@ func getCmdByPath(iofs fs.FS, path string) CmdSearchResult {
 
 func buildCmdSource(path string) (exePath string, err error) {
 	cmd := exec.Command("build", "-output", "/sys/bin/", path)
-	_, err = cmd.Run()
-	return filepath.Join("/sys/bin", filepath.Base(path)+".wasm"), err
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if exitcode, err := cmd.Run(); exitcode != 0 {
+		if err == nil {
+			err = fmt.Errorf("exit code: %d", exitcode)
+		}
+		return "", err
+	} else {
+		return filepath.Join("/sys/bin", filepath.Base(path)+".wasm"), nil
+	}
 }
 
 var WASM_MAGIC = []byte{0, 'a', 's', 'm'}
