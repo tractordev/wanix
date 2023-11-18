@@ -23,6 +23,7 @@ export class Task {
       ppid: (globalThis.process) ? globalThis.process.pid : -1,
       fs: this.initfs,
       dir: opts.dir || "/",
+      hostURL: location.href,
     }});
     
     const taskReady = new Promise((resolve) => {
