@@ -89,15 +89,15 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     }
     // TODO: define these in one place. duplicated in initdata.go
     await Promise.all([
-      load("/~dev/kernel/web/lib/duplex.js"),
-      load("/~dev/kernel/web/lib/worker.js"),
-      load("/~dev/kernel/web/lib/syscall.js"),
-      load("/~dev/kernel/web/lib/task.js"),
-      load("/~dev/kernel/web/lib/wasm.js"),
-      load("/~dev/kernel/web/lib/host.js"),
-      load("/~dev/internal/indexedfs/indexedfs.js"), // maybe load from kernel?
-      load("/~dev/local/bin/kernel"),
-      load("/~dev/local/bin/shell"),
+      load("/sys/dev/kernel/web/lib/duplex.js"),
+      load("/sys/dev/kernel/web/lib/worker.js"),
+      load("/sys/dev/kernel/web/lib/syscall.js"),
+      load("/sys/dev/kernel/web/lib/task.js"),
+      load("/sys/dev/kernel/web/lib/wasm.js"),
+      load("/sys/dev/kernel/web/lib/host.js"),
+      load("/sys/dev/internal/indexedfs/indexedfs.js"), // maybe load from kernel?
+      load("/sys/dev/local/bin/kernel"),
+      load("/sys/dev/local/bin/shell"),
     ]);
     
     globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"]));
@@ -140,7 +140,6 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
       url.pathname === "/" ||
       url.pathname === "/wanix-bootloader.js" ||
       url.pathname === "/favicon.ico" || 
-      url.pathname.startsWith("/~dev") || // deprecated
       url.pathname.startsWith("/sys/dev") || 
       url.pathname.startsWith("/bootloader") || 
       url.pathname.startsWith("/index.html") ||

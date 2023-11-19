@@ -16,7 +16,6 @@ import (
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
-
 	"tractor.dev/wanix/internal/mountablefs"
 )
 
@@ -52,6 +51,8 @@ func (s *Service) Initialize() {
 	fs.MkdirAll(s.fsys, "app", 0755)
 	fs.MkdirAll(s.fsys, "cmd", 0755)
 	fs.MkdirAll(s.fsys, "sys", 0755)
+	fs.MkdirAll(s.fsys, "sys/app", 0755)
+	fs.MkdirAll(s.fsys, "sys/cmd", 0755)
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	resp, err := http.DefaultClient.Get(devURL)
@@ -603,7 +604,8 @@ func (s *Service) unlink(this js.Value, args []js.Value) any {
 	go func() {
 		log("unlink", path)
 
-		if err := s.fsys.Remove(path); err != nil {
+		// GOOS=js calls unlink for os.RemoveAll so we use RemoveAll here
+		if err := s.fsys.RemoveAll(path); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}

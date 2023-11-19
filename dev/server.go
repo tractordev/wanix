@@ -30,7 +30,6 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/sys/dev/", http.StripPrefix("/sys/dev/", httpfs.FileServer(os.DirFS(dir))))
-	mux.Handle("/~dev/", http.StripPrefix("/~dev", http.FileServer(http.Dir(dir)))) // deprecated
 	mux.Handle("/wanix-bootloader.js", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/javascript")
 
