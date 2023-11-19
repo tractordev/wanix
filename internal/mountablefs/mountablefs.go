@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
-	"tractor.dev/toolkit-go/engine/fs/fsutil"
 )
 
 type mountedFSDir struct {
@@ -149,6 +148,25 @@ func (host *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	return chtimesableFS.Chtimes(trimMountPoint(name, prefix), atime, mtime)
 }
 
+func (host *FS) Stat(name string) (fs.FileInfo, error) {
+	name = cleanPath(name)
+	var fsys fs.FS
+	prefix := ""
+
+	if found, mount := host.isPathInMount(name); found {
+		fsys = mount.fsys
+		prefix = mount.mountPoint
+	} else {
+		fsys = host.MutableFS
+	}
+
+	statFS, ok := fsys.(fs.StatFS)
+	if !ok {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: errors.ErrUnsupported}
+	}
+	return statFS.Stat(trimMountPoint(name, prefix))
+}
+
 func (host *FS) Create(name string) (fs.File, error) {
 	name = cleanPath(name)
 	var fsys fs.FS
@@ -223,9 +241,9 @@ func (host *FS) Open(name string) (fs.File, error) {
 
 func (host *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) {
 	if found, mount := host.isPathInMount(name); found {
-		return fsutil.OpenFile(mount.fsys, trimMountPoint(name, mount.mountPoint), flag, perm)
+		return fs.OpenFile(mount.fsys, trimMountPoint(name, mount.mountPoint), flag, perm)
 	} else {
-		return fsutil.OpenFile(host.MutableFS, name, flag, perm)
+		return fs.OpenFile(host.MutableFS, name, flag, perm)
 	}
 }
 
@@ -305,7 +323,7 @@ func (host *FS) RemoveAll(path string) error {
 func removeAll(fsys removableFS, path string, mntPoints []string) error {
 	path = filepath.Clean(path)
 
-	if exists, err := fsutil.Exists(fsys, path); !exists || err != nil {
+	if exists, err := fs.Exists(fsys, path); !exists || err != nil {
 		return err
 	}
 
@@ -318,7 +336,7 @@ func rmRecurse(fsys removableFS, path string, mntPoints []string) error {
 		return &fs.PathError{Op: "remove", Path: path, Err: syscall.EBUSY}
 	}
 
-	isdir, dirErr := fsutil.IsDir(fsys, path)
+	isdir, dirErr := fs.IsDir(fsys, path)
 	if dirErr != nil {
 		return dirErr
 	}
