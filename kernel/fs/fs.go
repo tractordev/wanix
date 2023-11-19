@@ -3,6 +3,7 @@ package fs
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,9 +13,9 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
-
 	"tractor.dev/wanix/internal/mountablefs"
 )
 
@@ -23,7 +24,7 @@ func log(args ...any) {
 }
 
 type Service struct {
-	fsys fs.MutableFS
+	fsys *mountablefs.FS
 
 	fds    map[int]*fd
 	nextFd int
@@ -45,6 +46,24 @@ func (s *Service) Initialize() {
 		panic(err)
 	}
 	s.fsys = mountablefs.New(ifs)
+
+	// setup dirs
+	fs.MkdirAll(s.fsys, "app", 0755)
+	fs.MkdirAll(s.fsys, "cmd", 0755)
+	fs.MkdirAll(s.fsys, "sys", 0755)
+	fs.MkdirAll(s.fsys, "sys/app", 0755)
+	fs.MkdirAll(s.fsys, "sys/cmd", 0755)
+
+	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
+	resp, err := http.DefaultClient.Get(devURL)
+	if err != nil {
+		panic(err)
+	}
+	if resp.StatusCode == 200 {
+		if err := s.fsys.Mount(httpfs.New(devURL), "/sys/dev"); err != nil {
+			panic(err)
+		}
+	}
 }
 
 func (s *Service) InitializeJS() {
@@ -585,7 +604,8 @@ func (s *Service) unlink(this js.Value, args []js.Value) any {
 	go func() {
 		log("unlink", path)
 
-		if err := s.fsys.Remove(path); err != nil {
+		// GOOS=js calls unlink for os.RemoveAll so we use RemoveAll here
+		if err := s.fsys.RemoveAll(path); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}

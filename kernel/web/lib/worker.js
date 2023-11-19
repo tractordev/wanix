@@ -6,6 +6,7 @@ addEventListener("message", async (e) => {
   if (e.data.duplex) return;
   if (e.data.init) {
     
+    globalThis.hostURL = e.data.init.hostURL;
     globalThis.initfs = e.data.init.fs;
     globalThis.process.pid = e.data.init.pid;
     globalThis.process.ppid = e.data.init.ppid;

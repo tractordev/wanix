@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
-	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/wanix/internal/jsutil"
 )
 
@@ -73,7 +72,7 @@ func (ifs *FS) Mkdir(name string, perm fs.FileMode) error {
 	}
 	dir := filepath.Dir(name)
 	if dir != "." && dir != "/" {
-		exists, err := fsutil.DirExists(ifs, dir)
+		exists, err := fs.DirExists(ifs, dir)
 		if err != nil {
 			return err
 		}
@@ -96,7 +95,7 @@ func (ifs *FS) MkdirAll(path string, perm fs.FileMode) error {
 		}
 		pp = append(pp, p)
 		dir := filepath.Join(pp...)
-		exists, err := fsutil.DirExists(ifs, dir)
+		exists, err := fs.DirExists(ifs, dir)
 		if err != nil {
 			return err
 		}

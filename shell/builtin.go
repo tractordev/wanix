@@ -9,8 +9,10 @@ import (
 	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
-	"tractor.dev/toolkit-go/engine/fs/fsutil"
+	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
+	"tractor.dev/wanix/internal/fsutil"
+	"tractor.dev/wanix/internal/osfs"
 )
 
 func echoCmd() *cli.Command {
@@ -30,9 +32,9 @@ func openCmd() *cli.Command {
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			var path string
-			if exists, _ := fsutil.Exists(os.DirFS("/"), fmt.Sprintf("sys/app/%s", args[0])); exists {
+			if exists, _ := fs.Exists(os.DirFS("/"), fmt.Sprintf("sys/app/%s", args[0])); exists {
 				path = fmt.Sprintf("sys/app/%s", args[0])
-			} else if exists, _ := fsutil.Exists(os.DirFS("/"), fmt.Sprintf("app/%s", args[0])); exists {
+			} else if exists, _ := fs.Exists(os.DirFS("/"), fmt.Sprintf("app/%s", args[0])); exists {
 				path = fmt.Sprintf("app/%s", args[0])
 			} else {
 				fmt.Fprintln(ctx, "app not found")
@@ -132,7 +134,7 @@ func cdCmd() *cli.Command {
 		Usage: "cd <path>",
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
-			exists, err := fsutil.DirExists(os.DirFS("/"), unixToFsPath(args[0]))
+			exists, err := fs.DirExists(os.DirFS("/"), unixToFsPath(args[0]))
 			if checkErr(ctx, err) {
 				return
 			}
@@ -222,7 +224,7 @@ func removeCmd() *cli.Command {
 					return
 				}
 			} else {
-				if isdir, err := fsutil.IsDir(os.DirFS("/"), unixToFsPath(args[0])); isdir {
+				if isdir, err := fs.IsDir(os.DirFS("/"), unixToFsPath(args[0])); isdir {
 					fmt.Fprintf(ctx, "cant remove file %s: is a directory\n(try using the `-r` flag)\n", absPath(args[0]))
 					return
 				} else if checkErr(ctx, err) {
@@ -265,7 +267,7 @@ func moveCmd() *cli.Command {
 		Run: func(ctx *cli.Context, args []string) {
 			// TODO: prevent file overwrite if dest file already exits (should this already be an error?)
 			// TODO: error when dest directory doesn't exist and args.len > 2
-			isdir, err := fsutil.DirExists(os.DirFS("/"), unixToFsPath(args[len(args)-1]))
+			isdir, err := fs.DirExists(os.DirFS("/"), unixToFsPath(args[len(args)-1]))
 			if checkErr(ctx, err) {
 				return
 			}
@@ -291,6 +293,24 @@ func moveCmd() *cli.Command {
 	}
 }
 
+// TODO: merge with copyCmd
+func copyCmd2() *cli.Command {
+	cmd := &cli.Command{
+		Usage: "cp2 SOURCE DEST",
+		Args:  cli.MinArgs(2),
+		Short: "Recursively copy SOURCE to DEST. DEST must not exist.",
+		Run: func(ctx *cli.Context, args []string) {
+			srcpath := args[0]
+			dstpath := args[1]
+			err := fsutil.CopyAll(osfs.New(), unixToFsPath(srcpath), unixToFsPath(dstpath))
+			if checkErr(ctx, err) {
+				return
+			}
+		},
+	}
+	return cmd
+}
+
 func copyCmd() *cli.Command {
 	var recursive bool
 
@@ -300,7 +320,7 @@ func copyCmd() *cli.Command {
 		Short: "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.",
 		Run: func(ctx *cli.Context, args []string) {
 			// TODO: handle copying directories
-			isdir, err := fsutil.DirExists(os.DirFS("/"), unixToFsPath(args[len(args)-1]))
+			isdir, err := fs.DirExists(os.DirFS("/"), unixToFsPath(args[len(args)-1]))
 			if checkErr(ctx, err) {
 				return
 			}
@@ -312,7 +332,7 @@ func copyCmd() *cli.Command {
 					srcName := filepath.Base(path)
 					dest := filepath.Join(dir, srcName)
 
-					srcIsDir, err := fsutil.IsDir(os.DirFS("/"), unixToFsPath(path))
+					srcIsDir, err := fs.IsDir(os.DirFS("/"), unixToFsPath(path))
 					if checkErr(ctx, err) {
 						continue
 					}
