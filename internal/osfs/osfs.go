@@ -10,6 +10,8 @@ import (
 
 type FS struct{}
 
+// This file system is a passthrough for `os` calls, which expect rooted paths.
+// Pass OS paths, not io/fs paths.
 func New() *FS {
 	return &FS{}
 }
