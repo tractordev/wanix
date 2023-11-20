@@ -43,6 +43,7 @@ func (m *Shell) Initialize() {
 	m.Root.AddCommand(mkdirCmd())
 	m.Root.AddCommand(moveCmd())
 	m.Root.AddCommand(copyCmd())
+	m.Root.AddCommand(copyCmd2()) // temporary
 	m.Root.AddCommand(pwdCmd())
 	m.Root.AddCommand(writeCmd())
 	m.Root.AddCommand(printEnvCmd())

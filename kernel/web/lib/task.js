@@ -23,6 +23,7 @@ export class Task {
       ppid: (globalThis.process) ? globalThis.process.pid : -1,
       fs: this.initfs,
       dir: opts.dir || "/",
+      hostURL: location.href,
     }});
     
     const taskReady = new Promise((resolve) => {
@@ -42,6 +43,7 @@ export class Task {
       this.pipe.handle("fs", duplex.handlerFrom(globalThis.api.fs));
       this.pipe.handle("proc", duplex.handlerFrom(globalThis.api.proc));
       this.pipe.handle("tty", duplex.handlerFrom(globalThis.api.tty));  
+      this.pipe.handle("host", duplex.handlerFrom(globalThis.api.host));  
     }
     
     await taskReady;

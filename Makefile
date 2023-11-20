@@ -2,7 +2,7 @@
 
 all: kernel shell build
 
-dev:
+dev: all
 	go run ./dev
 
 bundle: local/bin

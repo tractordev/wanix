@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"tractor.dev/wanix/internal/httpfs"
+	"tractor.dev/wanix/kernel/web/gwutil"
 )
 
 func loggerMiddleware(next http.Handler) http.Handler {
@@ -24,9 +27,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Serving WANIX dev server at http://localhost:8080 ...")
+	log.Println("Serving WANIX dev server at http://localhost:7777 ...")
+
 	mux := http.NewServeMux()
-	mux.Handle("/~dev/", http.StripPrefix("/~dev", http.FileServer(http.Dir(dir))))
+	mux.Handle("/sys/dev/", http.StripPrefix("/sys/dev/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gwutil.FileTransformer(os.DirFS(dir), httpfs.FileServer).ServeHTTP(w, r)
+	})))
 	mux.Handle("/wanix-bootloader.js", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/javascript")
 
@@ -48,5 +54,7 @@ func main() {
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "./dev/index.html")
 	}))
-	http.ListenAndServe(":8080", loggerMiddleware(mux))
+	if err := http.ListenAndServe(":7777", loggerMiddleware(mux)); err != nil {
+		log.Fatal(err)
+	}
 }

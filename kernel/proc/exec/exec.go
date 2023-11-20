@@ -1,3 +1,6 @@
+// exec is a cheap knock-off of os/exec to be used by userland programs
+// to spawn subprocesses with the wanix kernel. Perhaps with WASI support
+// it will be unnecessary as the os/exec can be used directly instead.
 package exec
 
 import (
@@ -10,8 +13,6 @@ import (
 
 	"tractor.dev/wanix/internal/jsutil"
 )
-
-// cheap knock-off of os/exec
 
 type Cmd struct {
 	Path string
