@@ -305,7 +305,7 @@ func copyCmd2() *cli.Command {
 		Run: func(ctx *cli.Context, args []string) {
 			srcpath := args[0]
 			dstpath := args[1]
-			err := fsutil.CopyAll(osfs.New(), unixToFsPath(srcpath), unixToFsPath(dstpath))
+			err := fsutil.CopyAll(osfs.New(), absPath(srcpath), absPath(dstpath))
 			if checkErr(ctx, err) {
 				return
 			}
