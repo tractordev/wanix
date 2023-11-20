@@ -237,11 +237,15 @@ export function deleteFile(db, key) {
 
 export function deleteAll(db, path) {
 	if (path === "." || path === "") {
+		console.warn("deleteAll invalid path:", path)
 		return; // error? allow it? 
 	}
+
+	let dirpath = path;
 	if (path && path[path.length - 1] !== '/') {
-		path = path + "/";
+		dirpath = path + "/";
 	}
+
 	return new Promise((resolve, reject) => {
 		const range = IDBKeyRange.lowerBound(path);
 
@@ -251,11 +255,10 @@ export function deleteAll(db, path) {
 		req.onsuccess = (event) => {
 			const cursor = event.target.result;
 			if (cursor) {
-				return;
-			}
-			if (cursor.key.startsWith(path) && cursor.key !== ".") {
-				tx.objectStore("files").delete(cursor.key)
-				cursor.continue();
+				if ((cursor.key === path || cursor.key.startsWith(dirpath)) && cursor.key !== ".") {
+					cursor.delete();
+					cursor.continue();
+				}
 			}
 		};
 
