@@ -28,18 +28,21 @@ type Target struct {
 	arch string
 }
 
-var supportedTargets = []Target{
-	{"js", "wasm"}, {"darwin", "amd64"},
+func (t Target) print() string {
+	return strings.Join([]string{t.os, t.arch}, "_")
 }
 
-func isValidBuildTarget(os, arch string) bool {
-	target := Target{os: os, arch: arch}
+func (target Target) isValid() bool {
 	for _, t := range supportedTargets {
 		if target == t {
 			return true
 		}
 	}
 	return false
+}
+
+var supportedTargets = []Target{
+	{"js", "wasm"}, {"darwin", "amd64"},
 }
 
 type SourceInfo struct {
@@ -135,8 +138,10 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		return 0
 	}
 
-	if !isValidBuildTarget(*flags.Os, *flags.Arch) {
-		fmt.Printf("unsupported build target OS=%s ARCH=%s\n", *flags.Os, *flags.Arch)
+	target := Target{os: *flags.Os, arch: *flags.Arch}
+
+	if !target.isValid() {
+		fmt.Printf("unsupported build target OS=%s ARCH=%s\n", target.os, target.arch)
 		fmt.Println("use -targets flag to see supported targets")
 		return 1
 	}
@@ -174,9 +179,7 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 	}()
 
 	fmt.Println("Unpacking pkg.zip...")
-	// TODO: lazily load files as we need them, as opposed to the whole zip.
-	// e.g. don't load darwin files if compiling to wasm
-	if err := openZipPkg("/tmp/build"); err != nil {
+	if err := openZipPkg("/tmp/build", target); err != nil {
 		fmt.Println("unable to open pkg.zip:", err)
 		return 1
 	}
@@ -191,7 +194,7 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		}
 	}
 
-	importcfgPath := strings.Join([]string{"/tmp/build/importcfg", *flags.Os, *flags.Arch}, "_")
+	importcfgPath := strings.Join([]string{"/tmp/build/importcfg", target.os, target.arch}, "_")
 	importcfg, err := os.Create(importcfgPath)
 	if err != nil {
 		fmt.Println("unable to create importcfg:", err)
@@ -200,7 +203,7 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 
 	bw := bufio.NewWriter(importcfg)
 	for _, i := range ast.Imports {
-		fmt.Fprintf(bw, "packagefile %s=/tmp/build/pkg/%s_%s/%[1]s.a\n", strings.Trim(i.Path.Value, "\""), flags.Os, flags.Arch)
+		fmt.Fprintf(bw, "packagefile %s=/tmp/build/pkg/targets/%s_%s/%[1]s.a\n", strings.Trim(i.Path.Value, "\""), target.os, target.arch)
 	}
 	if err := bw.Flush(); err != nil {
 		fmt.Println("unable to write to importcfg:", err)
@@ -232,7 +235,7 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		return exitcode
 	}
 
-	linkcfg := fmt.Sprintf("/tmp/build/pkg/importcfg_%s_%s.link", flags.Os, flags.Arch)
+	linkcfg := fmt.Sprintf("/tmp/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
 
 	var output string
 	if *flags.Output != "" {
@@ -267,7 +270,7 @@ func run(name string, args ...string) (int, error) {
 	return cmd.Run()
 }
 
-func openZipPkg(dest string) error {
+func openZipPkg(dest string, tgt Target) error {
 	pkg, err := zip.NewReader(bytes.NewReader(zipEmbed), int64(len(zipEmbed)))
 	if err != nil {
 		return err
@@ -275,7 +278,14 @@ func openZipPkg(dest string) error {
 
 	dfs := os.DirFS(dest)
 
+	// TODO: Optimize
 	for _, zfile := range pkg.File {
+		if strings.HasPrefix(zfile.Name, "pkg/targets") {
+			if !strings.HasPrefix(zfile.Name, "pkg/targets/"+tgt.print()) {
+				continue
+			}
+		}
+
 		if exists, err := fsutil.Exists(dfs, filepath.Clean(zfile.Name)); exists {
 			continue
 		} else if err != nil {
