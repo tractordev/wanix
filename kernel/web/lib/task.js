@@ -43,6 +43,7 @@ export class Task {
       this.pipe.handle("fs", duplex.handlerFrom(globalThis.api.fs));
       this.pipe.handle("proc", duplex.handlerFrom(globalThis.api.proc));
       this.pipe.handle("tty", duplex.handlerFrom(globalThis.api.tty));  
+      this.pipe.handle("host", duplex.handlerFrom(globalThis.api.host));  
     }
     
     await taskReady;
