@@ -1,5 +1,13 @@
 
 globalThis.api = {
+  host: {
+    respondRPC: async (resp, call) => {
+      // forward upstream to host page
+      const args = await call.receive();
+      const r = await sys.call(call.selector, args);
+      resp.return(r.value);
+    },
+  },
   fs: {
     write(fd, buf, offset, length, position) {
       return new Promise((ok, err) => globalThis.fs.write(fd, buf, offset, length, position, cb(ok, err)));
