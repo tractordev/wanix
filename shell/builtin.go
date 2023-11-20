@@ -32,11 +32,14 @@ func openCmd() *cli.Command {
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			var path string
-			if exists, _ := fs.Exists(os.DirFS("/"), fmt.Sprintf("sys/app/%s", args[0])); exists {
-				path = fmt.Sprintf("sys/app/%s", args[0])
-			} else if exists, _ := fs.Exists(os.DirFS("/"), fmt.Sprintf("app/%s", args[0])); exists {
-				path = fmt.Sprintf("app/%s", args[0])
-			} else {
+			var searchPaths = []string{"sys/app", "app", "sys/dev/internal/app"}
+			for _, searchPath := range searchPaths {
+				if exists, _ := fs.Exists(os.DirFS("/"), fmt.Sprintf("%s/%s", searchPath, args[0])); exists {
+					path = fmt.Sprintf("%s/%s", searchPath, args[0])
+					break
+				}
+			}
+			if path == "" {
 				fmt.Fprintln(ctx, "app not found")
 				return
 			}
