@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"tractor.dev/wanix/internal/httpfs"
+	"tractor.dev/wanix/kernel/web/gwutil"
 )
 
 func loggerMiddleware(next http.Handler) http.Handler {
@@ -29,7 +30,9 @@ func main() {
 	log.Println("Serving WANIX dev server at http://localhost:7777 ...")
 
 	mux := http.NewServeMux()
-	mux.Handle("/sys/dev/", http.StripPrefix("/sys/dev/", httpfs.FileServer(os.DirFS(dir))))
+	mux.Handle("/sys/dev/", http.StripPrefix("/sys/dev/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gwutil.FileTransformer(os.DirFS(dir), httpfs.FileServer).ServeHTTP(w, r)
+	})))
 	mux.Handle("/wanix-bootloader.js", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/javascript")
 

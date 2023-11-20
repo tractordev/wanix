@@ -2,17 +2,15 @@ package web
 
 import (
 	"fmt"
-	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
 	"syscall/js"
 
-	esbuild "github.com/evanw/esbuild/pkg/api"
-	"tractor.dev/toolkit-go/engine/fs/xformfs"
 	"tractor.dev/wanix/internal/jsutil"
+	"tractor.dev/wanix/kernel/web/gwutil"
 )
 
 type Gateway struct{}
@@ -65,55 +63,7 @@ func (s *Gateway) request(this js.Value, args []js.Value) any {
 }
 
 func (s *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if _, ok := map[string]bool{
-		".js":  true,
-		".jsx": true,
-		".ts":  true,
-		".tsx": true,
-	}[filepath.Ext(r.URL.Path)]; ok {
-		w.Header().Set("content-type", "text/javascript")
-	}
-
-	httpfs := xformfs.New(os.DirFS("."))
-	httpfs.Transform(".jsx", TransformJSX)
-	httpfs.Transform(".tsx", TransformTSX)
-	httpfs.Transform(".ts", TransformTSX)
-
-	http.FileServer(http.FS(httpfs)).ServeHTTP(w, r)
-}
-
-func TransformTSX(dst io.Writer, src io.Reader) error {
-	b, err := io.ReadAll(src)
-	if err != nil {
-		return err
-	}
-	result := esbuild.Transform(string(b), esbuild.TransformOptions{
-		Loader:      esbuild.LoaderTSX,
-		JSXFactory:  "m",
-		JSXFragment: "",
-	})
-	if len(result.Errors) > 0 {
-		fmt.Println(result.Errors)
-		return fmt.Errorf("TSX transform errors")
-	}
-	_, err = dst.Write(append([]byte("\n"), result.Code...))
-	return err
-}
-
-func TransformJSX(dst io.Writer, src io.Reader) error {
-	b, err := io.ReadAll(src)
-	if err != nil {
-		return err
-	}
-	result := esbuild.Transform(string(b), esbuild.TransformOptions{
-		Loader:      esbuild.LoaderJSX,
-		JSXFactory:  "m",
-		JSXFragment: "",
-	})
-	if len(result.Errors) > 0 {
-		fmt.Println(result.Errors)
-		return fmt.Errorf("JSX transform errors")
-	}
-	_, err = dst.Write(append([]byte("\n"), result.Code...))
-	return err
+	gwutil.FileTransformer(os.DirFS("."), func(f fs.FS) http.Handler {
+		return http.FileServer(http.FS(f))
+	}).ServeHTTP(w, r)
 }
