@@ -1,12 +1,16 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
+	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -15,6 +19,7 @@ import (
 	"strings"
 
 	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/wanix/kernel/proc/exec"
 )
 
@@ -118,6 +123,9 @@ func main() {
 	}
 }
 
+//go:embed pkg.zip
+var zipEmbed []byte
+
 func mainWithExitCode(flags BuildFlags, args []string) int {
 	if *flags.PrintTargets {
 		fmt.Println("Supported targets:")
@@ -153,15 +161,25 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		return 1
 	}
 
-	// TODO: Unpack/mount go zip-pkg
-
-	// TODO: maybe use file hash to prevent path conflicts?
+	// TODO: use os Temp funcs instead
+	if err := os.MkdirAll("/tmp/build", 0755); err != nil {
+		fmt.Println(err)
+		return 1
+	}
 	// Ensure we clean up all build artifacts from here on
 	defer func() {
 		if err := os.RemoveAll("/tmp/build"); err != nil {
 			fmt.Println("unable to clean build artifacts:", err)
 		}
 	}()
+
+	fmt.Println("Unpacking pkg.zip...")
+	// TODO: lazily load files as we need them, as opposed to the whole zip.
+	// e.g. don't load darwin files if compiling to wasm
+	if err := openZipPkg("/tmp/build"); err != nil {
+		fmt.Println("unable to open pkg.zip:", err)
+		return 1
+	}
 
 	embedPatterns, hasEmbeds := findEmbedDirectives(src)
 	var embedcfgPath string = ""
@@ -207,8 +225,7 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 
 	fmt.Println("Compiling", args[0])
 	// run compile.wasm
-	// TODO: use zip-pkg compile.wasm
-	if exitcode, err := run("compile.wasm", compileArgs...); exitcode != 0 {
+	if exitcode, err := run("/tmp/build/pkg/compile.wasm", compileArgs...); exitcode != 0 {
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -228,9 +245,8 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 
 	fmt.Println("Linking", objPath)
 	// run link.wasm using importcfg_$GOOS_$GOARCH.link
-	// TODO: use zip-pkg link.wasm
 	if exitcode, err := run(
-		"link.wasm",
+		"/tmp/build/pkg/link.wasm",
 		"-importcfg", linkcfg,
 		"-buildmode=exe", objPath,
 		"-o", output,
@@ -249,6 +265,46 @@ func run(name string, args ...string) (int, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func openZipPkg(dest string) error {
+	pkg, err := zip.NewReader(bytes.NewReader(zipEmbed), int64(len(zipEmbed)))
+	if err != nil {
+		return err
+	}
+
+	dfs := os.DirFS(dest)
+
+	for _, zfile := range pkg.File {
+		if exists, err := fsutil.Exists(dfs, filepath.Clean(zfile.Name)); exists {
+			continue
+		} else if err != nil {
+			return err
+		}
+
+		if zfile.FileInfo().IsDir() {
+			if err := os.MkdirAll(filepath.Join(dest, zfile.Name), 0755); err != nil {
+				return err
+			}
+		} else {
+			zreader, err := zfile.Open()
+			defer zreader.Close()
+			if err != nil {
+				return err
+			}
+
+			destFile, err := os.Create(filepath.Join(dest, zfile.Name))
+			defer destFile.Close()
+			if err != nil {
+				return err
+			}
+
+			if _, err := io.Copy(destFile, zreader); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func findEmbedDirectives(src []byte) (patterns []string, ok bool) {

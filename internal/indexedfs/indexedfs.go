@@ -261,6 +261,7 @@ type indexedFile struct {
 	flags  int
 	offset int64
 	// TODO: see if read/write caches can be merged
+
 	// used internally by data()
 	readCache    []byte
 	outdatedRead bool

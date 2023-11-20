@@ -16,8 +16,6 @@ shell: shell/main.go local/bin
 
 build: build/main.go build/pkg.zip local/bin
 	cd build && GOOS=js GOARCH=wasm go build -o ../local/bin/build .
-# 	cd build && GOOS=js GOARCH=wasm go build -o ./build .
-# 	cd build && cat ./build ./pkg.zip > ../local/bin/build && rm ./build
 
 local/bin:
 	mkdir -p local/bin
