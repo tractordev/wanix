@@ -81,7 +81,7 @@ func openCmd() *cli.Command {
 			// 	fmt.Fprintf(t, "%s\n", err)
 			// 	return
 			// }
-			js.Global().Get("wanix").Get("loadApp").Invoke("main", fmt.Sprintf("/-/%s/", path), true)
+			js.Global().Get("sys").Call("call", "host.loadApp", []any{"app", path, true})
 		},
 	}
 	return cmd
