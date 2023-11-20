@@ -53,6 +53,7 @@ func (s *Service) Initialize() {
 	fs.MkdirAll(s.fsys, "sys", 0755)
 	fs.MkdirAll(s.fsys, "sys/app", 0755)
 	fs.MkdirAll(s.fsys, "sys/cmd", 0755)
+	fs.MkdirAll(s.fsys, "sys/dev", 0755)
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	resp, err := http.DefaultClient.Get(devURL)
