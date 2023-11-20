@@ -341,8 +341,8 @@ func (f *indexedFile) Write(p []byte) (n int, err error) {
 	writeEnd := f.offset + int64(len(p))
 
 	if writeEnd > int64(cap(f.writeCache)) {
-		newCapacity := cap(f.writeCache)*2 + 1
-		for ; writeEnd > int64(newCapacity); newCapacity *= 2 {
+		newCapacity := int64(cap(f.writeCache))*2 + 1
+		for ; writeEnd > newCapacity; newCapacity *= 2 {
 		}
 
 		newCache := make([]byte, len(f.writeCache), newCapacity)
@@ -352,6 +352,7 @@ func (f *indexedFile) Write(p []byte) (n int, err error) {
 
 	copy(f.writeCache[f.offset:writeEnd], p)
 	f.writeCache = f.writeCache[:writeEnd]
+	f.offset = writeEnd
 	f.dirty = true
 	return len(p), nil
 }
