@@ -15,6 +15,16 @@ import (
 	"tractor.dev/wanix/internal/osfs"
 )
 
+func exitCmd() *cli.Command {
+	cmd := &cli.Command{
+		Usage: "exit",
+		Run: func(ctx *cli.Context, args []string) {
+			os.Exit(0)
+		},
+	}
+	return cmd
+}
+
 func echoCmd() *cli.Command {
 	cmd := &cli.Command{
 		Usage: "echo [text]...",
@@ -408,7 +418,8 @@ func writeCmd() *cli.Command {
 		Usage: "write <filepath> [text]...",
 		Args:  cli.MinArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
-			err := os.WriteFile(absPath(args[0]), []byte(strings.Join(args[1:], " ")), 0644)
+			input := append([]byte(strings.Join(args[1:], " ")), '\n')
+			err := os.WriteFile(absPath(args[0]), input, 0644)
 			if checkErr(ctx, err) {
 				return
 			}
