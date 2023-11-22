@@ -33,26 +33,45 @@ addEventListener("message", async (e) => {
       // TODO: handle params[2].stdin
       const res = await WebAssembly.instantiate(mod, go.importObject);
       await go.run(res.instance);
+      globalThis.stdin(null, () => null);
+      globalThis.stdout(null);
+      globalThis.stderr(null);
       resp.return(go.exitcode);
     }))
     sys.handle("stdout", duplex.HandlerFunc(async (resp, call) => {
       const ch = await resp.continue();
       globalThis.stdout = (buf) => {
+        if (buf === null) {
+          ch.close();
+          return;
+        }
         ch.write(buf);
       }
     }));
     sys.handle("stderr", duplex.HandlerFunc(async (resp, call) => {
       const ch = await resp.continue();
       globalThis.stderr = (buf) => {
+        if (buf === null) {
+          ch.close();
+          return;
+        }
         ch.write(buf);
       }
     }));
     sys.handle("output", duplex.HandlerFunc(async (resp, call) => {
       const ch = await resp.continue();
       globalThis.stdout = (buf) => {
+        if (buf === null) {
+          ch.close();
+          return;
+        }
         ch.write(buf);
       }
       globalThis.stderr = (buf) => {
+        if (buf === null) {
+          ch.close();
+          return;
+        }
         ch.write(buf);
       }
     }));
@@ -60,6 +79,10 @@ addEventListener("message", async (e) => {
       await call.receive();
       const ch = await resp.continue();
       globalThis.stdin = (buf, cb) => {
+        if (buf === null) {
+          ch.close();
+          return;
+        }
         ch.read(buf).then(n => cb(null, n));
       }
     }));

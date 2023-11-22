@@ -45,7 +45,7 @@ func (s *Service) open(this js.Value, jsArgs []js.Value) any {
 		io.Copy(tty, &jsutil.Reader{ch}) // stdin blocks close
 		ch.Call("close")
 		tty.Close()
-		p.Kill()
+		p.Terminate()
 		return nil, nil
 	})
 }

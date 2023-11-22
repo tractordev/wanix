@@ -20,7 +20,7 @@ type Cmd struct {
 	Env  []string
 	Dir  string
 
-	Stdin  io.Reader
+	stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
 
@@ -37,6 +37,12 @@ func Command(name string, arg ...string) *Cmd {
 	}
 }
 
+func (c *Cmd) StdinPipe() io.WriteCloser {
+	pr, pw := io.Pipe()
+	c.stdin = pr
+	return pw
+}
+
 func (c *Cmd) Start() error {
 	menv := map[string]any{}
 	for _, kvp := range c.Env {
@@ -50,13 +56,13 @@ func (c *Cmd) Start() error {
 
 	c.PID = resp.Get("value").Int()
 
-	if c.Stdin != nil {
+	if c.stdin != nil {
 		resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.stdin", []any{c.PID}))
 		if err != nil {
 			// TODO: cancel/kill process
 			return err
 		}
-		go io.Copy(&jsutil.Writer{resp.Get("channel")}, c.Stdin)
+		go io.Copy(&jsutil.Writer{resp.Get("channel")}, c.stdin)
 	}
 	if c.Stdout != nil {
 		resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.stdout", []any{c.PID}))

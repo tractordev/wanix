@@ -47,7 +47,7 @@ func (s *Service) Initialize() {
 	}
 	s.fsys = mountablefs.New(ifs)
 
-	// setup dirs
+	// ensure basic system tree exists
 	fs.MkdirAll(s.fsys, "app", 0755)
 	fs.MkdirAll(s.fsys, "cmd", 0755)
 	fs.MkdirAll(s.fsys, "sys", 0755)

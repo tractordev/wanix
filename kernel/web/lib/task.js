@@ -49,10 +49,22 @@ export class Task {
     await taskReady;
 
     this.finished = this.call("exec", [path, args, opts]);
+    this.finished.then(() => {
+      this.terminate();
+    });
   } 
 
   call(selector, args) {
     return this.pipe.call(selector, args);
+  }
+
+  async terminate() {
+    if (!this.worker) {
+      throw "no worker";
+    }
+
+    await this.pipe.close();
+    this.worker.terminate();
   }
 
   async wait() {
