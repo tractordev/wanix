@@ -42,7 +42,19 @@ func New() (*FS, error) {
 }
 
 func (ifs *FS) Chmod(name string, mode fs.FileMode) error {
-	return fs.ErrPermission // TODO: maybe just a no-op?
+	if !fs.ValidPath(name) {
+		return &fs.PathError{Op: "chmod", Path: name, Err: fs.ErrInvalid}
+	}
+
+	updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
+		file := args[0]
+		file.Set("perms", uint32(mode.Perm()))
+		return file
+	})
+	defer updateFunc.Release()
+
+	_, err := jsutil.AwaitErr(callHelper("updateFile", ifs.db, name, updateFunc))
+	return err
 }
 func (ifs *FS) Chown(name string, uid, gid int) error {
 	return fs.ErrPermission // TODO: maybe just a no-op?
