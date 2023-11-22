@@ -94,9 +94,9 @@ func (p *Process) Stdin() io.WriteCloser {
 	return &jsutil.Writer{ch}
 }
 
-func (p *Process) Kill() error {
-	// todo
-	return nil
+func (p *Process) Terminate() error {
+	_, err := jsutil.AwaitErr(p.Task.Call("terminate"))
+	return err
 }
 
 func (p *Process) Wait() (int, error) {
