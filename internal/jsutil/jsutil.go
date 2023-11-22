@@ -209,7 +209,10 @@ type Writer struct {
 func (w *Writer) Write(p []byte) (n int, err error) {
 	buf := js.Global().Get("Uint8Array").New(len(p))
 	js.CopyBytesToJS(buf, p)
-	nn := Await(w.Value.Call("write", buf))
+	nn, e := AwaitErr(w.Value.Call("write", buf))
+	if e != nil {
+		return 0, e
+	}
 	n = nn.Int()
 	return
 }
@@ -225,8 +228,14 @@ type Reader struct {
 
 func (r *Reader) Read(p []byte) (n int, err error) {
 	buf := js.Global().Get("Uint8Array").New(len(p))
-	nn := Await(r.Value.Call("read", buf))
+	nn, e := AwaitErr(r.Value.Call("read", buf))
+	if e != nil {
+		return 0, e
+	}
 	js.CopyBytesToGo(p, buf)
+	if nn.IsNull() {
+		return 0, io.EOF
+	}
 	return nn.Int(), nil
 }
 
