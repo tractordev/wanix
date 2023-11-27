@@ -14,10 +14,20 @@ import (
 	"tractor.dev/wanix/kernel/proc/exec"
 )
 
+// returns an empty wasmPath on error or non-zero exit code
 func buildCmdSource(path string) (wasmPath string, err error) {
-	cmd := exec.Command("build", "-output", "/sys/bin/", path)
-	_, err = cmd.Run()
-	return filepath.Join("/sys/bin", filepath.Base(path)+".wasm"), err
+	wasmPath = filepath.Join("/sys/bin", filepath.Base(path)+".wasm")
+
+	cmd := exec.Command("build", "-output", wasmPath, path)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	exitCode, err := cmd.Run()
+	if exitCode != 0 {
+		return "", err
+	}
+
+	return wasmPath, nil
 }
 
 var WASM_MAGIC = []byte{0, 'a', 's', 'm'}
