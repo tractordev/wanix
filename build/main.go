@@ -171,13 +171,16 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		fmt.Println(err)
 		return 1
 	}
+	// TEMPORARY: only commented out to make testing easier.
 	// Ensure we clean up all build artifacts from here on
-	defer func() {
-		if err := os.RemoveAll("/tmp/build"); err != nil {
-			fmt.Println("unable to clean build artifacts:", err)
-		}
-	}()
+	// defer func() {
+	// 	if err := os.RemoveAll("/tmp/build"); err != nil {
+	// 		fmt.Println("unable to clean build artifacts:", err)
+	// 	}
+	// }()
 
+	// TODO: unpack in a different tmp folder, so successive builds don't
+	// require unpacking everything each time.
 	fmt.Println("Unpacking pkg.zip...")
 	if err := openZipPkg("/tmp/build", target); err != nil {
 		fmt.Println("unable to open pkg.zip:", err)
@@ -220,6 +223,8 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		"-pack",
 		"-o", objPath,
 		"-importcfg", importcfgPath,
+		// "-I", "/tmp/build/pkg/targets/js_wasm/", // TODO: I think this can replace our generated importcfg
+		"-v",
 		srcInfo.filePath(),
 	}
 	if hasEmbeds {
@@ -237,6 +242,7 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 
 	linkcfg := fmt.Sprintf("/tmp/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
 
+	// TODO: make sure it outputs a ".wasm" file in the output dir
 	var output string
 	if *flags.Output != "" {
 		output = *flags.Output
@@ -246,13 +252,14 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		output = filepath.Base(srcInfo.dirPath)
 	}
 
-	fmt.Println("Linking", objPath)
+	fmt.Println("Linking", objPath, output)
 	// run link.wasm using importcfg_$GOOS_$GOARCH.link
 	if exitcode, err := run(
 		"/tmp/build/pkg/link.wasm",
 		"-importcfg", linkcfg,
-		"-buildmode=exe", objPath,
+		"-buildmode=exe",
 		"-o", output,
+		objPath,
 	); exitcode != 0 {
 		if err != nil {
 			fmt.Println(err)
