@@ -50,6 +50,7 @@ func (m *Shell) Initialize() {
 	m.cmd.AddCommand(writeCmd())
 	m.cmd.AddCommand(printEnvCmd())
 	m.cmd.AddCommand(exportCmd())
+	m.cmd.AddCommand(treeCmd())
 	m.cmd.Run = m.ExecuteCommand
 
 	m.defaultStdin = NewBlockingBuffer()
