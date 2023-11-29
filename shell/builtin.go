@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall/js"
+	"time"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
@@ -488,8 +489,7 @@ func (t *treeNode) addChild(child *treeNode) {
 }
 
 func (t *treeNode) populate(dirpath string) error {
-	// TODO: allow configuration for avoiding these dirs
-	if filepath.Base(dirpath) == ".git" || strings.HasPrefix(dirpath, "/sys/dev") {
+	if t.parent != nil && (filepath.Base(dirpath) == ".git" || dirpath == "/sys/dev") {
 		return nil
 	}
 
@@ -503,6 +503,7 @@ func (t *treeNode) populate(dirpath string) error {
 		t.addChild(child)
 
 		if entry.IsDir() {
+			// TODO: possible stack overflow
 			err := child.populate(filepath.Join(dirpath, entry.Name()))
 			if err != nil {
 				return err
@@ -544,21 +545,39 @@ func (t *treeNode) render(w io.Writer) {
 	}
 
 	for c := t.child; c != nil; c = c.sibling {
+		// TODO: possible stack overflow
 		c.render(w)
 	}
 }
 
 func treeCmd() *cli.Command {
 	return &cli.Command{
-		Usage: "tree",
-		Args:  cli.MaxArgs(0),
-		Short: "Prints a file tree rooted at the working directory.",
+		Usage: "tree [directory]",
+		Args:  cli.MaxArgs(1),
+		Short: "Prints a file tree rooted at the given directory, or the working directory if none is specified.",
 		Run: func(ctx *cli.Context, args []string) {
 			var dir string
-			dir, _ = os.Getwd() // TODO: input
+			if len(args) > 0 {
+				dir = absPath(args[0])
+			} else {
+				var err error
+				dir, err = os.Getwd()
+				if checkErr(ctx, err) {
+					return
+				}
+			}
+
+			finishedTreeGen := false
+			go func() {
+				time.Sleep(time.Second)
+				if !finishedTreeGen {
+					ctx.Errout().Write([]byte("Generating file tree. This may take a moment...\n"))
+				}
+			}()
 
 			root := &treeNode{name: filepath.Base(dir)}
 			treeErr := root.populate(dir)
+			finishedTreeGen = true
 
 			// render what we have then show the error, if any.
 			root.render(ctx)
