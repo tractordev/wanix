@@ -15,6 +15,9 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/kernel/proc/exec"
+
+	"tractor.dev/wanix/shell/internal/cmds"
+	. "tractor.dev/wanix/shell/internal/sharedutil"
 )
 
 func main() {
@@ -31,26 +34,26 @@ type Shell struct {
 
 func (m *Shell) Initialize() {
 	m.cmd = &cli.Command{}
-	m.cmd.AddCommand(exitCmd())
-	m.cmd.AddCommand(echoCmd())
-	m.cmd.AddCommand(openCmd())
-	m.cmd.AddCommand(mtimeCmd())
-	m.cmd.AddCommand(lsCmd())
-	m.cmd.AddCommand(cdCmd())
-	m.cmd.AddCommand(catCmd())
-	m.cmd.AddCommand(reloadCmd())
-	m.cmd.AddCommand(downloadCmd())
-	m.cmd.AddCommand(touchCmd())
-	m.cmd.AddCommand(removeCmd())
-	m.cmd.AddCommand(mkdirCmd())
-	m.cmd.AddCommand(moveCmd())
-	m.cmd.AddCommand(copyCmd())
-	m.cmd.AddCommand(copyCmd2()) // temporary
-	m.cmd.AddCommand(pwdCmd())
-	m.cmd.AddCommand(writeCmd())
-	m.cmd.AddCommand(printEnvCmd())
-	m.cmd.AddCommand(exportCmd())
-	m.cmd.AddCommand(treeCmd())
+	m.cmd.AddCommand(cmds.ExitCmd())
+	m.cmd.AddCommand(cmds.EchoCmd())
+	m.cmd.AddCommand(cmds.OpenCmd())
+	m.cmd.AddCommand(cmds.MtimeCmd())
+	m.cmd.AddCommand(cmds.LsCmd())
+	m.cmd.AddCommand(cmds.CdCmd())
+	m.cmd.AddCommand(cmds.CatCmd())
+	m.cmd.AddCommand(cmds.ReloadCmd())
+	m.cmd.AddCommand(cmds.DownloadCmd())
+	m.cmd.AddCommand(cmds.TouchCmd())
+	m.cmd.AddCommand(cmds.RemoveCmd())
+	m.cmd.AddCommand(cmds.MkdirCmd())
+	m.cmd.AddCommand(cmds.MoveCmd())
+	m.cmd.AddCommand(cmds.CopyCmd())
+	m.cmd.AddCommand(cmds.CopyCmd2()) // temporary
+	m.cmd.AddCommand(cmds.PwdCmd())
+	m.cmd.AddCommand(cmds.WriteCmd())
+	m.cmd.AddCommand(cmds.PrintEnvCmd())
+	m.cmd.AddCommand(cmds.ExportCmd())
+	m.cmd.AddCommand(cmds.TreeCmd())
 	m.cmd.Run = m.ExecuteCommand
 
 	m.defaultStdin = NewBlockingBuffer()
@@ -195,20 +198,20 @@ func findCommand(name string, args []string) (*exec.Cmd, error) {
 		for _, path := range []string{"/cmd", "/sys/cmd", "/sys/bin"} {
 
 			searchPath := filepath.Join(path, fmt.Sprintf("%s.wasm", cmdName))
-			if ok, _ := fs.Exists(fsys, unixToFsPath(searchPath)); ok && isWasmFile(searchPath) {
+			if ok, _ := fs.Exists(fsys, UnixToFsPath(searchPath)); ok && isWasmFile(searchPath) {
 				wasmPath = searchPath
 				break
 			}
 
 			searchPath = filepath.Join(path, fmt.Sprintf("%s.sh", cmdName))
-			if ok, _ := fs.Exists(fsys, unixToFsPath(searchPath)); ok {
+			if ok, _ := fs.Exists(fsys, UnixToFsPath(searchPath)); ok {
 				scriptPath = searchPath
 				break
 			}
 
 			searchPath = filepath.Join(path, cmdName)
-			if ok, _ := fs.DirExists(fsys, unixToFsPath(searchPath)); ok {
-				if matches, _ := fs.Glob(fsys, fmt.Sprintf("%s/*.go", unixToFsPath(searchPath))); len(matches) > 0 {
+			if ok, _ := fs.DirExists(fsys, UnixToFsPath(searchPath)); ok {
+				if matches, _ := fs.Glob(fsys, fmt.Sprintf("%s/*.go", UnixToFsPath(searchPath))); len(matches) > 0 {
 					buildPath = searchPath
 					break
 				}
@@ -216,20 +219,20 @@ func findCommand(name string, args []string) (*exec.Cmd, error) {
 		}
 	} else {
 		// absolute command: path and extension
-		path := absPath(name)
+		path := AbsPath(name)
 		ext := filepath.Ext(path)
 		switch ext {
 		case ".wasm":
-			if ok, _ := fs.Exists(fsys, unixToFsPath(path)); ok && isWasmFile(path) {
+			if ok, _ := fs.Exists(fsys, UnixToFsPath(path)); ok && isWasmFile(path) {
 				wasmPath = path
 			}
 		case ".sh":
-			if ok, _ := fs.Exists(fsys, unixToFsPath(path)); ok {
+			if ok, _ := fs.Exists(fsys, UnixToFsPath(path)); ok {
 				scriptPath = path
 			}
 		default:
-			if ok, _ := fs.DirExists(fsys, unixToFsPath(path)); ok {
-				if matches, _ := fs.Glob(fsys, fmt.Sprintf("%s/*.go", unixToFsPath(path))); len(matches) > 0 {
+			if ok, _ := fs.DirExists(fsys, UnixToFsPath(path)); ok {
+				if matches, _ := fs.Glob(fsys, fmt.Sprintf("%s/*.go", UnixToFsPath(path))); len(matches) > 0 {
 					buildPath = path
 				}
 			}

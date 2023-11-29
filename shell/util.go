@@ -74,36 +74,6 @@ func packEnv(m map[string]string) []string {
 	return r
 }
 
-// Unix absolute path. Returns cwd if path is empty
-func absPath(path string) string {
-	if filepath.IsAbs(path) {
-		return filepath.Clean(path)
-	}
-	wd, _ := os.Getwd()
-	return filepath.Join(wd, path)
-}
-
-// Convert a Unix path to an io/fs path (See `io/fs.ValidPath()`)
-// Use `absPath()` instead if passing result to OS functions
-func unixToFsPath(path string) string {
-	if !filepath.IsAbs(path) {
-		// Join calls Clean internally
-		wd, _ := os.Getwd()
-		path = filepath.Join(strings.TrimLeft(wd, "/"), path)
-	} else {
-		path = filepath.Clean(strings.TrimLeft(path, "/"))
-	}
-	return path
-}
-
-func checkErr(w io.Writer, err error) (hadError bool) {
-	if err != nil {
-		io.WriteString(w, fmt.Sprintln(err))
-		return true
-	}
-	return false
-}
-
 // TEMP: just for fsdata debug command
 func GetUnexportedField(field reflect.Value) interface{} {
 	return reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface()
