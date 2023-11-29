@@ -217,7 +217,7 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 	objPath := fmt.Sprintf("/tmp/build/%s.a", strings.TrimSuffix(srcInfo.filename, ".go"))
 
 	compileArgs := []string{
-		"-p", "main",
+		"-p=main",
 		"-complete",
 		"-dwarf=false",
 		"-pack",
@@ -256,7 +256,7 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 	// run link.wasm using importcfg_$GOOS_$GOARCH.link
 	if exitcode, err := run(
 		"/tmp/build/pkg/link.wasm",
-		"-importcfg", linkcfg,
+		"-importcfg", linkcfg, // TODO: maybe we can use importcfgPath instead?
 		"-buildmode=exe",
 		"-o", output,
 		objPath,
@@ -345,7 +345,7 @@ func findEmbedDirectives(src []byte) (patterns []string, ok bool) {
 	return patterns, true
 }
 
-func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err error) {
+func generateEmbedConfig(patterns []string, srcDir string) (cfgPath string, err error) {
 	jsonObj := struct {
 		Patterns map[string][]string
 		Files    map[string]string
@@ -353,7 +353,7 @@ func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err
 		make(map[string][]string, len(patterns)), make(map[string]string),
 	}
 
-	dfs := os.DirFS(src_dir)
+	dfs := os.DirFS(srcDir)
 	for _, p := range patterns {
 		matches, err := fs.Glob(dfs, patterns[0])
 		if err != nil {
@@ -367,14 +367,14 @@ func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err
 			stat, _ := f.Stat()
 
 			if stat.IsDir() {
-				err := fs.WalkDir(dfs, m, func(path string, d fs.DirEntry, walk_err error) error {
-					if walk_err != nil {
-						return walk_err
+				err := fs.WalkDir(dfs, m, func(path string, d fs.DirEntry, walkErr error) error {
+					if walkErr != nil {
+						return walkErr
 					}
 
 					if !d.IsDir() {
 						jsonObj.Patterns[p] = append(jsonObj.Patterns[p], path)
-						jsonObj.Files[path], _ = filepath.Abs(filepath.Join(src_dir, path))
+						jsonObj.Files[path], _ = filepath.Abs(filepath.Join(srcDir, path))
 					}
 
 					return nil
@@ -384,7 +384,7 @@ func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err
 				}
 			} else {
 				jsonObj.Patterns[p] = append(jsonObj.Patterns[p], m)
-				jsonObj.Files[m], _ = filepath.Abs(filepath.Join(src_dir, m))
+				jsonObj.Files[m], _ = filepath.Abs(filepath.Join(srcDir, m))
 			}
 
 			f.Close()
