@@ -1,4 +1,4 @@
-package cmds
+package main
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
 )
 
-func OpenCmd() *cli.Command {
+func openCmd() *cli.Command {
 	var openWatch *watchfs.Watch
 	cmd := &cli.Command{
 		Usage: "open <appname>",

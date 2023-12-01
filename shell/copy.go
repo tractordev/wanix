@@ -1,4 +1,4 @@
-package cmds
+package main
 
 import (
 	"fmt"
@@ -10,11 +10,10 @@ import (
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/internal/fsutil"
 	"tractor.dev/wanix/internal/osfs"
-	. "tractor.dev/wanix/shell/internal/sharedutil"
 )
 
 // TODO: merge with copyCmd
-func CopyCmd2() *cli.Command {
+func copyCmd2() *cli.Command {
 	cmd := &cli.Command{
 		Usage: "cp2 SOURCE DEST",
 		Args:  cli.MinArgs(2),
@@ -22,8 +21,8 @@ func CopyCmd2() *cli.Command {
 		Run: func(ctx *cli.Context, args []string) {
 			srcpath := args[0]
 			dstpath := args[1]
-			err := fsutil.CopyAll(osfs.New(), AbsPath(srcpath), AbsPath(dstpath))
-			if CheckErr(ctx, err) {
+			err := fsutil.CopyAll(osfs.New(), absPath(srcpath), absPath(dstpath))
+			if checkErr(ctx, err) {
 				return
 			}
 		},
@@ -31,7 +30,7 @@ func CopyCmd2() *cli.Command {
 	return cmd
 }
 
-func CopyCmd() *cli.Command {
+func copyCmd() *cli.Command {
 	var recursive bool
 
 	cmd := &cli.Command{
@@ -40,20 +39,20 @@ func CopyCmd() *cli.Command {
 		Short: "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.",
 		Run: func(ctx *cli.Context, args []string) {
 			// TODO: handle copying directories
-			isdir, err := fs.DirExists(os.DirFS("/"), UnixToFsPath(args[len(args)-1]))
-			if CheckErr(ctx, err) {
+			isdir, err := fs.DirExists(os.DirFS("/"), unixToFsPath(args[len(args)-1]))
+			if checkErr(ctx, err) {
 				return
 			}
 			if isdir {
 				// copy all paths to this directory
-				dir := AbsPath(args[len(args)-1])
+				dir := absPath(args[len(args)-1])
 
 				for _, path := range args[:len(args)-1] {
 					srcName := filepath.Base(path)
 					dest := filepath.Join(dir, srcName)
 
-					srcIsDir, err := fs.IsDir(os.DirFS("/"), UnixToFsPath(path))
-					if CheckErr(ctx, err) {
+					srcIsDir, err := fs.IsDir(os.DirFS("/"), unixToFsPath(path))
+					if checkErr(ctx, err) {
 						continue
 					}
 
@@ -63,39 +62,39 @@ func CopyCmd() *cli.Command {
 							continue
 						}
 
-						err = os.MkdirAll(AbsPath(dest), 0755)
-						if CheckErr(ctx, err) {
+						err = os.MkdirAll(absPath(dest), 0755)
+						if checkErr(ctx, err) {
 							continue
 						}
 
-						entries, err := os.ReadDir(AbsPath(path))
-						if CheckErr(ctx, err) {
+						entries, err := os.ReadDir(absPath(path))
+						if checkErr(ctx, err) {
 							continue
 						}
 
 						for _, e := range entries {
-							cli.Execute(ctx, CopyCmd(), []string{"-r", filepath.Join(path, e.Name()), dest})
+							cli.Execute(ctx, copyCmd(), []string{"-r", filepath.Join(path, e.Name()), dest})
 							// commands["cp"](t, fs, []string{"-r", filepath.Join(path, e.Name()), dest})
 						}
 					} else {
-						content, err := os.ReadFile(AbsPath(path))
-						if CheckErr(ctx, err) {
+						content, err := os.ReadFile(absPath(path))
+						if checkErr(ctx, err) {
 							continue
 						}
-						err = os.WriteFile(AbsPath(dest), content, 0644)
-						if CheckErr(ctx, err) {
+						err = os.WriteFile(absPath(dest), content, 0644)
+						if checkErr(ctx, err) {
 							continue
 						}
 					}
 				}
 			} else {
-				content, err := os.ReadFile(AbsPath(args[0]))
-				if CheckErr(ctx, err) {
+				content, err := os.ReadFile(absPath(args[0]))
+				if checkErr(ctx, err) {
 					return
 				}
 
-				err = os.WriteFile(AbsPath(args[1]), content, 0644)
-				if CheckErr(ctx, err) {
+				err = os.WriteFile(absPath(args[1]), content, 0644)
+				if checkErr(ctx, err) {
 					return
 				}
 			}

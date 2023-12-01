@@ -1,4 +1,4 @@
-package cmds
+package main
 
 import (
 	"fmt"
@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/cli"
-	. "tractor.dev/wanix/shell/internal/sharedutil"
 )
 
 type treeNode struct {
@@ -93,7 +92,7 @@ func (t *treeNode) render(w io.Writer) {
 	}
 }
 
-func TreeCmd() *cli.Command {
+func treeCmd() *cli.Command {
 	return &cli.Command{
 		Usage: "tree [directory]",
 		Args:  cli.MaxArgs(1),
@@ -101,11 +100,11 @@ func TreeCmd() *cli.Command {
 		Run: func(ctx *cli.Context, args []string) {
 			var dir string
 			if len(args) > 0 {
-				dir = AbsPath(args[0])
+				dir = absPath(args[0])
 			} else {
 				var err error
 				dir, err = os.Getwd()
-				if CheckErr(ctx, err) {
+				if checkErr(ctx, err) {
 					return
 				}
 			}
@@ -124,7 +123,7 @@ func TreeCmd() *cli.Command {
 
 			// render what we have then show the error, if any.
 			root.render(ctx)
-			CheckErr(ctx, treeErr)
+			checkErr(ctx, treeErr)
 		},
 	}
 }

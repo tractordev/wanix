@@ -1,4 +1,4 @@
-package cmds
+package main
 
 // todo: port from afero to engine/fs so watchfs works
 // --
