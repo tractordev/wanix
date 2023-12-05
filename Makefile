@@ -1,4 +1,4 @@
-.PHONY: boot dev kernel shell dev bundle
+.PHONY: boot dev kernel shell dev bundle micro
 
 all: kernel shell
 
@@ -13,6 +13,10 @@ kernel: kernel/main.go local/bin
 
 shell: shell/main.go local/bin
 	cd shell && GOOS=js GOARCH=wasm go build -o ../local/bin/shell .
+
+micro: external/micro/
+	cd external/micro && make build
+	mv external/micro/repo/micro.wasm local/bin/micro
 
 local/bin:
 	mkdir -p local/bin

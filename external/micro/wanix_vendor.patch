@@ -1,0 +1,132 @@
+diff --git a/vendor/github.com/mattn/go-isatty/isatty_js.go b/vendor/github.com/mattn/go-isatty/isatty_js.go
+new file mode 100644
+index 00000000..4800321c
+--- /dev/null
++++ b/vendor/github.com/mattn/go-isatty/isatty_js.go
+@@ -0,0 +1,16 @@
++//go:build js
++// +build js
++
++package isatty
++
++// IsTerminal returns true if the file descriptor is terminal which
++// is always false on js and appengine classic which is a sandboxed PaaS.
++func IsTerminal(fd uintptr) bool {
++	return true
++}
++
++// IsCygwinTerminal() return true if the file descriptor is a cygwin or msys2
++// terminal. This is also always false on this environment.
++func IsCygwinTerminal(fd uintptr) bool {
++	return false
++}
+diff --git a/vendor/github.com/mattn/go-isatty/isatty_others.go b/vendor/github.com/mattn/go-isatty/isatty_others.go
+index ff714a37..de398b3a 100644
+--- a/vendor/github.com/mattn/go-isatty/isatty_others.go
++++ b/vendor/github.com/mattn/go-isatty/isatty_others.go
+@@ -1,4 +1,5 @@
+-// +build appengine js nacl
++//go:build appengine || nacl
++// +build appengine nacl
+ 
+ package isatty
+ 
+diff --git a/vendor/github.com/zyedidia/tcell/v2/tscreen_js.go b/vendor/github.com/zyedidia/tcell/v2/tscreen_js.go
+new file mode 100644
+index 00000000..d56e4524
+--- /dev/null
++++ b/vendor/github.com/zyedidia/tcell/v2/tscreen_js.go
+@@ -0,0 +1,31 @@
++//go:build js
++
++package tcell
++
++import (
++	"fmt"
++	"os"
++)
++
++// This stub file is for systems that have no termios.
++
++type termiosPrivate struct{}
++
++func (t *tScreen) termioInit() error {
++	t.in = os.Stdin
++	t.out = os.Stdout
++	t.resize()
++	return nil
++}
++
++func (t *tScreen) termioFini() {
++}
++
++func (t *tScreen) getWinSize() (int, int, error) {
++	return 129, 24, nil
++}
++
++func (t *tScreen) Beep() error {
++	fmt.Fprintln(os.Stderr, "Beep!")
++	return nil
++}
+diff --git a/vendor/github.com/zyedidia/terminal/ioctl_other.go b/vendor/github.com/zyedidia/terminal/ioctl_other.go
+index c08989bf..9ac64ca9 100644
+--- a/vendor/github.com/zyedidia/terminal/ioctl_other.go
++++ b/vendor/github.com/zyedidia/terminal/ioctl_other.go
+@@ -1,4 +1,5 @@
+-// +build plan9 nacl windows
++//go:build plan9 || nacl || windows || js
++// +build plan9 nacl windows js
+ 
+ package terminal
+ 
+diff --git a/vendor/github.com/zyedidia/terminal/vt_other.go b/vendor/github.com/zyedidia/terminal/vt_other.go
+index d16c91e1..b97e26af 100644
+--- a/vendor/github.com/zyedidia/terminal/vt_other.go
++++ b/vendor/github.com/zyedidia/terminal/vt_other.go
+@@ -1,5 +1,5 @@
+-//go:build plan9 || nacl || windows
+-// +build plan9 nacl windows
++//go:build plan9 || nacl || windows || js
++// +build plan9 nacl windows js
+ 
+ package terminal
+ 
+diff --git a/Makefile b/Makefile
+index fc9601aa..34c7ce1e 100644
+--- a/Makefile
++++ b/Makefile
+@@ -15,6 +15,9 @@ VSCODE_TESTS_BASE_URL = 'https://raw.githubusercontent.com/microsoft/vscode/e6a4
+ 
+ build: generate build-quick
+ 
++wasm: generate
++	GOOS=js GOARCH=wasm go build -o ./micro.wasm -trimpath -ldflags "-s -w $(GOVARS)" ./cmd/micro
++
+ build-quick:
+ 	go build -trimpath -ldflags "-s -w $(GOVARS) $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
+ 
+diff --git a/cmd/micro/micro.go b/cmd/micro/micro.go
+index 3e6756bc..413e449c 100644
+--- a/cmd/micro/micro.go
++++ b/cmd/micro/micro.go
+@@ -361,8 +361,7 @@ func main() {
+ 
+ 	sigterm = make(chan os.Signal, 1)
+ 	sighup = make(chan os.Signal, 1)
+-	signal.Notify(sigterm, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGABRT)
+-	signal.Notify(sighup, syscall.SIGHUP)
++	signal.Notify(sigterm, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+ 
+ 	// Here is the event loop which runs in a separate thread
+ 	go func() {
+diff --git a/internal/action/actions_other.go b/internal/action/actions_other.go
+index 6d62581b..71fccc6e 100644
+--- a/internal/action/actions_other.go
++++ b/internal/action/actions_other.go
+@@ -1,4 +1,5 @@
+-// +build plan9 nacl windows
++//go:build plan9 || nacl || windows || js
++// +build plan9 nacl windows js
+ 
+ package action
+ 
