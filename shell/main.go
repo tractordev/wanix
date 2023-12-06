@@ -60,6 +60,10 @@ func (m *Shell) Initialize() {
 }
 
 func (m *Shell) Run(ctx context.Context) (err error) {
+	os.Setenv("TERM", "xterm")
+	os.Setenv("LINES", "35")
+	os.Setenv("COLUMNS", "80")
+
 	var readLine func() (string, error)
 
 	if len(os.Args) > 1 {
@@ -135,11 +139,7 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 }
 
 func (m *Shell) ExecuteCommand(ctx *cli.Context, args []string) {
-	env := make(map[string]string)
-	for _, kvp := range os.Environ() {
-		parts := strings.SplitN(kvp, "=", 2)
-		env[parts[0]] = parts[1]
-	}
+	env := os.Environ()
 
 	var err error
 	args, err = parseEnvArgs(args, env)
@@ -158,7 +158,7 @@ func (m *Shell) ExecuteCommand(ctx *cli.Context, args []string) {
 		return
 	}
 
-	cmd.Env = packEnv(env)
+	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	wc := cmd.StdinPipe()
