@@ -76,6 +76,20 @@
       //     return;
       // }
 
+      // Override ctrl+c behaviour to copy selected text.
+      // Just a passthrough for OS/browser copy
+      if(e.ctrlKey && e.code === "KeyC" && e.type === "keydown") {
+        if (terminal.hasSelection()) {
+          return false;
+        }
+      }
+
+      // Override ctrl+v behaviour to paste text, I don't think anybody really uses the Unix behavior anyway.
+      // Just a passthrough for OS/browser paste.
+      if(e.ctrlKey && e.code === "KeyV" && e.type === "keydown") {
+        return false;
+      }
+
       if (e.type === "keydown") {
         // not sure why we need a custom handler for
         // backspace, but here we are. without this,
