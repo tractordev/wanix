@@ -76,9 +76,12 @@
       //     return;
       // }
 
+      // On Mac we want to use Cmd+C/V instead of Ctrl+C/V
+      const modifierKey = (navigator.userAgent.toLowerCase().indexOf("mac") !== -1) ? e.metaKey : e.ctrlKey;
+      
       // Override ctrl+c behaviour to copy selected text.
       // Just a passthrough for OS/browser copy
-      if(e.ctrlKey && e.code === "KeyC" && e.type === "keydown") {
+      if(modifierKey && e.code === "KeyC" && e.type === "keydown") {
         if (terminal.hasSelection()) {
           return false;
         }
@@ -86,7 +89,7 @@
 
       // Override ctrl+v behaviour to paste text, I don't think anybody really uses the Unix behavior anyway.
       // Just a passthrough for OS/browser paste.
-      if(e.ctrlKey && e.code === "KeyV" && e.type === "keydown") {
+      if(modifierKey && e.code === "KeyV" && e.type === "keydown") {
         return false;
       }
 
