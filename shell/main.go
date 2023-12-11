@@ -32,6 +32,13 @@ type Shell struct {
 }
 
 func (m *Shell) Initialize() {
+	m.defaultStdin = NewBlockingBuffer()
+	m.stdinRouter = &SwitchableWriter{writer: m.defaultStdin}
+
+	go io.Copy(m.stdinRouter, os.Stdin)
+}
+
+func (m *Shell) buildCmds() {
 	m.cmd = &cli.Command{}
 	m.cmd.AddCommand(exitCmd())
 	m.cmd.AddCommand(echoCmd())
@@ -47,18 +54,12 @@ func (m *Shell) Initialize() {
 	m.cmd.AddCommand(mkdirCmd())
 	m.cmd.AddCommand(moveCmd())
 	m.cmd.AddCommand(copyCmd())
-	m.cmd.AddCommand(copyCmd2()) // temporary
 	m.cmd.AddCommand(pwdCmd())
 	m.cmd.AddCommand(writeCmd())
 	m.cmd.AddCommand(printEnvCmd())
 	m.cmd.AddCommand(exportCmd())
 	m.cmd.AddCommand(treeCmd())
 	m.cmd.Run = m.ExecuteCommand
-
-	m.defaultStdin = NewBlockingBuffer()
-	m.stdinRouter = &SwitchableWriter{writer: m.defaultStdin}
-
-	go io.Copy(m.stdinRouter, os.Stdin)
 }
 
 func (m *Shell) Run(ctx context.Context) (err error) {
@@ -115,6 +116,10 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 	// }
 
 	for {
+		// We rebuild the commands because flags that reference captured variables
+		// don't get reset with their default values when a command is run again.
+		// This is a dumb design limitiation.
+		m.buildCmds()
 		m.lineNum++
 
 		line, err := readLine()
