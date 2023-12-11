@@ -12,6 +12,8 @@ import (
 	"tractor.dev/wanix/kernel/web"
 )
 
+var Version string
+
 func main() {
 	engine.Run(Kernel{},
 		proc.Service{},
@@ -35,6 +37,8 @@ func (m *Kernel) Run(ctx context.Context) error {
 	blob := js.Global().Get("initfs").Get("syscall.js")
 	url := js.Global().Get("URL").Call("createObjectURL", blob)
 	jsutil.Await(js.Global().Call("import", url))
+
+	js.Global().Set("wanixVersion", Version)
 
 	// initialize components
 	for _, c := range m.Components {
