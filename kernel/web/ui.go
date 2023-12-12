@@ -1,12 +1,12 @@
 package web
 
 import (
-	"syscall/js"
+	"tractor.dev/wanix/internal/jsutil"
 )
 
 type UI struct{}
 
 func (s *UI) InitializeJS() {
-	js.Global().Get("sys").Call("call", "host.loadStylesheet", []any{"/sys/dev/kernel/web/ui/style.css"})
-	js.Global().Get("sys").Call("call", "host.loadApp", []any{"terminal", "/sys/dev/internal/app/terminal", true})
+	jsutil.WanixSyscall("host.loadStylesheet", "/sys/dev/kernel/web/ui/style.css")
+	jsutil.WanixSyscall("host.loadApp", "terminal", "/sys/dev/internal/app/terminal", true)
 }

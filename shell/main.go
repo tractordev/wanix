@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall/js"
 
 	"github.com/anmitsu/go-shlex"
 	"golang.org/x/term"
@@ -82,7 +81,7 @@ func (m *Shell) Run(ctx context.Context) (err error) {
 		}
 
 	} else {
-		wanixVersion := jsutil.Await(js.Global().Get("sys").Call("call", "kernel.version")).Get("value").String()
+		wanixVersion, _ := jsutil.WanixSyscall("kernel.version")
 		fmt.Printf(`
     ____    _____  _____     ___    __      __   ____   _
 |  |    |  |    /  \    |    \  |  | (_    _) \  \  /  / 
@@ -91,7 +90,7 @@ func (m *Shell) Run(ctx context.Context) (err error) {
  \  \/\/  /  |   __   | |  |  \    |  _|  |_   /  /\  \  
 __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
                         -- v%s --
-`, wanixVersion)
+`, wanixVersion.String())
 
 		terminal := term.NewTerminal(struct {
 			io.Reader
