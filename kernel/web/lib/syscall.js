@@ -1,10 +1,5 @@
 
 globalThis.api = {
-  kernel: {
-    version() {
-      return globalThis.wanixVersion;
-    },
-  },
   host: {
     respondRPC: async (resp, call) => {
       // forward upstream to host page
