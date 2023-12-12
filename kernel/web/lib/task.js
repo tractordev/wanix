@@ -40,6 +40,7 @@ export class Task {
 
     // if in kernel worker
     if (globalThis.api) {
+      this.pipe.handle("kernel", duplex.handlerFrom(globalThis.api.kernel));
       this.pipe.handle("fs", duplex.handlerFrom(globalThis.api.fs));
       this.pipe.handle("proc", duplex.handlerFrom(globalThis.api.proc));
       this.pipe.handle("tty", duplex.handlerFrom(globalThis.api.tty));  

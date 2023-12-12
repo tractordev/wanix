@@ -14,6 +14,7 @@ import (
 	"tractor.dev/toolkit-go/engine"
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/wanix/internal/jsutil"
 	"tractor.dev/wanix/kernel/proc/exec"
 )
 
@@ -80,15 +81,17 @@ func (m *Shell) Run(ctx context.Context) (err error) {
 		}
 
 	} else {
-		fmt.Println(`
+		wanixVersion, _ := jsutil.WanixSyscall("kernel.version")
+		fmt.Printf(`
     ____    _____  _____     ___    __      __   ____   _
 |  |    |  |    /  \    |    \  |  | (_    _) \  \  /  / 
 |  |    |  |   /    \   |  |\ \ |  |   |  |    \  \/  /  
 |  |    |  |  /  ()  \  |  | \ \|  |   |  |     >    <   
  \  \/\/  /  |   __   | |  |  \    |  _|  |_   /  /\  \  
 __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
-																																		
-`)
+                        -- v%s --
+`, wanixVersion.String())
+
 		terminal := term.NewTerminal(struct {
 			io.Reader
 			io.Writer
