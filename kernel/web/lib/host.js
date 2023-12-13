@@ -38,6 +38,21 @@ globalThis.sys.pipe.handle("host.loadApp", duplex.handlerFrom((target, path, foc
   frame.setAttribute("src", path);
 }));
 
+globalThis.sys.pipe.handle("host.download", duplex.handlerFrom((filename, data) => {
+  const blob = new Blob([data], {type: "application/octet-stream"});
+  const url = URL.createObjectURL(blob);
+  
+  const elem = document.createElement("a");
+  elem.setAttribute("download", filename);
+  elem.href = url;
+  elem.setAttribute("target", "_blank");
+  elem.click();
+
+  elem.remove();
+  URL.revokeObjectURL(url);
+}));
+
+
 const visorKeydown = (e) => {
   const el = document.querySelector("#terminal");
   if (e.code === "Backquote" && e.ctrlKey && el.classList.contains("visor")) {   
