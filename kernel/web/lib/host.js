@@ -39,7 +39,6 @@ globalThis.sys.pipe.handle("host.loadApp", duplex.handlerFrom((target, path, foc
 }));
 
 globalThis.sys.pipe.handle("host.download", duplex.handlerFrom((filename, data) => {
-  console.log(data.byteLength);
   const blob = new Blob([data], {type: "application/octet-stream"});
   const url = URL.createObjectURL(blob);
   
