@@ -9,13 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall/js"
-
-	// "syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
-	"tractor.dev/wanix/internal/jsutil"
 )
 
 func exitCmd() *cli.Command {
@@ -135,43 +131,6 @@ func reloadCmd() *cli.Command {
 		Run: func(ctx *cli.Context, args []string) {
 			fmt.Println("TODO: Unimplemented")
 			// js.Global().Get("wanix").Get("reload").Invoke()
-		},
-	}
-}
-
-func downloadCmd() *cli.Command {
-	return &cli.Command{
-		Usage: "dl <path>",
-		Args:  cli.ExactArgs(1),
-		Run: func(ctx *cli.Context, args []string) {
-			target := absPath(args[0])
-
-			fi, err := os.Stat(target)
-			if checkErr(ctx, err) {
-				return
-			}
-
-			if fi.IsDir() {
-				// TODO: tar the dir
-				// target = target + ".tar"
-			}
-
-			// TODO: there may be a more efficient way of doing this.
-			// Initially we passed a blob but duplex complained about
-			// "Iterable/blob should be serialized as iterator".
-			// (related: BlobFromFile helper to avoid unecessary operations on indexedfs)
-
-			data, err := os.ReadFile(target)
-			if checkErr(ctx, err) {
-				return
-			}
-
-			jsbuf := js.Global().Get("Uint8Array").New(len(data))
-			js.CopyBytesToJS(jsbuf, data)
-			_, err = jsutil.WanixSyscall("host.download", filepath.Base(target), jsbuf)
-			if checkErr(ctx, err) {
-				return
-			}
 		},
 	}
 }
