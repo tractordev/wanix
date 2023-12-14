@@ -61,7 +61,8 @@
     const enc = new TextEncoder();
     const dec = new TextDecoder();
 
-    const resp = await sys.call("tty.open", ["shell", []]); //{ Term: "xterm-256color", Rows: 10, Cols: 80 });
+    const resp = await sys.call("tty.open", ["shell", [], { TERM: "xterm-256color" }]);
+    const pid = resp.value;
     const ch = resp.channel;
     //parent.wanix.termCh = ch;
     
@@ -69,7 +70,7 @@
       ch.write(enc.encode(data));
     });
     terminal.onResize((size) => {
-      //wanix.call("terminal.Resize", [{ Rows: size.rows, Cols: size.cols }]);
+      sys.call("tty.resize", [pid, size.rows, size.cols]);
     })
     terminal.attachCustomKeyEventHandler((e) => {
       // if (visorKeydown(e)) {

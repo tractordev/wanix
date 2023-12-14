@@ -43,7 +43,7 @@ func (s *Service) Spawn(path string, args []string, env map[string]string, dir s
 	s.mu.Lock()
 	s.nextPID++
 	p := &Process{
-		PID:  s.nextPID,
+		ID:   s.nextPID,
 		Path: path,
 		Args: args,
 		Env:  env,
@@ -52,7 +52,7 @@ func (s *Service) Spawn(path string, args []string, env map[string]string, dir s
 	s.running[s.nextPID] = p
 	s.mu.Unlock()
 
-	p.Task = js.Global().Get("task").Get("Task").New(js.Global().Get("initfs"), p.PID)
+	p.Task = js.Global().Get("task").Get("Task").New(js.Global().Get("initfs"), p.ID)
 	_, err := jsutil.AwaitErr(p.Task.Call("exec", p.Path, jsutil.ToJSArray(p.Args), map[string]any{
 		"env": jsutil.ToJSMap(p.Env),
 		"dir": p.Dir,
@@ -65,7 +65,7 @@ func (s *Service) Spawn(path string, args []string, env map[string]string, dir s
 }
 
 type Process struct {
-	PID  int
+	ID   int
 	Task js.Value
 
 	Path string
