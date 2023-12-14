@@ -27,12 +27,16 @@ func (s *Service) Open(path string, args []string, env map[string]string) (*proc
 	if env["TERM"] == "" {
 		env["TERM"] = "xterm-256color"
 	}
-	if env["COLS"] == "" {
-		env["COLS"] = strconv.Itoa(s.defaultCols)
+	if env["COLUMNS"] == "" {
+		env["COLUMNS"] = strconv.Itoa(s.defaultCols)
 	}
-	if env["ROWS"] == "" {
-		env["ROWS"] = strconv.Itoa(s.defaultRows)
+	if env["LINES"] == "" {
+		env["LINES"] = strconv.Itoa(s.defaultRows)
 	}
+	if env["MICRO_CONFIG_HOME"] == "" {
+		env["MICRO_CONFIG_HOME"] = "/home"
+	}
+
 	p, err := s.Proc.Spawn(path, args, env, "")
 	if err != nil {
 		return nil, nil, err

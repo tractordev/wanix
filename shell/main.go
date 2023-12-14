@@ -62,10 +62,6 @@ func (m *Shell) buildCmds() {
 }
 
 func (m *Shell) Run(ctx context.Context) (err error) {
-	os.Setenv("TERM", "xterm")
-	os.Setenv("LINES", "35")
-	os.Setenv("COLUMNS", "80")
-
 	var readLine func() (string, error)
 
 	if len(os.Args) > 1 {
