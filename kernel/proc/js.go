@@ -37,7 +37,7 @@ func (s *Service) spawn(this js.Value, args []js.Value) any {
 			jsutil.Err(err)
 			return nil, err
 		}
-		return p.PID, nil
+		return p.ID, nil
 	})
 }
 

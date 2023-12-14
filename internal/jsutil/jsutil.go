@@ -8,6 +8,21 @@ import (
 	"syscall/js"
 )
 
+// Returns the syscall `response.value`.
+// To access the response itself see `WanixSyscallResp` instead.
+func WanixSyscall(fn string, args ...any) (js.Value, error) {
+	response, err := WanixSyscallResp(fn, args...)
+	if err != nil {
+		return js.Null(), err
+	}
+	return response.Get("value"), nil
+}
+
+// Useful for syscalls involving streams (i.e. stdio).
+func WanixSyscallResp(fn string, args ...any) (response js.Value, err error) {
+	return AwaitErr(js.Global().Get("sys").Call("call", fn, args))
+}
+
 func Await(promise js.Value) js.Value {
 	ch := make(chan js.Value, 1)
 	promise.Call("then", js.FuncOf(func(this js.Value, args []js.Value) any {

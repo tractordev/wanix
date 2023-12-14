@@ -14,6 +14,7 @@ import (
 	"tractor.dev/toolkit-go/engine"
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/wanix/internal/jsutil"
 	"tractor.dev/wanix/kernel/proc/exec"
 )
 
@@ -30,6 +31,13 @@ type Shell struct {
 }
 
 func (m *Shell) Initialize() {
+	m.defaultStdin = NewBlockingBuffer()
+	m.stdinRouter = &SwitchableWriter{writer: m.defaultStdin}
+
+	go io.Copy(m.stdinRouter, os.Stdin)
+}
+
+func (m *Shell) buildCmds() {
 	m.cmd = &cli.Command{}
 	m.cmd.AddCommand(exitCmd())
 	m.cmd.AddCommand(echoCmd())
@@ -45,18 +53,12 @@ func (m *Shell) Initialize() {
 	m.cmd.AddCommand(mkdirCmd())
 	m.cmd.AddCommand(moveCmd())
 	m.cmd.AddCommand(copyCmd())
-	m.cmd.AddCommand(copyCmd2()) // temporary
 	m.cmd.AddCommand(pwdCmd())
 	m.cmd.AddCommand(writeCmd())
 	m.cmd.AddCommand(printEnvCmd())
 	m.cmd.AddCommand(exportCmd())
 	m.cmd.AddCommand(treeCmd())
 	m.cmd.Run = m.ExecuteCommand
-
-	m.defaultStdin = NewBlockingBuffer()
-	m.stdinRouter = &SwitchableWriter{writer: m.defaultStdin}
-
-	go io.Copy(m.stdinRouter, os.Stdin)
 }
 
 func (m *Shell) Run(ctx context.Context) (err error) {
@@ -83,15 +85,21 @@ func (m *Shell) Run(ctx context.Context) (err error) {
 		}
 
 	} else {
-		fmt.Println(`
+		version, err := jsutil.WanixSyscall("kernel.version")
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Printf(`
     ____    _____  _____     ___    __      __   ____   _
 |  |    |  |    /  \    |    \  |  | (_    _) \  \  /  / 
 |  |    |  |   /    \   |  |\ \ |  |   |  |    \  \/  /  
 |  |    |  |  /  ()  \  |  | \ \|  |   |  |     >    <   
  \  \/\/  /  |   __   | |  |  \    |  _|  |_   /  /\  \  
 __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
-																																		
-`)
+                        -- v%s --
+`, version.String())
+
 		terminal := term.NewTerminal(struct {
 			io.Reader
 			io.Writer
@@ -115,6 +123,10 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 	// }
 
 	for {
+		// We rebuild the commands because flags that reference captured variables
+		// don't get reset with their default values when a command is run again.
+		// This is a dumb design limitiation.
+		m.buildCmds()
 		m.lineNum++
 
 		line, err := readLine()

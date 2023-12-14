@@ -1,4 +1,6 @@
 if (!globalThis["ServiceWorkerGlobalScope"]) {
+  const basePath = window.location.pathname.replace("index.html", "");
+
   // registers Service Worker using this file (see bottom) if none is registered,
   // and sets up a mechanism to fullfill requests from initfs or kernel
   async function setupServiceWorker() {
@@ -18,7 +20,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
 
     let registration = await navigator.serviceWorker.getRegistration("/");
     if (!registration) {
-      await navigator.serviceWorker.register(import.meta.url+"?sw", {type: "module"});
+      await navigator.serviceWorker.register("./wanix-bootloader.js?sw", {type: "module"});
       registration = await navigator.serviceWorker.ready;
       await new Promise((resolve) => {
         navigator.serviceWorker.addEventListener("controllerchange", async (event) => {
@@ -43,8 +45,8 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
       }
 
       // handle requests for compressed embedded initfs files if present
-      if (globalThis.initdata && req.path.startsWith("/~init/")) {
-        const f = globalThis.initdata[req.path.replace("/~init/", "")];
+      if (globalThis.initdata && req.path.startsWith(`${basePath}~init/`)) {
+        const f = globalThis.initdata[req.path.replace(`${basePath}~init/`, "")];
         if (f) {
           const data = await unzip(f.data);
           registration.active.postMessage({response: { reqId: req.id, body: data, headers: {"content-type": f.type}}});
@@ -58,7 +60,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
       }
 
       // handle request using kernel via rpc
-      const resp = await globalThis.sys.call("web.request", [req.method, req.url])
+      const resp = await globalThis.sys.call("web.request", [req.method, req.url.replace(basePath, "/")]);
       const headers = resp.value;
       const ch = resp.channel;
       const buf = new duplex.Buffer();
@@ -69,7 +71,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
       registration.active.postMessage({response: { reqId: req.id, body: buf.bytes(), headers }});
     });
 
-    registration.active.postMessage({init: true});
+    registration.active.postMessage({init: true, basePath});
     await ready;
   }
 
@@ -83,22 +85,22 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
       const basename = (path) => path.replace(/\\/g,'/').split('/').pop();
       if (globalThis.initdata) {
         // use embedded data if present
-        path = `/~init/${basename(path)}`;
+        path = `./~init/${basename(path)}`;
       }
       globalThis.initfs[basename(path)] = await (await fetch(path)).blob();
     }
     // TODO: define these in one place. duplicated in initdata.go
     await Promise.all([
-      load("/sys/dev/kernel/web/lib/duplex.js"),
-      load("/sys/dev/kernel/web/lib/worker.js"),
-      load("/sys/dev/kernel/web/lib/syscall.js"),
-      load("/sys/dev/kernel/web/lib/task.js"),
-      load("/sys/dev/kernel/web/lib/wasm.js"),
-      load("/sys/dev/kernel/web/lib/host.js"),
-      load("/sys/dev/internal/indexedfs/indexedfs.js"), // maybe load from kernel?
-      load("/sys/dev/local/bin/kernel"),
-      load("/sys/dev/local/bin/shell"),
-      load("/sys/dev/local/bin/build"),
+      load("./sys/dev/kernel/web/lib/duplex.js"),
+      load("./sys/dev/kernel/web/lib/worker.js"),
+      load("./sys/dev/kernel/web/lib/syscall.js"),
+      load("./sys/dev/kernel/web/lib/task.js"),
+      load("./sys/dev/kernel/web/lib/wasm.js"),
+      load("./sys/dev/kernel/web/lib/host.js"),
+      load("./sys/dev/internal/indexedfs/indexedfs.js"), // maybe load from kernel?
+      load("./sys/dev/local/bin/kernel"),
+      load("./sys/dev/local/bin/shell"),
+      // load("./sys/dev/local/bin/build"),
     ]);
     
     globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"]));
@@ -122,10 +124,12 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
   let host = undefined;
   let responders = {};
   let reqId = 0;
+  let basePath = "/";
 
   self.addEventListener("message", (event) => {
     if (event.data.init) {
       host = event.source;
+      basePath = event.data.basePath;
       host.postMessage({ready: true});
       return;
     }
@@ -137,13 +141,12 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
   self.addEventListener("fetch", async (event) => {
     const req = event.request;
     const url = new URL(req.url);
-    if (req.url === import.meta.url ||
-      url.pathname === "/" ||
-      url.pathname === "/wanix-bootloader.js" ||
-      url.pathname === "/favicon.ico" || 
-      url.pathname.startsWith("/sys/dev") || 
-      url.pathname.startsWith("/bootloader") || 
-      url.pathname.startsWith("/index.html") ||
+    if (url.pathname === "/favicon.ico" || 
+      url.pathname === basePath ||
+      url.pathname.startsWith(`${basePath}wanix-bootloader.js`) ||
+      url.pathname.startsWith(`${basePath}sys/dev`) || 
+      url.pathname.startsWith(`${basePath}bootloader`) || 
+      url.pathname.startsWith(`${basePath}index.html`) ||
       !host) return;
 
     reqId++;

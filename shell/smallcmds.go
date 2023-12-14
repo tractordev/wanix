@@ -135,17 +135,6 @@ func reloadCmd() *cli.Command {
 	}
 }
 
-func downloadCmd() *cli.Command {
-	return &cli.Command{
-		Usage: "dl <path>",
-		Args:  cli.ExactArgs(1),
-		Run: func(ctx *cli.Context, args []string) {
-			fmt.Println("TODO: Unimplemented")
-			// js.Global().Get("wanix").Get("download").Invoke(args[0])
-		},
-	}
-}
-
 func touchCmd() *cli.Command {
 	return &cli.Command{
 		Usage: "touch <path>...",

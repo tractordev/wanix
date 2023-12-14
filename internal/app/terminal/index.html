@@ -61,7 +61,8 @@
     const enc = new TextEncoder();
     const dec = new TextDecoder();
 
-    const resp = await sys.call("tty.open", ["shell", []]); //{ Term: "xterm-256color", Rows: 10, Cols: 80 });
+    const resp = await sys.call("tty.open", ["shell", [], { TERM: "xterm-256color" }]);
+    const pid = resp.value;
     const ch = resp.channel;
     //parent.wanix.termCh = ch;
     
@@ -69,12 +70,29 @@
       ch.write(enc.encode(data));
     });
     terminal.onResize((size) => {
-      //wanix.call("terminal.Resize", [{ Rows: size.rows, Cols: size.cols }]);
+      sys.call("tty.resize", [pid, size.rows, size.cols]);
     })
     terminal.attachCustomKeyEventHandler((e) => {
       // if (visorKeydown(e)) {
       //     return;
       // }
+
+      // On Mac we want to use Cmd+C/V instead of Ctrl+C/V
+      const modifierKey = (navigator.userAgent.toLowerCase().indexOf("mac") !== -1) ? e.metaKey : e.ctrlKey;
+      
+      // Override ctrl+c behaviour to copy selected text.
+      // Just a passthrough for OS/browser copy
+      if(modifierKey && e.code === "KeyC" && e.type === "keydown") {
+        if (terminal.hasSelection()) {
+          return false;
+        }
+      }
+
+      // Override ctrl+v behaviour to paste text, I don't think anybody really uses the Unix behavior anyway.
+      // Just a passthrough for OS/browser paste.
+      if(modifierKey && e.code === "KeyV" && e.type === "keydown") {
+        return false;
+      }
 
       if (e.type === "keydown") {
         // not sure why we need a custom handler for

@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"syscall/js"
 
 	"tractor.dev/wanix/internal/jsutil"
 )
@@ -49,15 +48,14 @@ func (c *Cmd) Start() error {
 		parts := strings.Split(kvp, "=")
 		menv[parts[0]] = parts[1]
 	}
-	resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.spawn", []any{c.Path, jsutil.ToJSArray(c.Args[1:]), menv, c.Dir}))
+	value, err := jsutil.WanixSyscall("proc.spawn", c.Path, jsutil.ToJSArray(c.Args[1:]), menv, c.Dir)
 	if err != nil {
 		return err
 	}
-
-	c.PID = resp.Get("value").Int()
+	c.PID = value.Int()
 
 	if c.stdin != nil {
-		resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.stdin", []any{c.PID}))
+		resp, err := jsutil.WanixSyscallResp("proc.stdin", c.PID)
 		if err != nil {
 			// TODO: cancel/kill process
 			return err
@@ -65,7 +63,7 @@ func (c *Cmd) Start() error {
 		go io.Copy(&jsutil.Writer{resp.Get("channel")}, c.stdin)
 	}
 	if c.Stdout != nil {
-		resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.stdout", []any{c.PID}))
+		resp, err := jsutil.WanixSyscallResp("proc.stdout", c.PID)
 		if err != nil {
 			// TODO: cancel/kill process
 			return err
@@ -73,7 +71,7 @@ func (c *Cmd) Start() error {
 		go io.Copy(c.Stdout, &jsutil.Reader{resp.Get("channel")})
 	}
 	if c.Stderr != nil {
-		resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.stderr", []any{c.PID}))
+		resp, err := jsutil.WanixSyscallResp("proc.stderr", c.PID)
 		if err != nil {
 			// TODO: cancel/kill process
 			return err
@@ -84,11 +82,11 @@ func (c *Cmd) Start() error {
 }
 
 func (c *Cmd) Wait() (int, error) {
-	resp, err := jsutil.AwaitErr(js.Global().Get("sys").Call("call", "proc.wait", []any{c.PID}))
+	value, err := jsutil.WanixSyscall("proc.wait", c.PID)
 	if err != nil {
 		return -1, err
 	}
-	return resp.Get("value").Int(), nil
+	return value.Int(), nil
 }
 
 func (c *Cmd) Run() (int, error) {
