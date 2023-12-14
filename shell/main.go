@@ -147,11 +147,7 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 }
 
 func (m *Shell) ExecuteCommand(ctx *cli.Context, args []string) {
-	env := make(map[string]string)
-	for _, kvp := range os.Environ() {
-		parts := strings.SplitN(kvp, "=", 2)
-		env[parts[0]] = parts[1]
-	}
+	env := os.Environ()
 
 	var err error
 	args, err = parseEnvArgs(args, env)
@@ -170,7 +166,7 @@ func (m *Shell) ExecuteCommand(ctx *cli.Context, args []string) {
 		return
 	}
 
-	cmd.Env = packEnv(env)
+	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	wc := cmd.StdinPipe()
