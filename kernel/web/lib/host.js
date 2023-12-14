@@ -1,8 +1,9 @@
+const baseURL = window.location.pathname.replace("index.html", "").replace(/\/$/, '');
 
-globalThis.sys.pipe.handle("host.loadStylesheet", duplex.handlerFrom((url) => {
+globalThis.sys.pipe.handle("host.loadStylesheet", duplex.handlerFrom((path) => {
   const style = document.createElement("link");
   style.rel = "stylesheet";
-  style.href = url;
+  style.href = baseURL+path;
   document.body.appendChild(style);
 }));
 
@@ -35,8 +36,23 @@ globalThis.sys.pipe.handle("host.loadApp", duplex.handlerFrom((target, path, foc
       }
       frame.onload = null;
   }
-  frame.setAttribute("src", path);
+  frame.setAttribute("src", baseURL+path);
 }));
+
+globalThis.sys.pipe.handle("host.download", duplex.handlerFrom((filename, data) => {
+  const blob = new Blob([data], {type: "application/octet-stream"});
+  const url = URL.createObjectURL(blob);
+  
+  const elem = document.createElement("a");
+  elem.setAttribute("download", filename);
+  elem.href = url;
+  elem.setAttribute("target", "_blank");
+  elem.click();
+
+  elem.remove();
+  URL.revokeObjectURL(url);
+}));
+
 
 const visorKeydown = (e) => {
   const el = document.querySelector("#terminal");

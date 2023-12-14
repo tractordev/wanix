@@ -45,7 +45,7 @@ func isWasmFile(name string) bool {
 	return bytes.Equal(magic, WASM_MAGIC)
 }
 
-func parseEnvArgs(args []string, env map[string]string) (rest []string, err error) {
+func parseEnvArgs(args []string, env []string) (rest []string, err error) {
 	for i, arg := range args {
 		name, value, found := strings.Cut(arg, "=")
 		if !found {
@@ -55,7 +55,18 @@ func parseEnvArgs(args []string, env map[string]string) (rest []string, err erro
 		if name == "" {
 			return rest, fmt.Errorf("invalid variable at arg %d", i)
 		}
-		env[name] = value
+
+		found = false
+		for j, entry := range env {
+			if strings.HasPrefix(entry, name) {
+				env[j] = strings.Join([]string{name, value}, "=")
+				found = true
+				break
+			}
+		}
+		if !found {
+			env = append(env, strings.Join([]string{name, value}, "="))
+		}
 	}
 	return rest, nil
 }
@@ -77,7 +88,7 @@ func unpackMap(m map[string]string) map[string]any {
 }
 
 func packEnv(m map[string]string) []string {
-	r := make([]string, len(m))
+	r := make([]string, 0, len(m))
 	for k, v := range m {
 		r = append(r, strings.Join([]string{k, v}, "="))
 	}

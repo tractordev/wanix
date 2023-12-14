@@ -1,18 +1,17 @@
 package main
 
+// Commands in this file should be small, <~50 loc. Bigger ones should get a
+// dedicated file. Use common sense; if it takes up your whole screen, move it.
+
 import (
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
-	"tractor.dev/toolkit-go/engine/fs/watchfs"
-	"tractor.dev/wanix/internal/fsutil"
-	"tractor.dev/wanix/internal/osfs"
 )
 
 func exitCmd() *cli.Command {
@@ -30,68 +29,6 @@ func echoCmd() *cli.Command {
 		Usage: "echo [text]...",
 		Run: func(ctx *cli.Context, args []string) {
 			io.WriteString(ctx, strings.Join(args, " "))
-		},
-	}
-	return cmd
-}
-
-func openCmd() *cli.Command {
-	var openWatch *watchfs.Watch
-	cmd := &cli.Command{
-		Usage: "open <appname>",
-		Args:  cli.ExactArgs(1),
-		Run: func(ctx *cli.Context, args []string) {
-			var path string
-			var searchPaths = []string{"sys/app", "app", "sys/dev/internal/app"}
-			for _, searchPath := range searchPaths {
-				if exists, _ := fs.Exists(os.DirFS("/"), fmt.Sprintf("%s/%s", searchPath, args[0])); exists {
-					path = fmt.Sprintf("%s/%s", searchPath, args[0])
-					break
-				}
-			}
-			if path == "" {
-				fmt.Fprintln(ctx, "app not found")
-				return
-			}
-			if openWatch != nil {
-				openWatch.Close()
-			}
-
-			// todo: port from afero to engine/fs so watchfs works
-			// --
-			// var err error
-			// var firstWrite bool
-			// if args[0] == "jazz-todo" {
-			// 	openWatch, err = watchfs.WatchFile(fs, "app/jazz-todo/view.jsx", &watchfs.Config{
-			// 		Handler: func(e watchfs.Event) {
-			// 			if e.Type == watchfs.EventWrite && len(e.Path) > len(path) {
-			// 				if !firstWrite {
-			// 					firstWrite = true
-			// 					return
-			// 				}
-			// 				js.Global().Get("wanix").Get("loadApp").Invoke("main")
-			// 			}
-			// 		},
-			// 	})
-			// } else {
-			// 	openWatch, err = watchfs.WatchFile(fs, path, &watchfs.Config{
-			// 		Recursive: true,
-			// 		Handler: func(e watchfs.Event) {
-			// 			if e.Type == watchfs.EventWrite && len(e.Path) > len(path) {
-			// 				if !firstWrite {
-			// 					firstWrite = true
-			// 					return
-			// 				}
-			// 				js.Global().Get("wanix").Get("loadApp").Invoke("main")
-			// 			}
-			// 		},
-			// 	})
-			// }
-			// if err != nil {
-			// 	fmt.Fprintf(t, "%s\n", err)
-			// 	return
-			// }
-			js.Global().Get("sys").Call("call", "host.loadApp", []any{"main", path, true})
 		},
 	}
 	return cmd
@@ -198,17 +135,6 @@ func reloadCmd() *cli.Command {
 	}
 }
 
-func downloadCmd() *cli.Command {
-	return &cli.Command{
-		Usage: "dl <path>",
-		Args:  cli.ExactArgs(1),
-		Run: func(ctx *cli.Context, args []string) {
-			fmt.Println("TODO: Unimplemented")
-			// js.Global().Get("wanix").Get("download").Invoke(args[0])
-		},
-	}
-}
-
 func touchCmd() *cli.Command {
 	return &cli.Command{
 		Usage: "touch <path>...",
@@ -306,99 +232,6 @@ func moveCmd() *cli.Command {
 	}
 }
 
-// TODO: merge with copyCmd
-func copyCmd2() *cli.Command {
-	cmd := &cli.Command{
-		Usage: "cp2 SOURCE DEST",
-		Args:  cli.MinArgs(2),
-		Short: "Recursively copy SOURCE to DEST. DEST must not exist.",
-		Run: func(ctx *cli.Context, args []string) {
-			srcpath := args[0]
-			dstpath := args[1]
-			err := fsutil.CopyAll(osfs.New(), absPath(srcpath), absPath(dstpath))
-			if checkErr(ctx, err) {
-				return
-			}
-		},
-	}
-	return cmd
-}
-
-func copyCmd() *cli.Command {
-	var recursive bool
-
-	cmd := &cli.Command{
-		Usage: "cp [-r] <SOURCE DEST | SOURCE... DIRECTORY> ",
-		Args:  cli.MinArgs(2),
-		Short: "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.",
-		Run: func(ctx *cli.Context, args []string) {
-			// TODO: handle copying directories
-			isdir, err := fs.DirExists(os.DirFS("/"), unixToFsPath(args[len(args)-1]))
-			if checkErr(ctx, err) {
-				return
-			}
-			if isdir {
-				// copy all paths to this directory
-				dir := absPath(args[len(args)-1])
-
-				for _, path := range args[:len(args)-1] {
-					srcName := filepath.Base(path)
-					dest := filepath.Join(dir, srcName)
-
-					srcIsDir, err := fs.IsDir(os.DirFS("/"), unixToFsPath(path))
-					if checkErr(ctx, err) {
-						continue
-					}
-
-					if srcIsDir {
-						if !recursive {
-							io.WriteString(ctx, fmt.Sprintf("-r not specified; omitting directory '%s'\n", path))
-							continue
-						}
-
-						err = os.MkdirAll(absPath(dest), 0755)
-						if checkErr(ctx, err) {
-							continue
-						}
-
-						entries, err := os.ReadDir(absPath(path))
-						if checkErr(ctx, err) {
-							continue
-						}
-
-						for _, e := range entries {
-							cli.Execute(ctx, copyCmd(), []string{"-r", filepath.Join(path, e.Name()), dest})
-							// commands["cp"](t, fs, []string{"-r", filepath.Join(path, e.Name()), dest})
-						}
-					} else {
-						content, err := os.ReadFile(absPath(path))
-						if checkErr(ctx, err) {
-							continue
-						}
-						err = os.WriteFile(absPath(dest), content, 0644)
-						if checkErr(ctx, err) {
-							continue
-						}
-					}
-				}
-			} else {
-				content, err := os.ReadFile(absPath(args[0]))
-				if checkErr(ctx, err) {
-					return
-				}
-
-				err = os.WriteFile(absPath(args[1]), content, 0644)
-				if checkErr(ctx, err) {
-					return
-				}
-			}
-		},
-	}
-
-	cmd.Flags().BoolVar(&recursive, "r", false, "Copy recursively")
-	return cmd
-}
-
 func pwdCmd() *cli.Command {
 	return &cli.Command{
 		Usage: "pwd",
@@ -466,61 +299,6 @@ func exportCmd() *cli.Command {
 	cmd.Flags().BoolVar(&remove, "remove", false, "Remove an environment variable")
 	return cmd
 }
-
-// todo: port from afero to engine/fs so watchfs works
-// --
-// var watches = make(map[string]*watchfs.Watch)
-// func watchCmd() *cli.Command {
-// 	cmd := &cli.Command{
-// 		Usage: "watch <path>", // todo add -r
-// 		Args:  cli.ExactArgs(1),
-// 		Run: func(ctx *cli.Context, args []string) {
-// 			var recursive bool
-// 			var path string
-// 			if args[0] == "-r" {
-// 				recursive = true
-// 				path = args[1]
-// 			} else {
-// 				path = args[0]
-// 			}
-// 			if _, exists := watches[path]; exists {
-// 				return
-// 			}
-// 			w, err := watchfs.WatchFile(fs, path, &watchfs.Config{
-// 				Recursive: recursive,
-// 				Handler: func(e watchfs.Event) {
-// 					js.Global().Get("console").Call("log", e.String())
-// 				},
-// 			})
-// 			if err != nil {
-// 				fmt.Fprintf(t, "%s\n", err)
-// 				return
-// 			}
-// 			watches[args[0]] = w
-// 		},
-// 	}
-// 	return cmd
-// }
-// func unwatchCmd() *cli.Command {
-// 	cmd := &cli.Command{
-// 		Usage: "unwatch <path>", // todo add -r
-// 		Args:  cli.ExactArgs(1),
-// 		Run: func(ctx *cli.Context, args []string) {
-// 			w, exists := watches[args[0]]
-// 			if !exists {
-// 				return
-// 			}
-// 			w.Close()
-// 			delete(watches, args[0])
-// 			go func() {
-// 				for e := range w.Iter() {
-// 					js.Global().Get("console").Call("log", e.String())
-// 				}
-// 			}()
-// 		},
-// 	}
-// 	return cmd
-// }
 
 // TODO: port these debug commands to cli.Commands like above
 // "resetfs": func(t *term.Terminal, _ afero.Fs, args []string) {
