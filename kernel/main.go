@@ -12,7 +12,7 @@ import (
 	"tractor.dev/wanix/kernel/web"
 )
 
-var version string
+var Version string
 
 func main() {
 	engine.Run(Kernel{},
@@ -51,10 +51,6 @@ func (k *Kernel) Run(ctx context.Context) error {
 	select {}
 }
 
-func (k *Kernel) Version() string {
-	return version
-}
-
 func (k *Kernel) version(this js.Value, args []js.Value) any {
-	return version
+	return Version
 }

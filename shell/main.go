@@ -81,7 +81,11 @@ func (m *Shell) Run(ctx context.Context) (err error) {
 		}
 
 	} else {
-		wanixVersion, _ := jsutil.WanixSyscall("kernel.version")
+		version, err := jsutil.WanixSyscall("kernel.version")
+		if err != nil {
+			panic(err)
+		}
+
 		fmt.Printf(`
     ____    _____  _____     ___    __      __   ____   _
 |  |    |  |    /  \    |    \  |  | (_    _) \  \  /  / 
@@ -90,7 +94,7 @@ func (m *Shell) Run(ctx context.Context) (err error) {
  \  \/\/  /  |   __   | |  |  \    |  _|  |_   /  /\  \  
 __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
                         -- v%s --
-`, wanixVersion.String())
+`, version.String())
 
 		terminal := term.NewTerminal(struct {
 			io.Reader
