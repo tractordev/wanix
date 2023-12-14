@@ -1,8 +1,9 @@
+const baseURL = window.location.pathname.replace("index.html", "").replace(/\/$/, '');
 
-globalThis.sys.pipe.handle("host.loadStylesheet", duplex.handlerFrom((url) => {
+globalThis.sys.pipe.handle("host.loadStylesheet", duplex.handlerFrom((path) => {
   const style = document.createElement("link");
   style.rel = "stylesheet";
-  style.href = url;
+  style.href = baseURL+path;
   document.body.appendChild(style);
 }));
 
@@ -35,7 +36,7 @@ globalThis.sys.pipe.handle("host.loadApp", duplex.handlerFrom((target, path, foc
       }
       frame.onload = null;
   }
-  frame.setAttribute("src", path);
+  frame.setAttribute("src", baseURL+path);
 }));
 
 globalThis.sys.pipe.handle("host.download", duplex.handlerFrom((filename, data) => {
