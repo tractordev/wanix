@@ -39,12 +39,12 @@ func mtimeCmd() *cli.Command {
 		Usage: "mtime <path>",
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
-			fi, err := os.Stat(args[0])
+			fi, err := os.Stat(absPath(args[0]))
 			if err != nil {
-				fmt.Fprintf(ctx, "%s\n", err)
+				fmt.Fprintln(ctx, err)
 				return
 			}
-			fmt.Fprintf(ctx, "%s\n", fi.ModTime())
+			fmt.Fprintln(ctx, fi.ModTime())
 		},
 	}
 	return cmd
