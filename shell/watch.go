@@ -1,56 +1,79 @@
 package main
 
-// todo: port from afero to engine/fs so watchfs works
-// --
-// var watches = make(map[string]*watchfs.Watch)
-// func watchCmd() *cli.Command {
-// 	cmd := &cli.Command{
-// 		Usage: "watch <path>", // todo add -r
-// 		Args:  cli.ExactArgs(1),
-// 		Run: func(ctx *cli.Context, args []string) {
-// 			var recursive bool
-// 			var path string
-// 			if args[0] == "-r" {
-// 				recursive = true
-// 				path = args[1]
-// 			} else {
-// 				path = args[0]
-// 			}
-// 			if _, exists := watches[path]; exists {
-// 				return
-// 			}
-// 			w, err := watchfs.WatchFile(fs, path, &watchfs.Config{
-// 				Recursive: recursive,
-// 				Handler: func(e watchfs.Event) {
-// 					js.Global().Get("console").Call("log", e.String())
-// 				},
-// 			})
-// 			if err != nil {
-// 				fmt.Fprintf(t, "%s\n", err)
-// 				return
-// 			}
-// 			watches[args[0]] = w
-// 		},
-// 	}
-// 	return cmd
-// }
-// func unwatchCmd() *cli.Command {
-// 	cmd := &cli.Command{
-// 		Usage: "unwatch <path>", // todo add -r
-// 		Args:  cli.ExactArgs(1),
-// 		Run: func(ctx *cli.Context, args []string) {
-// 			w, exists := watches[args[0]]
-// 			if !exists {
-// 				return
-// 			}
-// 			w.Close()
-// 			delete(watches, args[0])
-// 			go func() {
-// 				for e := range w.Iter() {
-// 					js.Global().Get("console").Call("log", e.String())
-// 				}
-// 			}()
-// 		},
-// 	}
-// 	return cmd
-// }
+import (
+	"fmt"
+
+	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/toolkit-go/engine/fs/watchfs"
+	"tractor.dev/wanix/internal/osfs"
+)
+
+var watcher *watchfs.FS
+var watches = make(map[string]*watchfs.Watch)
+
+func watchCmd() *cli.Command {
+	var recursive bool
+
+	cmd := &cli.Command{
+		Usage: "watch [-recursive] <path>",
+		Args:  cli.MinArgs(1),
+		Run: func(ctx *cli.Context, args []string) {
+			path := absPath(args[0])
+
+			if watcher == nil {
+				watcher = watchfs.New(osfs.New())
+			}
+
+			if exists, err := fs.Exists(watcher, path); !exists {
+				if !checkErr(ctx, err) {
+					fmt.Printf("file or directory at path '%s' doesn't exist\n", path)
+				}
+				return
+			}
+
+			if _, exists := watches[path]; exists {
+				fmt.Printf("path '%s' is already being watched\n", path)
+				return
+			}
+
+			w, err := watcher.Watch(path, &watchfs.Config{
+				Recursive: recursive,
+				Handler: func(e watchfs.Event) {
+					fmt.Println("event", e.String())
+				},
+			})
+			if err != nil {
+				fmt.Fprintln(ctx, err)
+				return
+			}
+			watches[path] = w
+		},
+	}
+
+	cmd.Flags().BoolVar(&recursive, "recursive", false, "")
+	return cmd
+}
+
+func unwatchCmd() *cli.Command {
+	cmd := &cli.Command{
+		Usage: "unwatch <path>", // todo add -r
+		Args:  cli.ExactArgs(1),
+		Run: func(ctx *cli.Context, args []string) {
+			path := absPath(args[0])
+			w, exists := watches[path]
+			if !exists {
+				fmt.Printf("path '%s' isn't being watched\n", path)
+				return
+			}
+			w.Close()
+			delete(watches, path)
+			go func() {
+				for e := range w.Iter() {
+					fmt.Println("event", e.String())
+				}
+			}()
+		},
+	}
+	return cmd
+}
