@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/toolkit-go/engine/fs/memfs"
+	"tractor.dev/toolkit-go/engine/fs/watchfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
@@ -65,6 +67,36 @@ func (s *Service) Initialize() {
 			panic(err)
 		}
 	}
+
+	// watch test
+	{
+		testfs := watchfs.New(memfs.New())
+		err := fs.WriteFile(testfs.FS.(*memfs.FS), "foo", []byte("bar"), 0644)
+		if err != nil {
+			panic(err)
+		}
+
+		watch, err := testfs.Watch("foo", &watchfs.Config{
+			Recursive: false,
+			Handler: func(e watchfs.Event) {
+				log("event", e.String())
+			},
+		})
+		if err != nil {
+			panic(err)
+		}
+
+		time.Sleep(time.Second * 1)
+
+		err = fs.WriteFile(testfs.FS.(*memfs.FS), "foo", []byte("baz"), 0644)
+		if err != nil {
+			panic(err)
+		}
+		time.Sleep(time.Second * 1)
+
+		watch.Close()
+	}
+
 }
 
 func (s *Service) InitializeJS() {
