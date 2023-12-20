@@ -19,7 +19,7 @@ func watchCmd() *cli.Command {
 		Usage: "watch [-recursive] <path>",
 		Args:  cli.MinArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
-			path := absPath(args[0])
+			path := unixToFsPath(args[0])
 
 			if watcher == nil {
 				watcher = watchfs.New(osfs.New())
@@ -27,13 +27,13 @@ func watchCmd() *cli.Command {
 
 			if exists, err := fs.Exists(watcher, path); !exists {
 				if !checkErr(ctx, err) {
-					fmt.Printf("file or directory at path '%s' doesn't exist\n", path)
+					fmt.Printf("file or directory at path '%s' doesn't exist\n", absPath(path))
 				}
 				return
 			}
 
 			if _, exists := watches[path]; exists {
-				fmt.Printf("path '%s' is already being watched\n", path)
+				fmt.Printf("path '%s' is already being watched\n", absPath(path))
 				return
 			}
 
@@ -60,10 +60,10 @@ func unwatchCmd() *cli.Command {
 		Usage: "unwatch <path>", // todo add -r
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
-			path := absPath(args[0])
+			path := unixToFsPath(args[0])
 			w, exists := watches[path]
 			if !exists {
-				fmt.Printf("path '%s' isn't being watched\n", path)
+				fmt.Printf("path '%s' isn't being watched\n", absPath(path))
 				return
 			}
 			w.Close()
