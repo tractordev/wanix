@@ -30,9 +30,6 @@ type Service struct {
 	fds    map[int]*fd
 	nextFd int
 
-	watches         map[int]*watchfs.Watch
-	nextWatchHandle int
-
 	mu sync.Mutex
 }
 
@@ -44,8 +41,6 @@ type fd struct {
 func (s *Service) Initialize() {
 	s.fds = make(map[int]*fd)
 	s.nextFd = 1000
-	s.watches = make(map[int]*watchfs.Watch)
-	s.nextWatchHandle = 0
 
 	ifs, err := indexedfs.New()
 	if err != nil {
@@ -95,8 +90,10 @@ func (s *Service) InitializeJS() {
 	fsObj.Set("unlink", js.FuncOf(s.unlink))
 	fsObj.Set("fsync", js.FuncOf(s.fsync))
 	fsObj.Set("utimes", js.FuncOf(s.utimes))
-	fsObj.Set("watch", js.FuncOf(s.watch))
-	fsObj.Set("unwatch", js.FuncOf(s.unwatch))
+
+	js.Global().Get("api").Get("fs").Set("watch", map[string]any{
+		"respondRPC": js.FuncOf(s.watchRPC),
+	})
 
 	// TODO later
 	// ftruncate(fd, length, callback) { callback(enosys()); },
@@ -678,15 +675,22 @@ func (s *Service) utimes(this js.Value, args []js.Value) any {
 	return nil
 }
 
-// watch(path, recursive, eventMask, ignores, callback)
-func (s *Service) watch(this js.Value, args []js.Value) any {
-	path := cleanPath(args[0].String())
-	recursive := args[1].Bool()
-	eventMask := uint(args[2].Int())
-	ignores := jsutil.ToGoStringSlice(args[3])
-	cb := args[4]
+// watch(path, recursive, eventMask, ignores)
+func (s *Service) watchRPC(this js.Value, args []js.Value) any {
+	var (
+		response = args[0]
+		call     = args[1]
+	)
 
-	go func() {
+	return jsutil.Promise(func() (any, error) {
+		params := jsutil.Await(call.Call("receive"))
+		var (
+			path      = cleanPath(params.Index(0).String())
+			recursive = params.Index(1).Bool()
+			eventMask = uint(params.Index(2).Int())
+			ignores   = jsutil.ToGoStringSlice(params.Index(3))
+		)
+
 		log("watch", path)
 
 		w, err := s.fsys.Watch(path, &watchfs.Config{
@@ -694,38 +698,28 @@ func (s *Service) watch(this js.Value, args []js.Value) any {
 			EventMask: eventMask,
 			Ignores:   ignores,
 			Handler: func(e watchfs.Event) {
-				// TODO: Send event over rpc channel
-				log(e.String())
+				jsErr := js.Null()
+				if e.Err != nil {
+					jsErr = jsutil.ToJSError(e.Err)
+				}
+				jsEvent := map[string]any{
+					"type":    uint(e.Type),
+					"path":    e.Path,
+					"oldpath": e.OldPath,
+					"err":     jsErr,
+				}
+				response.Call("send", jsEvent)
 			},
 		})
 		if err != nil {
-			cb.Invoke(nil, jsutil.ToJSError(err))
-			return
+			response.Call("return", jsutil.ToJSError(err))
+			return nil, err
 		}
 
-		wh := s.nextWatchHandle
-		s.nextWatchHandle++
-		s.watches[wh] = w
-
-		cb.Invoke(wh, nil)
-	}()
-
-	return nil
-}
-
-// TODO: possibly just unwatch when closing the rpc channel?
-// unwatch(handle, callback)
-func (s *Service) unwatch(this js.Value, args []js.Value) any {
-	handle := args[0].Int()
-	cb := args[1]
-
-	go func() {
-		if w, ok := s.watches[handle]; !ok {
-			cb.Invoke(nil, jsutil.ToJSError(fs.ErrClosed))
-		} else {
-			w.Close()
-			cb.Invoke(nil, nil)
-		}
-	}()
-	return nil
+		ch := jsutil.Await(response.Call("continue"))
+		io.CopyN(io.Discard, &jsutil.Reader{ch}, 1) // read blocks close
+		ch.Call("close")
+		w.Close()
+		return nil, nil
+	})
 }

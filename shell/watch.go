@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
@@ -9,7 +10,7 @@ import (
 	"tractor.dev/wanix/internal/osfs"
 )
 
-var watches = make(map[string]int)
+var watches = make(map[string]js.Value)
 
 func watchCmd() *cli.Command {
 	var recursive bool
@@ -33,12 +34,23 @@ func watchCmd() *cli.Command {
 			}
 
 			// watch(path, recursive, eventMask, ignores)
-			w, err := jsutil.WanixSyscall("fs.watch", path, recursive, 0, []any{})
+			resp, err := jsutil.WanixSyscallResp("fs.watch", path, recursive, 0, []any{})
 			if err != nil {
 				fmt.Fprintln(ctx, err)
 				return
 			}
-			watches[path] = w.Int()
+
+			go func() {
+				for {
+					event := jsutil.Await(resp.Call("receive"))
+					if event.IsNull() {
+						return
+					}
+					jsutil.Log(event)
+				}
+			}()
+
+			watches[path] = resp
 		},
 	}
 
@@ -52,18 +64,13 @@ func unwatchCmd() *cli.Command {
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			path := unixToFsPath(args[0])
-			wHandle, exists := watches[path]
+			resp, exists := watches[path]
 			if !exists {
 				fmt.Printf("path '%s' isn't being watched\n", absPath(path))
 				return
 			}
-
-			_, err := jsutil.WanixSyscall("fs.unwatch", wHandle)
-			if err != nil {
-				fmt.Fprintln(ctx, err)
-				return
-			}
-
+			// this should close the rpc channel
+			jsutil.Await(resp.Call("send", 0))
 			delete(watches, path)
 		},
 	}
