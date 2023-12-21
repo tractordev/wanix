@@ -103,12 +103,6 @@ globalThis.api = {
     utimes(path, atime, mtime) { 
       return new Promise((ok, err) => globalThis.fs.utimes(path, atime, mtime, cb(ok, err)));
     },
-    watch(path, recursive, eventMask, ignores, eventCallback) { 
-      return new Promise((ok, err) => globalThis.fs.watch(path, recursive, eventMask, ignores, eventCallback, cb(ok, err)));
-    },
-    unwatch(handle) { 
-      return new Promise((ok, err) => globalThis.fs.unwatch(handle, cb(err)));
-    },
   }
 }
 

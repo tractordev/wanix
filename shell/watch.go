@@ -10,14 +10,7 @@ import (
 	"tractor.dev/wanix/internal/osfs"
 )
 
-var watches = make(map[string]int)
-
-// TODO: free watchFunc?
-var watchFunc = js.FuncOf(func(this js.Value, args []js.Value) any {
-	event := args[0]
-	jsutil.Log(event)
-	return nil
-})
+var watches = make(map[string]js.Value)
 
 func watchCmd() *cli.Command {
 	var recursive bool
@@ -30,34 +23,34 @@ func watchCmd() *cli.Command {
 
 			if exists, err := fs.Exists(osfs.New(), path); !exists {
 				if !checkErr(ctx, err) {
-					fmt.Fprintf(ctx, "file or directory at path '%s' doesn't exist\n", absPath(path))
+					fmt.Printf("file or directory at path '%s' doesn't exist\n", absPath(path))
 				}
 				return
 			}
 
 			if _, exists := watches[path]; exists {
-				fmt.Fprintf(ctx, "path '%s' is already being watched\n", absPath(path))
+				fmt.Printf("path '%s' is already being watched\n", absPath(path))
 				return
 			}
 
-			// watch(path, recursive, eventMask, ignores, eventCallback)
-			wHandle, err := jsutil.WanixSyscall(
-				"fs.watch",
-				path,
-				recursive,
-				0,
-				[]any{},
-				js.FuncOf(func(this js.Value, args []js.Value) any {
-					event := args[0]
+			// watch(path, recursive, eventMask, ignores)
+			resp, err := jsutil.WanixSyscallResp("fs.watch", path, recursive, 0, []any{})
+			if err != nil {
+				fmt.Fprintln(ctx, err)
+				return
+			}
+
+			go func() {
+				for {
+					event := jsutil.Await(resp.Call("receive"))
+					if event.IsNull() {
+						return
+					}
 					jsutil.Log(event)
-					return nil
-				}),
-			)
-			if checkErr(ctx, err) {
-				return
-			}
+				}
+			}()
 
-			watches[path] = wHandle.Int()
+			watches[path] = resp
 		},
 	}
 
@@ -71,13 +64,13 @@ func unwatchCmd() *cli.Command {
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			path := unixToFsPath(args[0])
-			wHandle, exists := watches[path]
+			resp, exists := watches[path]
 			if !exists {
 				fmt.Printf("path '%s' isn't being watched\n", absPath(path))
 				return
 			}
-			_, err := jsutil.WanixSyscall("fs.unwatch", wHandle)
-			checkErr(ctx, err)
+			// this should close the rpc channel
+			jsutil.Await(resp.Call("send", 0))
 			delete(watches, path)
 		},
 	}
