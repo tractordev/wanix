@@ -10,7 +10,14 @@ import (
 	"tractor.dev/wanix/internal/osfs"
 )
 
-var watches = make(map[string]js.Value)
+var watches = make(map[string]int)
+
+// TODO: free watchFunc?
+var watchFunc = js.FuncOf(func(this js.Value, args []js.Value) any {
+	event := args[0]
+	jsutil.Log(event)
+	return nil
+})
 
 func watchCmd() *cli.Command {
 	var recursive bool
@@ -23,34 +30,34 @@ func watchCmd() *cli.Command {
 
 			if exists, err := fs.Exists(osfs.New(), path); !exists {
 				if !checkErr(ctx, err) {
-					fmt.Printf("file or directory at path '%s' doesn't exist\n", absPath(path))
+					fmt.Fprintf(ctx, "file or directory at path '%s' doesn't exist\n", absPath(path))
 				}
 				return
 			}
 
 			if _, exists := watches[path]; exists {
-				fmt.Printf("path '%s' is already being watched\n", absPath(path))
+				fmt.Fprintf(ctx, "path '%s' is already being watched\n", absPath(path))
 				return
 			}
 
-			// watch(path, recursive, eventMask, ignores)
-			resp, err := jsutil.WanixSyscallResp("fs.watch", path, recursive, 0, []any{})
-			if err != nil {
-				fmt.Fprintln(ctx, err)
-				return
-			}
-
-			go func() {
-				for {
-					event := jsutil.Await(resp.Call("receive"))
-					if event.IsNull() {
-						return
-					}
+			// watch(path, recursive, eventMask, ignores, eventCallback)
+			wHandle, err := jsutil.WanixSyscall(
+				"fs.watch",
+				path,
+				recursive,
+				0,
+				[]any{},
+				js.FuncOf(func(this js.Value, args []js.Value) any {
+					event := args[0]
 					jsutil.Log(event)
-				}
-			}()
+					return nil
+				}),
+			)
+			if checkErr(ctx, err) {
+				return
+			}
 
-			watches[path] = resp
+			watches[path] = wHandle.Int()
 		},
 	}
 
@@ -64,13 +71,13 @@ func unwatchCmd() *cli.Command {
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			path := unixToFsPath(args[0])
-			resp, exists := watches[path]
+			wHandle, exists := watches[path]
 			if !exists {
 				fmt.Printf("path '%s' isn't being watched\n", absPath(path))
 				return
 			}
-			// this should close the rpc channel
-			jsutil.Await(resp.Call("send", 0))
+			_, err := jsutil.WanixSyscall("fs.unwatch", wHandle)
+			checkErr(ctx, err)
 			delete(watches, path)
 		},
 	}

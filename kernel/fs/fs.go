@@ -30,6 +30,9 @@ type Service struct {
 	fds    map[int]*fd
 	nextFd int
 
+	watches         map[int]*watchfs.Watch
+	nextWatchHandle int
+
 	mu sync.Mutex
 }
 
@@ -41,6 +44,8 @@ type fd struct {
 func (s *Service) Initialize() {
 	s.fds = make(map[int]*fd)
 	s.nextFd = 1000
+	s.watches = make(map[int]*watchfs.Watch)
+	s.nextWatchHandle = 0
 
 	ifs, err := indexedfs.New()
 	if err != nil {
@@ -90,10 +95,8 @@ func (s *Service) InitializeJS() {
 	fsObj.Set("unlink", js.FuncOf(s.unlink))
 	fsObj.Set("fsync", js.FuncOf(s.fsync))
 	fsObj.Set("utimes", js.FuncOf(s.utimes))
-
-	js.Global().Get("api").Get("fs").Set("watch", map[string]any{
-		"respondRPC": js.FuncOf(s.watchRPC),
-	})
+	fsObj.Set("watch", js.FuncOf(s.watchEvented))
+	fsObj.Set("unwatch", js.FuncOf(s.unwatch))
 
 	// TODO later
 	// ftruncate(fd, length, callback) { callback(enosys()); },
@@ -675,22 +678,17 @@ func (s *Service) utimes(this js.Value, args []js.Value) any {
 	return nil
 }
 
-// watch(path, recursive, eventMask, ignores)
-func (s *Service) watchRPC(this js.Value, args []js.Value) any {
+// watch(path, recursive, eventMask, ignores, eventCallback, callback)
+func (s *Service) watchEvented(this js.Value, args []js.Value) any {
 	var (
-		response = args[0]
-		call     = args[1]
+		path      = cleanPath(args[0].String())
+		recursive = args[1].Bool()
+		eventMask = uint(args[2].Int())
+		ignores   = jsutil.ToGoStringSlice(args[3])
+		eventCb   = args[4]
+		cb        = args[5]
 	)
-
-	return jsutil.Promise(func() (any, error) {
-		params := jsutil.Await(call.Call("receive"))
-		var (
-			path      = cleanPath(params.Index(0).String())
-			recursive = params.Index(1).Bool()
-			eventMask = uint(params.Index(2).Int())
-			ignores   = jsutil.ToGoStringSlice(params.Index(3))
-		)
-
+	go func() {
 		log("watch", path)
 
 		w, err := s.fsys.Watch(path, &watchfs.Config{
@@ -708,18 +706,38 @@ func (s *Service) watchRPC(this js.Value, args []js.Value) any {
 					"oldpath": e.OldPath,
 					"err":     jsErr,
 				}
-				response.Call("send", jsEvent)
+				eventCb.Invoke(jsEvent)
 			},
 		})
 		if err != nil {
-			response.Call("return", jsutil.ToJSError(err))
-			return nil, err
+			cb.Invoke(nil, jsutil.ToJSError(err))
+			return
 		}
 
-		ch := jsutil.Await(response.Call("continue"))
-		io.CopyN(io.Discard, &jsutil.Reader{ch}, 1) // read blocks close
-		ch.Call("close")
-		w.Close()
-		return nil, nil
-	})
+		wHandle := s.nextWatchHandle
+		s.watches[wHandle] = w
+		s.nextWatchHandle++
+		cb.Invoke(wHandle, nil)
+	}()
+
+	return nil
+}
+
+// unwatch(handle, callback)
+func (s *Service) unwatch(this js.Value, args []js.Value) any {
+	var (
+		handle = args[0].Int()
+		cb     = args[1]
+	)
+
+	w, exists := s.watches[handle]
+	if !exists {
+		cb.Invoke(jsutil.ToJSError(fs.ErrClosed))
+		return nil
+	}
+
+	w.Close()
+	delete(s.watches, handle)
+	cb.Invoke(nil)
+	return nil
 }
