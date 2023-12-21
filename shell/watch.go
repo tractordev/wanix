@@ -5,12 +5,11 @@ import (
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
-	"tractor.dev/toolkit-go/engine/fs/watchfs"
+	"tractor.dev/wanix/internal/jsutil"
 	"tractor.dev/wanix/internal/osfs"
 )
 
-var watcher *watchfs.FS
-var watches = make(map[string]*watchfs.Watch)
+var watches = make(map[string]int)
 
 func watchCmd() *cli.Command {
 	var recursive bool
@@ -21,11 +20,7 @@ func watchCmd() *cli.Command {
 		Run: func(ctx *cli.Context, args []string) {
 			path := unixToFsPath(args[0])
 
-			if watcher == nil {
-				watcher = watchfs.New(osfs.New())
-			}
-
-			if exists, err := fs.Exists(watcher, path); !exists {
+			if exists, err := fs.Exists(osfs.New(), path); !exists {
 				if !checkErr(ctx, err) {
 					fmt.Printf("file or directory at path '%s' doesn't exist\n", absPath(path))
 				}
@@ -37,17 +32,13 @@ func watchCmd() *cli.Command {
 				return
 			}
 
-			w, err := watcher.Watch(path, &watchfs.Config{
-				Recursive: recursive,
-				Handler: func(e watchfs.Event) {
-					fmt.Println("event", e.String())
-				},
-			})
+			// watch(path, recursive, eventMask, ignores)
+			w, err := jsutil.WanixSyscall("fs.watch", path, recursive, 0, []any{})
 			if err != nil {
 				fmt.Fprintln(ctx, err)
 				return
 			}
-			watches[path] = w
+			watches[path] = w.Int()
 		},
 	}
 
@@ -61,18 +52,19 @@ func unwatchCmd() *cli.Command {
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			path := unixToFsPath(args[0])
-			w, exists := watches[path]
+			wHandle, exists := watches[path]
 			if !exists {
 				fmt.Printf("path '%s' isn't being watched\n", absPath(path))
 				return
 			}
-			w.Close()
+
+			_, err := jsutil.WanixSyscall("fs.unwatch", wHandle)
+			if err != nil {
+				fmt.Fprintln(ctx, err)
+				return
+			}
+
 			delete(watches, path)
-			go func() {
-				for e := range w.Iter() {
-					fmt.Println("event", e.String())
-				}
-			}()
 		},
 	}
 	return cmd

@@ -3,11 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
-	"syscall/js"
+	"path/filepath"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
+	"tractor.dev/wanix/internal/jsutil"
 )
 
 func openCmd() *cli.Command {
@@ -19,8 +20,9 @@ func openCmd() *cli.Command {
 			var path string
 			var searchPaths = []string{"sys/app", "app", "sys/dev/internal/app"}
 			for _, searchPath := range searchPaths {
-				if exists, _ := fs.Exists(os.DirFS("/"), fmt.Sprintf("%s/%s", searchPath, args[0])); exists {
-					path = fmt.Sprintf("%s/%s", searchPath, args[0])
+				appPath := filepath.Join(searchPath, args[0])
+				if exists, _ := fs.Exists(os.DirFS("/"), appPath); exists {
+					path = appPath
 					break
 				}
 			}
@@ -28,6 +30,7 @@ func openCmd() *cli.Command {
 				fmt.Fprintln(ctx, "app not found")
 				return
 			}
+
 			if openWatch != nil {
 				openWatch.Close()
 			}
@@ -49,24 +52,25 @@ func openCmd() *cli.Command {
 			// 		},
 			// 	})
 			// } else {
-			// 	openWatch, err = watchfs.WatchFile(fs, path, &watchfs.Config{
-			// 		Recursive: true,
-			// 		Handler: func(e watchfs.Event) {
-			// 			if e.Type == watchfs.EventWrite && len(e.Path) > len(path) {
-			// 				if !firstWrite {
-			// 					firstWrite = true
-			// 					return
-			// 				}
-			// 				js.Global().Get("wanix").Get("loadApp").Invoke("main")
+			// openWatch, err = watchfs.WatchFile(fs, path, &watchfs.Config{
+			// 	Recursive: true,
+			// 	Handler: func(e watchfs.Event) {
+			// 		if e.Type == watchfs.EventWrite && len(e.Path) > len(path) {
+			// 			if !firstWrite {
+			// 				firstWrite = true
+			// 				return
 			// 			}
-			// 		},
-			// 	})
+			// 			jsutil.WanixSyscall("host.loadApp", "main", path, true)
+			// 		}
+			// 	},
+			// })
 			// }
 			// if err != nil {
-			// 	fmt.Fprintf(t, "%s\n", err)
+			// 	fmt.Fprintln(ctx, err)
 			// 	return
 			// }
-			js.Global().Get("sys").Call("call", "host.loadApp", []any{"main", path, true})
+
+			jsutil.WanixSyscall("host.loadApp", "main", path, true)
 		},
 	}
 	return cmd
