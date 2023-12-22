@@ -69,7 +69,7 @@ func unwatchCmd() *cli.Command {
 				fmt.Printf("path '%s' isn't being watched\n", absPath(path))
 				return
 			}
-			// this should close the rpc channel
+			// close the rpc channel
 			jsutil.Await(resp.Call("send", 0))
 			delete(watches, path)
 		},

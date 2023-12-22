@@ -38,7 +38,6 @@ Omits any SOURCE that is a directory if "-r" flag isn't specified.
 			DEST_exists := dstErr == nil
 			DEST_isDir := DEST_exists && dstInfo.IsDir()
 
-			fmt.Println(args)
 			if len(args)-1 >= 2 && !DEST_isDir {
 				io.WriteString(ctx, fmt.Sprintf("target '%s' is not a directory\n", args[len(args)-1]))
 				return

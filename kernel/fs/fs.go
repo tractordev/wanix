@@ -691,7 +691,7 @@ func (s *Service) watchRPC(this js.Value, args []js.Value) any {
 			ignores   = jsutil.ToGoStringSlice(params.Index(3))
 		)
 
-		log("watch", path)
+		log("watch", path, recursive, eventMask, params.Index(3))
 
 		w, err := s.fsys.Watch(path, &watchfs.Config{
 			Recursive: recursive,
