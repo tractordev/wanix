@@ -58,6 +58,8 @@ func (m *Shell) buildCmds() {
 	m.cmd.AddCommand(printEnvCmd())
 	m.cmd.AddCommand(exportCmd())
 	m.cmd.AddCommand(treeCmd())
+	m.cmd.AddCommand(watchCmd())
+	m.cmd.AddCommand(unwatchCmd())
 	m.cmd.Run = m.ExecuteCommand
 }
 
