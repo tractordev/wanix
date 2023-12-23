@@ -49,12 +49,16 @@ func (ifs *FS) Chmod(name string, mode fs.FileMode) error {
 	updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
 		file := args[0]
 		file.Set("perms", uint32(mode.Perm()))
+		file.Set("ctime", time.Now().Unix())
 		return file
 	})
 	defer updateFunc.Release()
 
-	_, err := jsutil.AwaitErr(callHelper("updateFile", ifs.db, name, updateFunc))
-	return err
+	if _, err := jsutil.AwaitErr(callHelper("updateFile", ifs.db, name, updateFunc)); err != nil {
+		return &fs.PathError{Op: "chmod", Path: name, Err: err}
+	}
+
+	return nil
 }
 func (ifs *FS) Chown(name string, uid, gid int) error {
 	return fs.ErrPermission // TODO: maybe just a no-op?
@@ -68,12 +72,16 @@ func (ifs *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 		file := args[0]
 		file.Set("atime", atime.Unix())
 		file.Set("mtime", mtime.Unix())
+		file.Set("ctime", time.Now().Unix())
 		return file
 	})
 	defer updateFunc.Release()
 
-	_, err := jsutil.AwaitErr(callHelper("updateFile", ifs.db, name, updateFunc))
-	return err
+	if _, err := jsutil.AwaitErr(callHelper("updateFile", ifs.db, name, updateFunc)); err != nil {
+		return &fs.PathError{Op: "chtimes", Path: name, Err: err}
+	}
+
+	return nil
 }
 func (ifs *FS) Create(name string) (fs.File, error) {
 	return ifs.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -86,14 +94,19 @@ func (ifs *FS) Mkdir(name string, perm fs.FileMode) error {
 	if dir != "." && dir != "/" {
 		exists, err := fs.DirExists(ifs, dir)
 		if err != nil {
-			return err
+			return &fs.PathError{Op: "mkdir", Path: name, Err: err}
 		}
 		if !exists {
 			return &fs.PathError{Op: "mkdir", Path: dir, Err: fs.ErrInvalid}
 		}
 	}
-	_, err := jsutil.AwaitErr(callHelper("addFile", ifs.db, name, uint32(perm), true))
-	return err
+
+	_, err := jsutil.AwaitErr(callHelper("addFile", ifs.db, name, uint32(perm), true, time.Now().Unix()))
+	if err != nil {
+		return &fs.PathError{Op: "mkdir", Path: name, Err: err}
+	}
+
+	return nil
 }
 func (ifs *FS) MkdirAll(path string, perm fs.FileMode) error {
 	if !fs.ValidPath(path) {
@@ -109,11 +122,11 @@ func (ifs *FS) MkdirAll(path string, perm fs.FileMode) error {
 		dir := filepath.Join(pp...)
 		exists, err := fs.DirExists(ifs, dir)
 		if err != nil {
-			return err
+			return &fs.PathError{Op: "mkdirall", Path: dir, Err: err}
 		}
 		if !exists {
 			if err := ifs.Mkdir(dir, perm); err != nil {
-				return err
+				return &fs.PathError{Op: "mkdirall", Path: dir, Err: err}
 			}
 		}
 	}
@@ -152,21 +165,22 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrExist}
 	}
 
-	// TODO: figure out a better way of signaling error type from javascript
-	if err != nil && strings.Contains(err.Error(), "ErrNotExist") {
-		if flag&os.O_CREATE > 0 {
-			if key, err = jsutil.AwaitErr(callHelper("addFile", ifs.db, name, uint32(perm), perm.IsDir())); err == nil {
+	if err != nil {
+		// TODO: figure out a better way of signaling error type from javascript
+		if strings.Contains(err.Error(), "ErrNotExist") {
+			if flag&os.O_CREATE > 0 {
+				key, err = jsutil.AwaitErr(callHelper("addFile", ifs.db, name, uint32(perm), perm.IsDir(), time.Now().Unix()))
+				if err != nil {
+					return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+				}
+
 				file = &indexedFile{name: name, key: key.Int(), ifs: ifs, flags: flag}
 			} else {
-				return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+				return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 			}
 		} else {
-			return nil, fs.ErrNotExist
+			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 		}
-	}
-
-	if err != nil {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
 
 	if flag&os.O_APPEND > 0 {
@@ -175,6 +189,20 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 	if flag&os.O_TRUNC > 0 {
 		// TODO: proper Truncate implementation
 		file.(*indexedFile).Seek(0, io.SeekStart)
+	}
+
+	// if we didn't just create the file, update atime
+	if flag&os.O_CREATE == 0 {
+		updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
+			file := args[0]
+			file.Set("atime", time.Now().Unix())
+			return file
+		})
+		defer updateFunc.Release()
+
+		if _, err = jsutil.AwaitErr(callHelper("updateFile", ifs.db, name, updateFunc)); err != nil {
+			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+		}
 	}
 
 	return file, nil
@@ -186,18 +214,23 @@ func (ifs *FS) Remove(name string) error {
 	}
 	key, err := jsutil.AwaitErr(callHelper("getFileKey", ifs.db, name))
 	if err != nil {
-		return err
+		return &fs.PathError{Op: "remove", Path: name, Err: err}
 	}
-	_, err = jsutil.AwaitErr(callHelper("deleteFile", ifs.db, key))
-	return err
+	if _, err = jsutil.AwaitErr(callHelper("deleteFile", ifs.db, key)); err != nil {
+		return &fs.PathError{Op: "remove", Path: name, Err: err}
+	}
+
+	return nil
 }
 
 func (ifs *FS) RemoveAll(path string) error {
 	if !fs.ValidPath(path) {
 		return &fs.PathError{Op: "removeAll", Path: path, Err: fs.ErrInvalid}
 	}
-	_, err := jsutil.AwaitErr(callHelper("deleteAll", ifs.db, path))
-	return err
+	if _, err := jsutil.AwaitErr(callHelper("deleteAll", ifs.db, path)); err != nil {
+		return &fs.PathError{Op: "removeAll", Path: path, Err: err}
+	}
+	return nil
 }
 
 func (ifs *FS) Rename(oldname, newname string) error {
@@ -210,19 +243,22 @@ func (ifs *FS) Rename(oldname, newname string) error {
 
 	key, err := jsutil.AwaitErr(callHelper("getFileKey", ifs.db, oldname))
 	if err != nil {
-		return err
+		return &fs.PathError{Op: "rename", Path: newname, Err: err}
 	}
 
 	updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
 		file := args[0]
 		file.Set("path", newname)
-		// TODO: set mtime
+		file.Set("ctime", time.Now().Unix())
 		return file
 	})
 	defer updateFunc.Release()
 
-	_, err = jsutil.AwaitErr(callHelper("updateFile", ifs.db, key, updateFunc))
-	return err
+	if _, err = jsutil.AwaitErr(callHelper("updateFile", ifs.db, key, updateFunc)); err != nil {
+		return &fs.PathError{Op: "rename", Path: newname, Err: err}
+	}
+
+	return nil
 }
 
 func (ifs *FS) Stat(name string) (fs.FileInfo, error) {
@@ -232,7 +268,7 @@ func (ifs *FS) Stat(name string) (fs.FileInfo, error) {
 
 	f, err := jsutil.AwaitErr(callHelper("getFileByPath", ifs.db, name))
 	if err != nil {
-		return nil, fs.ErrNotExist
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 	}
 
 	return &indexedInfo{
@@ -273,7 +309,7 @@ type indexedFile struct {
 	offset int64
 	// TODO: see if read/write caches can be merged
 
-	// used internally by data()
+  // used internally by getData()
 	readCache    []byte
 	outdatedRead bool
 	// used internally by Write() and Sync()
@@ -285,8 +321,10 @@ func (f *indexedFile) ReadDir(n int) ([]fs.DirEntry, error) {
 	return f.ifs.ReadDir(f.name)
 }
 
-func (f *indexedFile) data() ([]byte, error) {
+func (f *indexedFile) getData() ([]byte, error) {
 	if f.outdatedRead || f.readCache == nil {
+		// Deliberately not updating atime, as that can get slow fast.
+		// Aiming for posix-like, not compliant.
 		data, err := jsutil.AwaitErr(callHelper("readFile", f.ifs.db, f.key))
 		if err != nil {
 			return nil, err
@@ -322,7 +360,7 @@ func (f *indexedFile) Read(p []byte) (n int, err error) {
 		return 0, fs.ErrPermission
 	}
 
-	data, err := f.data()
+	data, err := f.getData()
 	if err != nil {
 		return 0, err
 	}
@@ -345,7 +383,7 @@ func (f *indexedFile) Read(p []byte) (n int, err error) {
 
 func (f *indexedFile) Write(p []byte) (n int, err error) {
 	if f.writeCache == nil {
-		if f.writeCache, err = f.data(); err != nil {
+		if f.writeCache, err = f.getData(); err != nil {
 			return 0, err
 		}
 	}
@@ -387,14 +425,17 @@ func (f *indexedFile) Sync() error {
 		js.CopyBytesToJS(buf, f.writeCache)
 		file.Set("blob", js.Global().Get("Blob").New([]any{buf}, mime))
 		file.Set("size", len(f.writeCache))
-		// TODO: set mtime
+
+		file.Set("mtime", time.Now().Unix())
+		file.Set("ctime", time.Now().Unix())
+		file.Set("atime", time.Now().Unix())
 		return file
 	})
 	defer updateFunc.Release()
 
 	_, err := jsutil.AwaitErr(callHelper("updateFile", f.ifs.db, f.key, updateFunc))
 	if err != nil {
-		return err
+		return &fs.PathError{Op: "sync", Path: f.name, Err: err}
 	}
 
 	f.dirty = false
@@ -415,15 +456,15 @@ func (f *indexedFile) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekCurrent:
 		f.offset += offset
 	case io.SeekEnd:
-		if d, err := f.data(); err == nil {
+		if d, err := f.getData(); err == nil {
 			f.offset = int64(len(d)) + offset
 		} else {
-			return 0, err
+			return 0, &fs.PathError{Op: "seek", Path: f.name, Err: err}
 		}
 	}
 	if f.offset < 0 {
 		f.offset = 0
-		return 0, fmt.Errorf("Seek: resultant offset cannot be negative")
+		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fmt.Errorf("%w: resultant offset cannot be negative", fs.ErrInvalid)}
 	}
 	return f.offset, nil
 }

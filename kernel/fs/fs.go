@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
+
 	"tractor.dev/toolkit-go/engine/fs/fsutil"
+	"tractor.dev/toolkit-go/engine/fs/watchfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
@@ -25,7 +27,7 @@ func log(args ...any) {
 }
 
 type Service struct {
-	fsys *mountablefs.FS
+	fsys *watchfs.FS
 
 	fds    map[int]*fd
 	nextFd int
@@ -46,7 +48,8 @@ func (s *Service) Initialize() {
 	if err != nil {
 		panic(err)
 	}
-	s.fsys = mountablefs.New(ifs)
+	mntfs := mountablefs.New(ifs)
+	s.fsys = watchfs.New(mntfs)
 
 	// ensure basic system tree exists
 	fs.MkdirAll(s.fsys, "app", 0755)
@@ -62,7 +65,7 @@ func (s *Service) Initialize() {
 		panic(err)
 	}
 	if resp.StatusCode == 200 {
-		if err := s.fsys.Mount(httpfs.New(devURL), "/sys/dev"); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).Mount(httpfs.New(devURL), "/sys/dev"); err != nil {
 			panic(err)
 		}
 	}
@@ -92,6 +95,10 @@ func (s *Service) InitializeJS() {
 	fsObj.Set("unlink", js.FuncOf(s.unlink))
 	fsObj.Set("fsync", js.FuncOf(s.fsync))
 	fsObj.Set("utimes", js.FuncOf(s.utimes))
+
+	js.Global().Get("api").Get("fs").Set("watch", map[string]any{
+		"respondRPC": js.FuncOf(s.watchRPC),
+	})
 
 	// TODO later
 	// ftruncate(fd, length, callback) { callback(enosys()); },
@@ -145,7 +152,7 @@ func (s *Service) open(this js.Value, args []js.Value) any {
 	go func() {
 		log("open", path, s.nextFd, strings.Join(flags, ","), fmt.Sprintf("%o\n", mode))
 
-		f, err := s.fsys.OpenFile(path, flag, fs.FileMode(mode))
+		f, err := s.fsys.FS.(*mountablefs.FS).OpenFile(path, flag, fs.FileMode(mode))
 		if err != nil {
 			if f != nil {
 				log("opened")
@@ -312,7 +319,7 @@ func (s *Service) readdir(this js.Value, args []js.Value) any {
 }
 
 func (s *Service) _stat(path string, cb js.Value) {
-	fi, err := s.fsys.Stat(path)
+	fi, err := s.fsys.FS.(*mountablefs.FS).Stat(path)
 	if err != nil {
 		cb.Invoke(jsutil.ToJSError(err))
 		return
@@ -433,7 +440,7 @@ func (s *Service) chown(this js.Value, args []js.Value) any {
 	go func() {
 		log("chown", path)
 
-		if err := s.fsys.Chown(path, uid, gid); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).Chown(path, uid, gid); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -462,7 +469,7 @@ func (s *Service) fchown(this js.Value, args []js.Value) any {
 			return
 		}
 
-		if err := s.fsys.Chown(f.Path, uid, gid); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).Chown(f.Path, uid, gid); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -483,7 +490,7 @@ func (s *Service) lchown(this js.Value, args []js.Value) any {
 	go func() {
 		log("lchown", path)
 
-		if err := s.fsys.Chown(path, uid, gid); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).Chown(path, uid, gid); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -503,7 +510,7 @@ func (s *Service) chmod(this js.Value, args []js.Value) any {
 	go func() {
 		log("chmod", path)
 
-		if err := s.fsys.Chmod(path, fs.FileMode(mode)); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).Chmod(path, fs.FileMode(mode)); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -531,7 +538,7 @@ func (s *Service) fchmod(this js.Value, args []js.Value) any {
 			return
 		}
 
-		if err := s.fsys.Chmod(f.Path, fs.FileMode(mode)); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).Chmod(f.Path, fs.FileMode(mode)); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -551,7 +558,7 @@ func (s *Service) mkdir(this js.Value, args []js.Value) any {
 	go func() {
 		log("mkdir", path)
 
-		if err := s.fsys.MkdirAll(path, os.FileMode(perm)); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).MkdirAll(path, os.FileMode(perm)); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -570,7 +577,7 @@ func (s *Service) rename(this js.Value, args []js.Value) any {
 	go func() {
 		log("rename", from, to)
 
-		if err := s.fsys.Rename(from, to); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).Rename(from, to); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -590,7 +597,7 @@ func (s *Service) rmdir(this js.Value, args []js.Value) any {
 		log("rmdir", path)
 
 		// TODO: should only remove if dir is empty i think?
-		if err := s.fsys.RemoveAll(path); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).RemoveAll(path); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -610,7 +617,7 @@ func (s *Service) unlink(this js.Value, args []js.Value) any {
 		log("unlink", path)
 
 		// GOOS=js calls unlink for os.RemoveAll so we use RemoveAll here
-		if err := s.fsys.RemoveAll(path); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).RemoveAll(path); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -662,7 +669,7 @@ func (s *Service) utimes(this js.Value, args []js.Value) any {
 	go func() {
 		log("utimes", path)
 
-		if err := s.fsys.Chtimes(path, atime, mtime); err != nil {
+		if err := s.fsys.FS.(*mountablefs.FS).Chtimes(path, atime, mtime); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -671,4 +678,53 @@ func (s *Service) utimes(this js.Value, args []js.Value) any {
 	}()
 
 	return nil
+}
+
+// watch(path, recursive, eventMask, ignores)
+func (s *Service) watchRPC(this js.Value, args []js.Value) any {
+	var (
+		response = args[0]
+		call     = args[1]
+	)
+
+	return jsutil.Promise(func() (any, error) {
+		params := jsutil.Await(call.Call("receive"))
+		var (
+			path      = cleanPath(params.Index(0).String())
+			recursive = params.Index(1).Bool()
+			eventMask = uint(params.Index(2).Int())
+			ignores   = jsutil.ToGoStringSlice(params.Index(3))
+		)
+
+		log("watch", path, recursive, eventMask, params.Index(3))
+
+		w, err := s.fsys.Watch(path, &watchfs.Config{
+			Recursive: recursive,
+			EventMask: eventMask,
+			Ignores:   ignores,
+			Handler: func(e watchfs.Event) {
+				jsErr := js.Null()
+				if e.Err != nil {
+					jsErr = jsutil.ToJSError(e.Err)
+				}
+				jsEvent := map[string]any{
+					"type":    uint(e.Type),
+					"path":    e.Path,
+					"oldpath": e.OldPath,
+					"err":     jsErr,
+				}
+				response.Call("send", jsEvent)
+			},
+		})
+		if err != nil {
+			response.Call("return", jsutil.ToJSError(err))
+			return nil, err
+		}
+
+		ch := jsutil.Await(response.Call("continue"))
+		io.CopyN(io.Discard, &jsutil.Reader{ch}, 1) // read blocks close
+		ch.Call("close")
+		w.Close()
+		return nil, nil
+	})
 }

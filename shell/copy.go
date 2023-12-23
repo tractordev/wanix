@@ -38,7 +38,6 @@ Omits any SOURCE that is a directory if "-r" flag isn't specified.
 			DEST_exists := dstErr == nil
 			DEST_isDir := DEST_exists && dstInfo.IsDir()
 
-			fmt.Println(args)
 			if len(args)-1 >= 2 && !DEST_isDir {
 				io.WriteString(ctx, fmt.Sprintf("target '%s' is not a directory\n", args[len(args)-1]))
 				return
@@ -60,7 +59,7 @@ Omits any SOURCE that is a directory if "-r" flag isn't specified.
 				var finalDestExists bool
 				if DEST_isDir {
 					finalDest = filepath.Join(DEST, filepath.Base(SOURCE))
-					finalDestExists, err = fs.Exists(osfs.New(), finalDest)
+					finalDestExists, err = fs.Exists(osfs.New(), unixToFsPath(finalDest))
 					if checkErr(ctx, err) {
 						continue
 					}
@@ -94,7 +93,7 @@ Omits any SOURCE that is a directory if "-r" flag isn't specified.
 					}
 				}
 
-				if err := fsutil.CopyAll(osfs.New(), SOURCE, finalDest); checkErr(ctx, err) {
+				if err := fsutil.CopyAll(osfs.New(), unixToFsPath(SOURCE), unixToFsPath(finalDest)); checkErr(ctx, err) {
 					return
 				}
 			}

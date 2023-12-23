@@ -55,7 +55,7 @@ export function initialize() {
 	})
 }
 
-export function addFile(db, path, perms, isdir) {
+export function addFile(db, path, perms, isdir, unixTime) {
 	return new Promise((resolve, reject) => {
 		const transaction = db.transaction("files", "readwrite");
 
@@ -70,9 +70,9 @@ export function addFile(db, path, perms, isdir) {
 			perms: perms,
 			size: 0,
 			isdir: isdir,
-			ctime: 0,
-			mtime: 0,
-			atime: 0,
+			ctime: unixTime,
+			mtime: unixTime,
+			atime: unixTime,
 			blob: new Blob([""], {
 				type: "text/plain"
 			}),
