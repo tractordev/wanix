@@ -363,7 +363,9 @@ func (f *indexedFile) Write(p []byte) (n int, err error) {
 	}
 
 	copy(f.writeCache[f.offset:writeEnd], p)
-	f.writeCache = f.writeCache[:writeEnd]
+	if len(f.writeCache) < int(writeEnd) {
+		f.writeCache = f.writeCache[:writeEnd]
+	}
 	f.offset = writeEnd
 	f.dirty = true
 	return len(p), nil

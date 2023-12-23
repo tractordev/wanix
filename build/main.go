@@ -224,7 +224,6 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		"-o", objPath,
 		"-importcfg", importcfgPath,
 		// "-I", "/tmp/build/pkg/targets/js_wasm/", // TODO: I think this can replace our generated importcfg
-		"-v",
 		srcInfo.filePath(),
 	}
 	if hasEmbeds {
