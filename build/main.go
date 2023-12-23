@@ -109,7 +109,7 @@ func setupCLI() *cli.Command {
 		Os:           cFlags.String("os", runtime.GOOS, "Sets the target OS (defaults to the host OS)"),
 		Arch:         cFlags.String("arch", runtime.GOARCH, "Sets the target architecture (defaults to the host architecture)"),
 		PrintTargets: cFlags.Bool("targets", false, "Print the supported build targets"),
-		Output:       cFlags.String("output", "", "Outputs an executable to the given filepath or directory (defaults to cwd)"),
+		Output:       cFlags.String("output", "", "Outputs the executable to the given filepath or directory (defaults to cwd)"),
 	}
 
 	cmd.Run = func(ctx *cli.Context, args []string) {
@@ -166,21 +166,11 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		return 1
 	}
 
-	// TODO: use os Temp funcs instead
 	if err := os.MkdirAll("/tmp/build", 0755); err != nil {
 		fmt.Println(err)
 		return 1
 	}
-	// TEMPORARY: only commented out to make testing easier.
-	// Ensure we clean up all build artifacts from here on
-	// defer func() {
-	// 	if err := os.RemoveAll("/tmp/build"); err != nil {
-	// 		fmt.Println("unable to clean build artifacts:", err)
-	// 	}
-	// }()
 
-	// TODO: unpack in a different tmp folder, so successive builds don't
-	// require unpacking everything each time.
 	fmt.Println("Unpacking pkg.zip...")
 	if err := openZipPkg("/tmp/build", target); err != nil {
 		fmt.Println("unable to open pkg.zip:", err)
@@ -230,7 +220,7 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		compileArgs = append([]string{"-embedcfg", embedcfgPath}, compileArgs...)
 	}
 
-	fmt.Println("Compiling", args[0])
+	fmt.Printf("Compiling %s to %s\n", args[0], objPath)
 	// run compile.wasm
 	if exitcode, err := run("/tmp/build/pkg/compile.wasm", compileArgs...); exitcode != 0 {
 		if err != nil {
@@ -241,17 +231,13 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 
 	linkcfg := fmt.Sprintf("/tmp/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
 
-	// TODO: make sure it outputs a ".wasm" file in the output dir
-	var output string
-	if *flags.Output != "" {
-		output = *flags.Output
-	} else if srcInfo.dirPath == "." || srcInfo.dirPath == "/" {
-		output, _, _ = strings.Cut(srcInfo.filename, ".")
-	} else {
-		output = filepath.Base(srcInfo.dirPath)
+	output, err := getOutputPath(target.arch, *flags.Output, &srcInfo)
+	if err != nil {
+		fmt.Println(err)
+		return 1
 	}
 
-	fmt.Println("Linking", objPath, output)
+	fmt.Println("Linking", objPath)
 	// run link.wasm using importcfg_$GOOS_$GOARCH.link
 	if exitcode, err := run(
 		"/tmp/build/pkg/link.wasm",
@@ -266,7 +252,44 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		return exitcode
 	}
 
+	fmt.Println("Output", output)
 	return 0
+}
+
+func getOutputPath(arch string, outputArg string, srcInfo *SourceInfo) (string, error) {
+	var output string
+
+	var name string
+	if srcInfo.dirPath == "." || srcInfo.dirPath == "/" {
+		name, _, _ = strings.Cut(srcInfo.filename, ".")
+	} else {
+		name = filepath.Base(srcInfo.dirPath)
+	}
+
+	if arch == "wasm" {
+		name += ".wasm"
+	}
+
+	if outputArg != "" {
+		outputArg = filepath.Clean(outputArg)
+
+		if isdir, err := fsutil.DirExists(os.DirFS("/"), strings.TrimLeft(outputArg, "/")); isdir {
+			output = filepath.Join(outputArg, name)
+		} else if err != nil {
+			return output, err
+		} else {
+			output = outputArg
+		}
+	} else {
+		wd, err := os.Getwd()
+		if err != nil {
+			return output, err
+		}
+
+		output = filepath.Join(wd, name)
+	}
+
+	return output, nil
 }
 
 func run(name string, args ...string) (int, error) {
