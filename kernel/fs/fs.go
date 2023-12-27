@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
+
+	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
@@ -52,8 +54,8 @@ func (s *Service) Initialize() {
 	// ensure basic system tree exists
 	fs.MkdirAll(s.fsys, "app", 0755)
 	fs.MkdirAll(s.fsys, "cmd", 0755)
-	fs.MkdirAll(s.fsys, "sys", 0755)
 	fs.MkdirAll(s.fsys, "sys/app", 0755)
+	fs.MkdirAll(s.fsys, "sys/bin", 0755)
 	fs.MkdirAll(s.fsys, "sys/cmd", 0755)
 	fs.MkdirAll(s.fsys, "sys/dev", 0755)
 
@@ -67,6 +69,9 @@ func (s *Service) Initialize() {
 			panic(err)
 		}
 	}
+
+	s.fsys.MkdirAll("cmd/sauce", 0755)
+	fsutil.WriteFile(s.fsys, "cmd/sauce/main.go", []byte("package main\nimport \"fmt\"\nfunc main() {\n\tfmt.Println(\"Hello World!\")\n}"), 0644)
 }
 
 func (s *Service) InitializeJS() {

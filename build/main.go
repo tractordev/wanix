@@ -1,72 +1,57 @@
 package main
 
 import (
+	"archive/zip"
 	"bufio"
+	"bytes"
+	"context"
+	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
-	"syscall/js"
+
+	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/toolkit-go/engine/fs/fsutil"
+	"tractor.dev/wanix/kernel/proc/exec"
 )
-
-func Usage() string {
-	return `Compiles a go file.
-Usage: build <-targets|source file>
-
-Outputs the compiled binary next to the input source file, 
-using the name of the containing directory if possible.
-
-GOOS and GOARCH match the host values by default,
-but can be overridden by environment variables.
-
--targets flag prints the supported build targets.`
-}
 
 type Target struct {
 	os   string
 	arch string
 }
 
+func (t Target) print() string {
+	return strings.Join([]string{t.os, t.arch}, "_")
+}
+
+func (target Target) isValid() bool {
+	for _, t := range supportedTargets {
+		if target == t {
+			return true
+		}
+	}
+	return false
+}
+
 var supportedTargets = []Target{
 	{"js", "wasm"}, {"darwin", "amd64"},
 }
 
-func getBuildTarget() (target Target, valid bool) {
-	target.os = os.Getenv("GOOS")
-	if target.os == "" {
-		target.os = runtime.GOOS
-	}
-
-	target.arch = os.Getenv("GOARCH")
-	if target.arch == "" {
-		target.arch = runtime.GOARCH
-	}
-
-	valid = false
-	for _, t := range supportedTargets {
-		if target == t {
-			valid = true
-			break
-		}
-	}
-
-	return target, valid
-}
-
 type SourceInfo struct {
-	dir_path  string
-	file_name string
+	dirPath  string
+	filename string
 }
 
 func (si SourceInfo) filePath() string {
-	return filepath.Join(si.dir_path, si.file_name)
+	return filepath.Join(si.dirPath, si.filename)
 }
 
 func getSourceInfo(path string) (SourceInfo, error) {
@@ -83,7 +68,6 @@ func getSourceInfo(path string) (SourceInfo, error) {
 
 	// if path is a directory, search dir for main.go
 	// if path is a go file, get parent dir
-	// TODO: user created directories show up as files for some reason.
 	if fstat.IsDir() {
 		entries, err := f.Readdirnames(-1)
 		if err != nil {
@@ -99,50 +83,76 @@ func getSourceInfo(path string) (SourceInfo, error) {
 		}
 
 		if !found {
-			return SourceInfo{}, errors.New("input directory missing a main.go")
+			return SourceInfo{}, fmt.Errorf("%w: missing main.go in directory %s", os.ErrNotExist, path)
 		} else {
-			return SourceInfo{dir_path: filepath.Clean(path), file_name: "main.go"}, nil
+			return SourceInfo{dirPath: filepath.Clean(path), filename: "main.go"}, nil
 		}
 	} else {
-		return SourceInfo{dir_path: filepath.Dir(path), file_name: filepath.Base(path)}, nil
+		return SourceInfo{dirPath: filepath.Dir(path), filename: filepath.Base(path)}, nil
 	}
+}
+
+type BuildFlags struct {
+	Os, Arch, Output *string
+	PrintTargets     *bool
+}
+
+func setupCLI() *cli.Command {
+	cmd := &cli.Command{
+		Usage: "build [options] <srcPath>",
+		Args:  cli.MinArgs(1),
+		Short: "Compiles a go file or source directory.",
+	}
+
+	cFlags := cmd.Flags()
+	inFlags := BuildFlags{
+		Os:           cFlags.String("os", runtime.GOOS, "Sets the target OS (defaults to the host OS)"),
+		Arch:         cFlags.String("arch", runtime.GOARCH, "Sets the target architecture (defaults to the host architecture)"),
+		PrintTargets: cFlags.Bool("targets", false, "Print the supported build targets"),
+		Output:       cFlags.String("output", "", "Outputs the executable to the given filepath or directory (defaults to cwd)"),
+	}
+
+	cmd.Run = func(ctx *cli.Context, args []string) {
+		os.Exit(mainWithExitCode(inFlags, args))
+	}
+
+	return cmd
 }
 
 func main() {
-	os.Exit(mainWithExitCode())
+	if err := cli.Execute(context.Background(), setupCLI(), os.Args[1:]); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
-func mainWithExitCode() int {
-	args := os.Args[1:]
+//go:embed pkg.zip
+var zipEmbed []byte
 
-	if len(args) != 1 {
-		fmt.Println(Usage())
-		return 1
-	}
-
-	if args[0] == "-targets" {
+func mainWithExitCode(flags BuildFlags, args []string) int {
+	if *flags.PrintTargets {
 		fmt.Println("Supported targets:")
 		for _, t := range supportedTargets {
-			fmt.Printf("GOOS=%s GOARCH=%s\n", t.os, t.arch)
+			fmt.Printf("OS=%s ARCH=%s\n", t.os, t.arch)
 		}
 		return 0
 	}
 
-	// verify valid GOOS and GOARCH targets
-	target, valid := getBuildTarget()
-	if !valid {
-		fmt.Printf("unsupported build target GOOS=%s GOARCH=%s\n", target.os, target.arch)
+	target := Target{os: *flags.Os, arch: *flags.Arch}
+
+	if !target.isValid() {
+		fmt.Printf("unsupported build target OS=%s ARCH=%s\n", target.os, target.arch)
 		fmt.Println("use -targets flag to see supported targets")
 		return 1
 	}
 
-	src_info, err := getSourceInfo(args[0])
+	srcInfo, err := getSourceInfo(args[0])
 	if err != nil {
 		fmt.Println(err)
 		return 1
 	}
 
-	src, err := os.ReadFile(src_info.filePath())
+	src, err := os.ReadFile(srcInfo.filePath())
 	if err != nil {
 		fmt.Println("unable to read source file:", err)
 		return 1
@@ -156,33 +166,37 @@ func mainWithExitCode() int {
 		return 1
 	}
 
+	if err := os.MkdirAll("/tmp/build", 0755); err != nil {
+		fmt.Println(err)
+		return 1
+	}
+
+	fmt.Println("Unpacking pkg.zip...")
+	if err := openZipPkg("/tmp/build", target); err != nil {
+		fmt.Println("unable to open pkg.zip:", err)
+		return 1
+	}
+
 	embedPatterns, hasEmbeds := findEmbedDirectives(src)
 	var embedcfgPath string = ""
 	if hasEmbeds {
-		embedcfgPath, err = generateEmbedConfig(embedPatterns, src_info.dir_path)
+		embedcfgPath, err = generateEmbedConfig(embedPatterns, srcInfo.dirPath)
 		if err != nil {
 			fmt.Println("unable to generate embedcfg:", err)
 			return 1
 		}
-		defer os.Remove(embedcfgPath) // defer applies to function scope!
 	}
 
-	importcfgPath := filepath.Join(src_info.dir_path, strings.Join([]string{"importcfg", target.os, target.arch}, "_"))
-
+	importcfgPath := strings.Join([]string{"/tmp/build/importcfg", target.os, target.arch}, "_")
 	importcfg, err := os.Create(importcfgPath)
 	if err != nil {
 		fmt.Println("unable to create importcfg:", err)
 		return 1
 	}
-	defer func() {
-		if err := os.Remove(importcfgPath); err != nil {
-			fmt.Println("unable to remove importcfg:", err)
-		}
-	}()
 
 	bw := bufio.NewWriter(importcfg)
 	for _, i := range ast.Imports {
-		fmt.Fprintf(bw, "packagefile %s=/sys/pkg/%s_%s/%[1]s.a\n", strings.Trim(i.Path.Value, "\""), target.os, target.arch)
+		fmt.Fprintf(bw, "packagefile %s=/tmp/build/pkg/targets/%s_%s/%[1]s.a\n", strings.Trim(i.Path.Value, "\""), target.os, target.arch)
 	}
 	if err := bw.Flush(); err != nil {
 		fmt.Println("unable to write to importcfg:", err)
@@ -190,53 +204,146 @@ func mainWithExitCode() int {
 	}
 	importcfg.Close()
 
-	env := mapEnv()
+	objPath := fmt.Sprintf("/tmp/build/%s.a", strings.TrimSuffix(srcInfo.filename, ".go"))
 
-	compileArgs := []string{"-p", "main", "-complete", "-dwarf=false", "-pack", "-importcfg", importcfgPath, src_info.filePath()}
+	compileArgs := []string{
+		"-p=main",
+		"-complete",
+		"-dwarf=false",
+		"-pack",
+		"-o", objPath,
+		"-importcfg", importcfgPath,
+		// "-I", "/tmp/build/pkg/targets/js_wasm/", // TODO: I think this can replace our generated importcfg
+		srcInfo.filePath(),
+	}
 	if hasEmbeds {
 		compileArgs = append([]string{"-embedcfg", embedcfgPath}, compileArgs...)
 	}
 
-	fmt.Println("Compiling", args[0])
+	fmt.Printf("Compiling %s to %s\n", args[0], objPath)
 	// run compile.wasm
-	exitcode := runWasm("/cmd/compile.wasm", compileArgs, env)
-	if exitcode.code != 0 {
-		if exitcode.err != nil {
-			fmt.Println(exitcode.err)
+	if exitcode, err := run("/tmp/build/pkg/compile.wasm", compileArgs...); exitcode != 0 {
+		if err != nil {
+			fmt.Println(err)
 		}
-		return exitcode.code
+		return exitcode
 	}
 
-	// TODO: compile.wasm dumps the obj file in the cwd instead of src_info.dir_path
-	obj_path := fmt.Sprintf("%s.a", strings.TrimSuffix(src_info.file_name, ".go"))
-	defer func() {
-		if err := os.Remove(obj_path); err != nil {
-			fmt.Println("unable to remove build artifact:", err)
-		}
-	}()
+	linkcfg := fmt.Sprintf("/tmp/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
 
-	fmt.Println("Linking", obj_path)
+	output, err := getOutputPath(target.arch, *flags.Output, &srcInfo)
+	if err != nil {
+		fmt.Println(err)
+		return 1
+	}
+
+	fmt.Println("Linking", objPath)
 	// run link.wasm using importcfg_$GOOS_$GOARCH.link
-	linkcfg := fmt.Sprintf("/sys/pkg/importcfg_%s_%s.link", target.os, target.arch)
-	exitcode = runWasm("/cmd/link.wasm", []string{"-importcfg", linkcfg, "-buildmode=exe", obj_path}, env)
-	if exitcode.code != 0 {
-		if exitcode.err != nil {
-			fmt.Println(exitcode.err)
+	if exitcode, err := run(
+		"/tmp/build/pkg/link.wasm",
+		"-importcfg", linkcfg, // TODO: maybe we can use importcfgPath instead?
+		"-buildmode=exe",
+		"-o", output,
+		objPath,
+	); exitcode != 0 {
+		if err != nil {
+			fmt.Println(err)
 		}
-		return exitcode.code
+		return exitcode
 	}
 
-	var output_name string
-	if src_info.dir_path == "." || src_info.dir_path == "/" {
-		output_name, _, _ = strings.Cut(src_info.file_name, ".")
-	} else {
-		output_name = filepath.Base(src_info.dir_path)
-	}
-	// TODO: link.wasm dumps a.out in the cwd instead of src_info.dir_path
-	os.Rename("a.out", filepath.Join(src_info.dir_path, output_name))
-
-	// profit
+	fmt.Println("Output", output)
 	return 0
+}
+
+func getOutputPath(arch string, outputArg string, srcInfo *SourceInfo) (string, error) {
+	var output string
+
+	var name string
+	if srcInfo.dirPath == "." || srcInfo.dirPath == "/" {
+		name, _, _ = strings.Cut(srcInfo.filename, ".")
+	} else {
+		name = filepath.Base(srcInfo.dirPath)
+	}
+
+	if arch == "wasm" {
+		name += ".wasm"
+	}
+
+	if outputArg != "" {
+		outputArg = filepath.Clean(outputArg)
+
+		if isdir, err := fsutil.DirExists(os.DirFS("/"), strings.TrimLeft(outputArg, "/")); isdir {
+			output = filepath.Join(outputArg, name)
+		} else if err != nil {
+			return output, err
+		} else {
+			output = outputArg
+		}
+	} else {
+		wd, err := os.Getwd()
+		if err != nil {
+			return output, err
+		}
+
+		output = filepath.Join(wd, name)
+	}
+
+	return output, nil
+}
+
+func run(name string, args ...string) (int, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func openZipPkg(dest string, tgt Target) error {
+	pkg, err := zip.NewReader(bytes.NewReader(zipEmbed), int64(len(zipEmbed)))
+	if err != nil {
+		return err
+	}
+
+	dfs := os.DirFS(dest)
+
+	// TODO: Optimize
+	for _, zfile := range pkg.File {
+		if strings.HasPrefix(zfile.Name, "pkg/targets") {
+			if !strings.HasPrefix(zfile.Name, "pkg/targets/"+tgt.print()) {
+				continue
+			}
+		}
+
+		if exists, err := fsutil.Exists(dfs, filepath.Clean(zfile.Name)); exists {
+			continue
+		} else if err != nil {
+			return err
+		}
+
+		if zfile.FileInfo().IsDir() {
+			if err := os.MkdirAll(filepath.Join(dest, zfile.Name), 0755); err != nil {
+				return err
+			}
+		} else {
+			zreader, err := zfile.Open()
+			defer zreader.Close()
+			if err != nil {
+				return err
+			}
+
+			destFile, err := os.Create(filepath.Join(dest, zfile.Name))
+			defer destFile.Close()
+			if err != nil {
+				return err
+			}
+
+			if _, err := io.Copy(destFile, zreader); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func findEmbedDirectives(src []byte) (patterns []string, ok bool) {
@@ -260,7 +367,7 @@ func findEmbedDirectives(src []byte) (patterns []string, ok bool) {
 	return patterns, true
 }
 
-func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err error) {
+func generateEmbedConfig(patterns []string, srcDir string) (cfgPath string, err error) {
 	jsonObj := struct {
 		Patterns map[string][]string
 		Files    map[string]string
@@ -268,7 +375,7 @@ func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err
 		make(map[string][]string, len(patterns)), make(map[string]string),
 	}
 
-	dfs := os.DirFS(src_dir)
+	dfs := os.DirFS(srcDir)
 	for _, p := range patterns {
 		matches, err := fs.Glob(dfs, patterns[0])
 		if err != nil {
@@ -282,14 +389,14 @@ func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err
 			stat, _ := f.Stat()
 
 			if stat.IsDir() {
-				err := fs.WalkDir(dfs, m, func(path string, d fs.DirEntry, walk_err error) error {
-					if walk_err != nil {
-						return walk_err
+				err := fs.WalkDir(dfs, m, func(path string, d fs.DirEntry, walkErr error) error {
+					if walkErr != nil {
+						return walkErr
 					}
 
 					if !d.IsDir() {
 						jsonObj.Patterns[p] = append(jsonObj.Patterns[p], path)
-						jsonObj.Files[path], _ = filepath.Abs(filepath.Join(src_dir, path))
+						jsonObj.Files[path], _ = filepath.Abs(filepath.Join(srcDir, path))
 					}
 
 					return nil
@@ -299,14 +406,14 @@ func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err
 				}
 			} else {
 				jsonObj.Patterns[p] = append(jsonObj.Patterns[p], m)
-				jsonObj.Files[m], _ = filepath.Abs(filepath.Join(src_dir, m))
+				jsonObj.Files[m], _ = filepath.Abs(filepath.Join(srcDir, m))
 			}
 
 			f.Close()
 		}
 	}
 
-	cfgPath = filepath.Join(src_dir, "embedcfg")
+	cfgPath = "/tmp/build/embedcfg"
 	cfg, err := os.Create(cfgPath)
 	if err != nil {
 		return cfgPath, err
@@ -320,67 +427,4 @@ func generateEmbedConfig(patterns []string, src_dir string) (cfgPath string, err
 	cfg.Close()
 
 	return cfgPath, nil
-}
-
-type ExitCode struct {
-	code int
-	err  error
-}
-
-func runWasm(path string, args []string, env map[string]any) ExitCode {
-	wasm, err := os.ReadFile(path)
-	if err != nil {
-		return ExitCode{1, err}
-	}
-
-	buf := js.Global().Get("Uint8Array").New(len(wasm))
-	js.CopyBytesToJS(buf, wasm)
-
-	var stdout = js.FuncOf(func(this js.Value, args []js.Value) any {
-		buf := make([]byte, args[0].Length())
-		js.CopyBytesToGo(buf, args[0])
-		os.Stdout.Write(buf)
-		return nil
-	})
-	defer stdout.Release()
-
-	// wanix.exec(wasm, args, env, stdout, stderr)
-	promise := js.Global().Get("wanix").Call("exec", buf, unpackArray(args), env, stdout, stdout)
-
-	wait := make(chan ExitCode)
-	then := js.FuncOf(func(this js.Value, args []js.Value) any {
-		wait <- ExitCode{args[0].Int(), nil}
-		return nil
-	})
-	defer then.Release()
-
-	// TODO: not sure this is necessary
-	catch := js.FuncOf(func(this js.Value, args []js.Value) any {
-		wait <- ExitCode{1, errors.New(args[0].Get("message").String())}
-		return nil
-	})
-	defer catch.Release()
-
-	promise.Call("then", then).Call("catch", catch)
-	return <-wait
-}
-
-func mapEnv() map[string]any {
-	env := os.Environ()
-	var result = make(map[string]any, len(env))
-
-	for _, envVar := range env {
-		k, v, _ := strings.Cut(envVar, "=")
-		result[k] = v
-	}
-
-	return result
-}
-
-func unpackArray[S ~[]E, E any](s S) []any {
-	r := make([]any, len(s))
-	for i, e := range s {
-		r[i] = e
-	}
-	return r
 }
