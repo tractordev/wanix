@@ -3171,7 +3171,7 @@ var Session = class {
 };
 
 // mux/session/channel.ts
-var channelMaxPacket = 1 << 24;
+var channelMaxPacket  = 1 << 24;
 var channelWindowSize = 64 * channelMaxPacket;
 var Channel = class {
   constructor(sess) {

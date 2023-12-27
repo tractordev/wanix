@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/toolkit-go/engine/fs/watchfs"
 )
 
 type mountedFSDir struct {
@@ -399,4 +400,23 @@ func (host *FS) Rename(oldname, newname string) error {
 		return &fs.PathError{Op: "rename", Path: oldname + " -> " + newname, Err: errors.ErrUnsupported}
 	}
 	return renameableFS.Rename(trimMountPoint(oldname, prefix), trimMountPoint(newname, prefix))
+}
+
+func (host *FS) Watch(name string, cfg *watchfs.Config) (*watchfs.Watch, error) {
+	name = cleanPath(name)
+	var fsys fs.FS
+	prefix := ""
+
+	if found, mount := host.isPathInMount(name); found {
+		fsys = mount.fsys
+		prefix = mount.mountPoint
+	} else {
+		fsys = host.MutableFS
+	}
+
+	watchableFS, ok := fsys.(watchfs.WatchFS)
+	if !ok {
+		return nil, &fs.PathError{Op: "watch", Path: name, Err: errors.ErrUnsupported}
+	}
+	return watchableFS.Watch(trimMountPoint(name, prefix), cfg)
 }
