@@ -54,30 +54,58 @@ func isWasmFile(name string) bool {
 	return bytes.Equal(magic, WASM_MAGIC)
 }
 
-func parseEnvArgs(args []string, env []string) (rest []string, err error) {
+func parsePrefixEnvArgs(args []string, env *[]string) (rest []string, err error) {
 	for i, arg := range args {
-		name, value, found := strings.Cut(arg, "=")
+		key, value, found := strings.Cut(arg, "=")
 		if !found {
 			rest = args[i:]
 			break
 		}
-		if name == "" {
+		if key == "" {
 			return rest, fmt.Errorf("invalid variable at arg %d", i)
 		}
 
 		found = false
-		for j, entry := range env {
-			if strings.HasPrefix(entry, name) {
-				env[j] = strings.Join([]string{name, value}, "=")
+		for j, entry := range *env {
+			if strings.HasPrefix(entry, key) {
+				(*env)[j] = strings.Join([]string{key, value}, "=")
 				found = true
 				break
 			}
 		}
 		if !found {
-			env = append(env, strings.Join([]string{name, value}, "="))
+			*env = append(*env, strings.Join([]string{key, value}, "="))
 		}
 	}
 	return rest, nil
+}
+
+// Parses $ENV_VAR arguments. `env` is a slice of "key=value" strings.
+// Returns an error if it cannot find a matching environment
+// variable.
+func parseEnvArgs(args *[]string, env []string) error {
+	// TODO: actually parse arguments
+	for i, arg := range *args {
+		envArg, found := strings.CutPrefix(arg, "$")
+		if !found {
+			continue
+		}
+
+		found = false
+		for _, envVar := range env {
+			if strings.HasPrefix(envVar, envArg) {
+				(*args)[i] = envVar[len(envArg)+1:]
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("%w: cannot find environment variable %s", os.ErrInvalid, envArg)
+		}
+	}
+
+	return nil
 }
 
 func unpackArray[S ~[]E, E any](s S) []any {
