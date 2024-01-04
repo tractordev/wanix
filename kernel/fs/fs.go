@@ -14,7 +14,6 @@ import (
 
 	"tractor.dev/toolkit-go/engine/fs"
 
-	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
@@ -70,8 +69,6 @@ func (s *Service) Initialize() {
 		}
 	}
 
-	fs.MkdirAll(s.fsys.FS, "cmd/sauce", 0755)
-	fsutil.WriteFile(s.fsys.FS, "cmd/sauce/main.go", []byte("package main\nimport \"fmt\"\nfunc main() {\n\tfmt.Println(\"Hello World!\")\n}"), 0644)
 }
 
 func (s *Service) InitializeJS() {
@@ -301,7 +298,7 @@ func (s *Service) readdir(this js.Value, args []js.Value) any {
 	go func() {
 		log("readdir", path)
 
-		fi, err := fs.ReadDir(s.fsys, path)
+		fi, err := fs.ReadDir(s.fsys.FS, path)
 		if err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
