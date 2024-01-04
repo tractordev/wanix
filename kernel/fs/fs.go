@@ -52,12 +52,12 @@ func (s *Service) Initialize() {
 	s.fsys = watchfs.New(mntfs)
 
 	// ensure basic system tree exists
-	fs.MkdirAll(s.fsys, "app", 0755)
-	fs.MkdirAll(s.fsys, "cmd", 0755)
-	fs.MkdirAll(s.fsys, "sys/app", 0755)
-	fs.MkdirAll(s.fsys, "sys/bin", 0755)
-	fs.MkdirAll(s.fsys, "sys/cmd", 0755)
-	fs.MkdirAll(s.fsys, "sys/dev", 0755)
+	fs.MkdirAll(s.fsys.FS, "app", 0755)
+	fs.MkdirAll(s.fsys.FS, "cmd", 0755)
+	fs.MkdirAll(s.fsys.FS, "sys/app", 0755)
+	fs.MkdirAll(s.fsys.FS, "sys/bin", 0755)
+	fs.MkdirAll(s.fsys.FS, "sys/cmd", 0755)
+	fs.MkdirAll(s.fsys.FS, "sys/dev", 0755)
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	resp, err := http.DefaultClient.Get(devURL)
@@ -70,8 +70,8 @@ func (s *Service) Initialize() {
 		}
 	}
 
-	s.fsys.MkdirAll("cmd/sauce", 0755)
-	fsutil.WriteFile(s.fsys, "cmd/sauce/main.go", []byte("package main\nimport \"fmt\"\nfunc main() {\n\tfmt.Println(\"Hello World!\")\n}"), 0644)
+	fs.MkdirAll(s.fsys.FS, "cmd/sauce", 0755)
+	fsutil.WriteFile(s.fsys.FS, "cmd/sauce/main.go", []byte("package main\nimport \"fmt\"\nfunc main() {\n\tfmt.Println(\"Hello World!\")\n}"), 0644)
 }
 
 func (s *Service) InitializeJS() {
