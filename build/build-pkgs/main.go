@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"go/build"
 	"io"
 	"io/fs"
 	"os"
@@ -23,12 +24,13 @@ func main() {
 
 	targets := []string{"js_wasm", "darwin_amd64"}
 	for _, target := range targets {
-		fmt.Printf("Building %s...\n", target)
+		fmt.Printf("Building target %s...\n", target)
 		buildArchives(pkgStagingDir, importsDir, target)
 		generateLinkConfig(pkgStagingDir, target)
 	}
 
-	// TODO: build compile.wasm and link.wasm
+	buildTool(pkgStagingDir, "compile")
+	buildTool(pkgStagingDir, "link")
 
 	// TODO: zip everything into build/pkg.zip
 }
@@ -42,7 +44,7 @@ func buildArchives(workingDir, importsDir, target string) {
 	cmd := exec.Command("go", "install", "-work", "-a", "-trimpath", "./...")
 	cmd.Env = append(os.Environ(), "GOOS="+GOOS, "GOARCH="+GOARCH)
 
-	fmt.Println(cmd.String())
+	// fmt.Println(cmd.String())
 	output, err := cmd.CombinedOutput()
 
 	// Ignoring "imported but not used" errors.
@@ -140,11 +142,29 @@ func generateLinkConfig(workingDir, target string) {
 			return nil
 		}
 
-		// packagefile pathWithoutExt=/tmp/build/pkg/targets/target/path\n
+		// packagefile $pathWithoutExt=/tmp/build/pkg/targets/$target/$path\n
 		f.WriteString("packagefile " + path[:len(path)-2] + "=/tmp/build/pkg/targets/" + target + "/" + path + "\n")
 		return nil
 	})
 	if err != nil {
+		fatal(err.Error())
+	}
+}
+
+func buildTool(pkgDir, name string) {
+	// cd $GOROOT/src/cmd/$name && GOOS=js GOARCH=wasm go build -o $pkgDir/$name.wasm -trimpath
+	fmt.Printf("Building %s.wasm...\n", name)
+
+	if err := os.Chdir(filepath.Join(build.Default.GOROOT, "src", "cmd", name)); err != nil {
+		fatal(err.Error())
+	}
+	cmd := exec.Command("go", "build", "-o", filepath.Join(pkgDir, name+".wasm"), "-trimpath")
+	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if output != nil {
+			fmt.Println(string(output))
+		}
 		fatal(err.Error())
 	}
 }
