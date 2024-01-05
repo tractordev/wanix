@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/anmitsu/go-shlex"
 	"golang.org/x/term"
 	"tractor.dev/toolkit-go/engine"
 	"tractor.dev/toolkit-go/engine/cli"
@@ -133,7 +132,7 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 			continue
 		}
 
-		args, err := shlex.Split(line, true)
+		args, err := preprocess(line)
 		if err != nil {
 			m.printErr(fmt.Errorf("parsing error: %w", err))
 			continue
