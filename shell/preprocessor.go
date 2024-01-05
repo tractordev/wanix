@@ -21,27 +21,23 @@ func preprocess(input string) ([]string, error) {
 	result := []string{}
 	for _, arg := range args {
 
-		if strings.Contains(arg, "*") {
+		if strings.ContainsAny(arg, "*?[") {
 			matches, err := filepath.Glob(arg)
 			if err != nil {
 				return result, err
 			}
-
 			// add expanded glob into result
 			for _, match := range matches {
 				result = append(result, match)
 			}
-
 			continue
 		}
 
 		if arg[0] == '$' {
-
 			val, err := posix.Expand(arg, mapping)
 			if err != nil {
 				return result, err
 			}
-
 			result = append(result, val)
 			continue
 		}
