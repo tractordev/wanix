@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/anmitsu/go-shlex"
+	"github.com/mgood/go-posix"
 )
 
 // Command Preprocessor for shell input
@@ -14,6 +15,8 @@ import (
 
 func preprocess(input string) ([]string, error) {
 	args, err := shlex.Split(input, true)
+
+	mapping := envMap()
 
 	result := []string{}
 	for _, arg := range args {
@@ -24,14 +27,21 @@ func preprocess(input string) ([]string, error) {
 				return result, err
 			}
 
+			// add expanded glob into result
 			for _, match := range matches {
 				result = append(result, match)
 			}
+
 			continue
 		}
 
 		if arg[0] == '$' {
-			val := getEnv(arg[1:])
+
+			val, err := posix.Expand(arg, mapping)
+			if err != nil {
+				return result, err
+			}
+
 			result = append(result, val)
 			continue
 		}
@@ -42,13 +52,13 @@ func preprocess(input string) ([]string, error) {
 	return result, err
 }
 
-func getEnv(key string) string {
+func envMap() posix.Map {
 	env := os.Environ()
+	mapping := map[string]string{}
 	for _, kv := range env {
 		split := strings.Split(kv, "=")
-		if split[0] == key {
-			return split[1]
-		}
+		k, v := split[0], split[1]
+		mapping[k] = v
 	}
-	return ""
+	return posix.Map(mapping)
 }
