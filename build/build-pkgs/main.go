@@ -21,23 +21,24 @@ func main() {
 		fatal(err.Error())
 	}
 
-	buildArchives(pkgStagingDir, importsDir, "js", "wasm")
-	buildArchives(pkgStagingDir, importsDir, "darwin", "amd64")
-
-	if err := os.Chdir(pkgStagingDir); err != nil {
-		fatal(err.Error())
+	targets := []string{"js_wasm", "darwin_amd64"}
+	for _, target := range targets {
+		fmt.Printf("Building %s...\n", target)
+		buildArchives(pkgStagingDir, importsDir, target)
+		generateLinkConfig(pkgStagingDir, target)
 	}
 
-	// TODO: build importcfg_target.link files
-
 	// TODO: build compile.wasm and link.wasm
+
+	// TODO: zip everything into build/pkg.zip
 }
 
-func buildArchives(workingDir, importsDir, GOOS, GOARCH string) {
+func buildArchives(workingDir, importsDir, target string) {
 	if err := os.Chdir(importsDir); err != nil {
 		fatal(err.Error())
 	}
 
+	GOOS, GOARCH, _ := strings.Cut(target, "_")
 	cmd := exec.Command("go", "install", "-work", "-a", "-trimpath", "./...")
 	cmd.Env = append(os.Environ(), "GOOS="+GOOS, "GOARCH="+GOARCH)
 
@@ -65,8 +66,7 @@ func buildArchives(workingDir, importsDir, GOOS, GOARCH string) {
 	}
 
 	WORK := string(rgxMatches[1])
-
-	fmt.Println("WORK:", WORK)
+	// fmt.Println("WORK:", WORK)
 	defer os.RemoveAll(WORK)
 
 	workFS := os.DirFS(WORK)
@@ -80,7 +80,7 @@ func buildArchives(workingDir, importsDir, GOOS, GOARCH string) {
 		fatal(err.Error())
 	}
 
-	outputDir := filepath.Join(workingDir, "targets", GOOS+"_"+GOARCH)
+	outputDir := filepath.Join(workingDir, "targets", target)
 	if err := os.MkdirAll(outputDir, 0655); err != nil {
 		fatal(err.Error())
 	}
@@ -121,6 +121,31 @@ func buildArchives(workingDir, importsDir, GOOS, GOARCH string) {
 				fatal(err.Error())
 			}
 		}
+	}
+}
+
+func generateLinkConfig(workingDir, target string) {
+	f, err := os.Create(filepath.Join(workingDir, "importcfg_"+target+".link"))
+	if err != nil {
+		fatal(err.Error())
+	}
+	defer f.Close()
+
+	targetDir := filepath.Join(workingDir, "targets", target)
+	err = fs.WalkDir(os.DirFS(targetDir), ".", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		// packagefile pathWithoutExt=/tmp/build/pkg/targets/target/path\n
+		f.WriteString("packagefile " + path[:len(path)-2] + "=/tmp/build/pkg/targets/" + target + "/" + path + "\n")
+		return nil
+	})
+	if err != nil {
+		fatal(err.Error())
 	}
 }
 
