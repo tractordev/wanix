@@ -58,6 +58,36 @@ func (s *Service) Initialize() {
 	fs.MkdirAll(s.fsys.FS, "sys/cmd", 0755)
 	fs.MkdirAll(s.fsys.FS, "sys/dev", 0755)
 
+	// copy build binary into filesystem
+	{
+		var exists bool
+		fi, err := fs.Stat(s.fsys.FS, "sys/cmd/build.wasm")
+		if err == nil {
+			exists = true
+		} else if os.IsNotExist(err) {
+			exists = false
+		} else {
+			panic(err)
+		}
+
+		blob := js.Global().Get("initfs").Get("build")
+
+		if !exists || int64(blob.Get("size").Int()) != fi.Size() {
+			buffer, err := jsutil.AwaitErr(blob.Call("arrayBuffer"))
+			if err != nil {
+				panic(err)
+			}
+
+			// TODO: creating the file and applying the blob directly in indexedfs would be faster.
+			data := make([]byte, blob.Get("size").Int())
+			js.CopyBytesToGo(data, js.Global().Get("Uint8Array").New(buffer))
+			err = fs.WriteFile(s.fsys.FS, "sys/cmd/build.wasm", data, 0644)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	resp, err := http.DefaultClient.Get(devURL)
 	if err != nil {
@@ -68,7 +98,6 @@ func (s *Service) Initialize() {
 			panic(err)
 		}
 	}
-
 }
 
 func (s *Service) InitializeJS() {

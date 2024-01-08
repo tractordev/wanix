@@ -60,7 +60,7 @@ func (m *Shell) buildCmds() {
 	m.cmd.AddCommand(treeCmd())
 	m.cmd.AddCommand(watchCmd())
 	m.cmd.AddCommand(unwatchCmd())
-	m.cmd.Run = m.ExecuteCommand
+	m.cmd.Run = m.ExecuteExternalCommand
 }
 
 func (m *Shell) Run(ctx context.Context) (err error) {
@@ -139,6 +139,20 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 			continue
 		}
 
+		if err = parseEnvArgs(&args, os.Environ()); err != nil {
+			m.printErr(err)
+			continue
+		}
+
+		if m.script != nil {
+			if err = m.parseScriptArgs(&args); err != nil {
+				m.printErr(err)
+				continue
+			}
+		}
+
+		fmt.Println(args)
+
 		ctx := cli.ContextWithIO(context.Background(), m.defaultStdin, os.Stdout, os.Stderr)
 		if err := cli.Execute(ctx, m.cmd, args); err != nil {
 			m.printErr(fmt.Errorf("exec error: %w", err))
@@ -148,11 +162,11 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 	}
 }
 
-func (m *Shell) ExecuteCommand(ctx *cli.Context, args []string) {
+func (m *Shell) ExecuteExternalCommand(ctx *cli.Context, args []string) {
 	env := os.Environ()
 
 	var err error
-	args, err = parseEnvArgs(args, env)
+	args, err = parsePrefixEnvArgs(args, &env)
 	if err != nil {
 		m.printErr(err)
 		return
@@ -178,7 +192,6 @@ func (m *Shell) ExecuteCommand(ctx *cli.Context, args []string) {
 	if _, err := cmd.Run(); err != nil {
 		m.printErr(err)
 	}
-
 }
 
 func (m *Shell) printErr(err error) {
@@ -267,4 +280,35 @@ func findCommand(name string, args []string) (*exec.Cmd, error) {
 	}
 
 	return nil, fmt.Errorf("unable to find command: %s", name)
+}
+
+// Parses $0-255 arguments, replacing with script input args.
+func (m *Shell) parseScriptArgs(args *[]string) error {
+	// TODO: actually parse arguments
+	// for i, arg := range *args {
+	// numArg, found := strings.CutPrefix(arg, "$")
+	// if !found {
+	// 	continue
+	// }
+
+	// j, err := strconv.ParseUint(numArg, 10, 8)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if uint(j) >= uint(len(os.Args)) {
+	// 	return fmt.Errorf("%w: positional argument %d >= number of arguments %d", os.ErrInvalid, j, len(os.Args))
+	// }
+
+	// (*args)[i] = os.Args[j]
+	// }
+
+	scriptArgs := os.Args[1:]
+	if len(scriptArgs) > 1 {
+		for i, arg := range *args {
+			(*args)[i] = strings.ReplaceAll(arg, "$1", scriptArgs[1])
+		}
+	}
+
+	return nil
 }

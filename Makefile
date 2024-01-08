@@ -16,6 +16,9 @@ kernel: kernel/main.go local/bin
 shell: shell/main.go local/bin
 	cd shell && GOOS=js GOARCH=wasm go build -o ../local/bin/shell .
 
+build/pkg.zip: build/build-pkgs/imports/imports.go build/build-pkgs/main.go
+	cd build && go run ./build-pkgs/main.go ./build-pkgs/imports ./pkg.zip
+
 build: build/main.go build/pkg.zip local/bin
 	cd build && GOOS=js GOARCH=wasm go build -o ../local/bin/build .
 

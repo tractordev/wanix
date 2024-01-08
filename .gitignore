@@ -3,3 +3,4 @@
 .DS_Store
 external/jazz/node_modules
 /local
+/build/pkg.zip
