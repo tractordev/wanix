@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"fmt"
 	"go/build"
 	"io"
@@ -17,25 +18,40 @@ func main() {
 	if err != nil {
 		fatal(err.Error())
 	}
-	pkgStagingDir, err := filepath.Abs(os.Args[2])
+	pkgZipPath, err := filepath.Abs(os.Args[2])
 	if err != nil {
 		fatal(err.Error())
 	}
 
+	zf, err := os.Create(pkgZipPath)
+	if err != nil {
+		fatal(err.Error())
+	}
+	defer func() {
+		if err := zf.Close(); err != nil {
+			fatal(err.Error())
+		}
+	}()
+
+	zw := zip.NewWriter(zf)
+	defer func() {
+		if err := zw.Close(); err != nil {
+			fatal(err.Error())
+		}
+	}()
+
 	targets := []string{"js_wasm", "darwin_amd64"}
 	for _, target := range targets {
 		fmt.Printf("Building target %s...\n", target)
-		buildArchives(pkgStagingDir, importsDir, target)
-		generateLinkConfig(pkgStagingDir, target)
+		pkgNames := buildArchives(zw, importsDir, target)
+		generateLinkConfig(zw, target, pkgNames)
 	}
 
-	buildTool(pkgStagingDir, "compile")
-	buildTool(pkgStagingDir, "link")
-
-	// TODO: zip everything into build/pkg.zip
+	buildTool(zw, "compile")
+	buildTool(zw, "link")
 }
 
-func buildArchives(workingDir, importsDir, target string) {
+func buildArchives(zw *zip.Writer, importsDir, target string) []string {
 	if err := os.Chdir(importsDir); err != nil {
 		fatal(err.Error())
 	}
@@ -82,10 +98,8 @@ func buildArchives(workingDir, importsDir, target string) {
 		fatal(err.Error())
 	}
 
-	outputDir := filepath.Join(workingDir, "targets", target)
-	if err := os.MkdirAll(outputDir, 0655); err != nil {
-		fatal(err.Error())
-	}
+	visited := map[string]struct{}{}
+	unique := []string{}
 	for _, filename := range globMatches {
 		contents, err := fs.ReadFile(workFS, filename)
 		if err != nil {
@@ -99,8 +113,6 @@ func buildArchives(workingDir, importsDir, target string) {
 			continue
 		}
 
-		visited := map[string]struct{}{}
-		unique := []string{}
 		for _, m := range pkgMatches {
 			str := string(m[1])
 			if _, ok := visited[str]; !ok {
@@ -108,83 +120,84 @@ func buildArchives(workingDir, importsDir, target string) {
 				unique = append(unique, str)
 			}
 		}
-
-		for _, pkg := range unique {
-			name, path, found := strings.Cut(pkg, "=")
-			if !found {
-				continue
-			}
-
-			newpath := filepath.Join(outputDir, name) + ".a"
-			if err = os.MkdirAll(filepath.Dir(newpath), 0655); err != nil {
-				fatal(err.Error())
-			}
-			if err = copyFile(path, newpath); err != nil {
-				fatal(err.Error())
-			}
-		}
 	}
+
+	targetDir := filepath.Join("pkg", "targets", target)
+	for i, pkg := range unique {
+		name, path, found := strings.Cut(pkg, "=")
+		if !found {
+			continue
+		}
+
+		if err = copyFileToZip(zw, filepath.Join(targetDir, name)+".a", path); err != nil {
+			fatal(err.Error())
+		}
+
+		// overwrite with name so later we can pass unique to generateLinkConfig
+		unique[i] = name
+	}
+
+	return unique
 }
 
-func generateLinkConfig(workingDir, target string) {
-	f, err := os.Create(filepath.Join(workingDir, "importcfg_"+target+".link"))
+func generateLinkConfig(zw *zip.Writer, target string, packages []string) {
+	wr, err := zw.Create("pkg/importcfg_" + target + ".link")
 	if err != nil {
 		fatal(err.Error())
 	}
-	defer f.Close()
 
-	targetDir := filepath.Join(workingDir, "targets", target)
-	err = fs.WalkDir(os.DirFS(targetDir), ".", func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-
-		// packagefile $pathWithoutExt=/tmp/build/pkg/targets/$target/$path\n
-		f.WriteString("packagefile " + path[:len(path)-2] + "=/tmp/build/pkg/targets/" + target + "/" + path + "\n")
-		return nil
-	})
-	if err != nil {
-		fatal(err.Error())
+	for _, pkg := range packages {
+		io.WriteString(wr, "packagefile "+pkg+"=/tmp/build/pkg/targets/"+target+"/"+pkg+".a\n")
 	}
 }
 
-func buildTool(pkgDir, name string) {
+func buildTool(zw *zip.Writer, name string) {
 	// cd $GOROOT/src/cmd/$name && GOOS=js GOARCH=wasm go build -o $pkgDir/$name.wasm -trimpath
 	fmt.Printf("Building %s.wasm...\n", name)
 
 	if err := os.Chdir(filepath.Join(build.Default.GOROOT, "src", "cmd", name)); err != nil {
 		fatal(err.Error())
 	}
-	cmd := exec.Command("go", "build", "-o", filepath.Join(pkgDir, name+".wasm"), "-trimpath")
-	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
-	output, err := cmd.CombinedOutput()
+	tmpDir, err := os.MkdirTemp("", "wanix-build-*")
 	if err != nil {
-		if output != nil {
-			fmt.Println(string(output))
+		fatal(err.Error())
+	}
+	defer os.RemoveAll(tmpDir)
+
+	output := filepath.Join(tmpDir, name+".wasm")
+
+	cmd := exec.Command("go", "build", "-o", output, "-trimpath")
+	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+	cmdOut, err := cmd.CombinedOutput()
+	if err != nil {
+		if cmdOut != nil {
+			fmt.Println(string(cmdOut))
 		}
+		fatal(err.Error())
+	}
+
+	if err = copyFileToZip(zw, "pkg/"+name+".wasm", output); err != nil {
 		fatal(err.Error())
 	}
 }
 
-func copyFile(srcPath, dstPath string) error {
-	src, err := os.Open(srcPath)
+func copyFileToZip(zw *zip.Writer, dstPath, srcPath string) error {
+	dst, err := zw.Create(dstPath)
 	if err != nil {
 		return err
 	}
 
-	dst, err := os.Create(dstPath)
+	src, err := os.Open(srcPath)
 	if err != nil {
 		return err
 	}
+	defer src.Close()
 
 	_, err = io.Copy(dst, src)
 	return err
 }
 
 func fatal(msg string) {
-	fmt.Println(msg)
+	fmt.Println("FATAL:", msg)
 	os.Exit(1)
 }
