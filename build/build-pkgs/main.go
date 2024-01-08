@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -122,19 +123,19 @@ func buildArchives(zw *zip.Writer, importsDir, target string) []string {
 		}
 	}
 
-	targetDir := filepath.Join("pkg", "targets", target)
+	targetDir := path.Join("pkg", "targets", target)
 	for i, pkg := range unique {
-		name, path, found := strings.Cut(pkg, "=")
+		name, arPath, found := strings.Cut(pkg, "=")
 		if !found {
 			continue
 		}
 
-		if err = copyFileToZip(zw, filepath.Join(targetDir, name)+".a", path); err != nil {
+		if err = copyFileToZip(zw, path.Join(targetDir, name)+".a", arPath); err != nil {
 			fatal(err.Error())
 		}
 
 		// overwrite with name so later we can pass unique to generateLinkConfig
-		unique[i] = name
+		unique[i] = path.Clean(name)
 	}
 
 	return unique
@@ -155,7 +156,7 @@ func buildTool(zw *zip.Writer, name string) {
 	// cd $GOROOT/src/cmd/$name && GOOS=js GOARCH=wasm go build -o $pkgDir/$name.wasm -trimpath
 	fmt.Printf("Building %s.wasm...\n", name)
 
-	if err := os.Chdir(filepath.Join(build.Default.GOROOT, "src", "cmd", name)); err != nil {
+	if err := os.Chdir(path.Join(build.Default.GOROOT, "src", "cmd", name)); err != nil {
 		fatal(err.Error())
 	}
 	tmpDir, err := os.MkdirTemp("", "wanix-build-*")
@@ -164,7 +165,7 @@ func buildTool(zw *zip.Writer, name string) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	output := filepath.Join(tmpDir, name+".wasm")
+	output := path.Join(tmpDir, name+".wasm")
 
 	cmd := exec.Command("go", "build", "-o", output, "-trimpath")
 	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
