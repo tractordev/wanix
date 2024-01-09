@@ -20,5 +20,11 @@ micro: external/micro/
 	cd external/micro && make build
 	mv external/micro/repo/micro.wasm local/bin/micro
 
+build/pkg.zip: build/build-pkgs/imports/imports.go build/build-pkgs/main.go
+	cd build && go run ./build-pkgs/main.go ./build-pkgs/imports ./pkg.zip
+
+build: build/main.go build/pkg.zip local/bin
+	cd build && GOOS=js GOARCH=wasm go build -o ../local/bin/build .
+
 local/bin:
 	mkdir -p local/bin
