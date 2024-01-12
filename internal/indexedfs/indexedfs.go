@@ -184,11 +184,15 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 	}
 
 	if flag&os.O_APPEND > 0 {
-		file.(*indexedFile).Seek(0, io.SeekEnd)
+		if _, err = file.(*indexedFile).Seek(0, io.SeekEnd); err != nil {
+			return file, err
+		}
+
 	}
 	if flag&os.O_TRUNC > 0 {
-		// TODO: proper Truncate implementation
-		file.(*indexedFile).Seek(0, io.SeekStart)
+		if err = file.(*indexedFile).Truncate(); err != nil {
+			return file, err
+		}
 	}
 
 	// if we didn't just create the file, update atime
@@ -309,7 +313,7 @@ type indexedFile struct {
 	offset int64
 	// TODO: see if read/write caches can be merged
 
-  // used internally by getData()
+	// used internally by getData()
 	readCache    []byte
 	outdatedRead bool
 	// used internally by Write() and Sync()
@@ -407,6 +411,12 @@ func (f *indexedFile) Write(p []byte) (n int, err error) {
 	f.offset = writeEnd
 	f.dirty = true
 	return len(p), nil
+}
+
+func (f *indexedFile) Truncate() error {
+	f.Seek(0, io.SeekStart)
+	f.writeCache = []byte{}
+	return f.Sync()
 }
 
 func (f *indexedFile) Sync() error {

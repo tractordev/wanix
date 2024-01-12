@@ -6,3 +6,4 @@ external/micro/*
 !external/micro/wanix_vendor.patch
 !external/micro/Makefile
 /local
+/build/pkg.zip

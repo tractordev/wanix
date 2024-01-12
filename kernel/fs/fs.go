@@ -14,7 +14,6 @@ import (
 
 	"tractor.dev/toolkit-go/engine/fs"
 
-	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
@@ -52,12 +51,42 @@ func (s *Service) Initialize() {
 	s.fsys = watchfs.New(mntfs)
 
 	// ensure basic system tree exists
-	fs.MkdirAll(s.fsys, "app", 0755)
-	fs.MkdirAll(s.fsys, "cmd", 0755)
-	fs.MkdirAll(s.fsys, "sys/app", 0755)
-	fs.MkdirAll(s.fsys, "sys/bin", 0755)
-	fs.MkdirAll(s.fsys, "sys/cmd", 0755)
-	fs.MkdirAll(s.fsys, "sys/dev", 0755)
+	fs.MkdirAll(s.fsys.FS, "app", 0755)
+	fs.MkdirAll(s.fsys.FS, "cmd", 0755)
+	fs.MkdirAll(s.fsys.FS, "sys/app", 0755)
+	fs.MkdirAll(s.fsys.FS, "sys/bin", 0755)
+	fs.MkdirAll(s.fsys.FS, "sys/cmd", 0755)
+	fs.MkdirAll(s.fsys.FS, "sys/dev", 0755)
+
+	// copy build binary into filesystem
+	{
+		var exists bool
+		fi, err := fs.Stat(s.fsys.FS, "sys/cmd/build.wasm")
+		if err == nil {
+			exists = true
+		} else if os.IsNotExist(err) {
+			exists = false
+		} else {
+			panic(err)
+		}
+
+		blob := js.Global().Get("initfs").Get("build")
+
+		if !exists || int64(blob.Get("size").Int()) != fi.Size() {
+			buffer, err := jsutil.AwaitErr(blob.Call("arrayBuffer"))
+			if err != nil {
+				panic(err)
+			}
+
+			// TODO: creating the file and applying the blob directly in indexedfs would be faster.
+			data := make([]byte, blob.Get("size").Int())
+			js.CopyBytesToGo(data, js.Global().Get("Uint8Array").New(buffer))
+			err = fs.WriteFile(s.fsys.FS, "sys/cmd/build.wasm", data, 0644)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	resp, err := http.DefaultClient.Get(devURL)
@@ -69,9 +98,6 @@ func (s *Service) Initialize() {
 			panic(err)
 		}
 	}
-
-	s.fsys.MkdirAll("cmd/sauce", 0755)
-	fsutil.WriteFile(s.fsys, "cmd/sauce/main.go", []byte("package main\nimport \"fmt\"\nfunc main() {\n\tfmt.Println(\"Hello World!\")\n}"), 0644)
 }
 
 func (s *Service) InitializeJS() {
@@ -301,7 +327,7 @@ func (s *Service) readdir(this js.Value, args []js.Value) any {
 	go func() {
 		log("readdir", path)
 
-		fi, err := fs.ReadDir(s.fsys, path)
+		fi, err := fs.ReadDir(s.fsys.FS, path)
 		if err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
-	"github.com/spf13/afero"
 	"tractor.dev/toolkit-go/engine/fs/xformfs"
 )
 
@@ -26,11 +25,11 @@ func main() {
 		if _, ok := ext[filepath.Ext(r.URL.Path)]; ok {
 			w.Header().Set("content-type", "text/javascript")
 		}
-		httpfs := xformfs.New(afero.FromIOFS{FS: assets})
-		httpfs.Transform(".jsx", transformJSX)
-		httpfs.Transform(".tsx", transformTSX)
-		httpfs.Transform(".ts", transformTSX)
-		http.FileServer(afero.NewHttpFs(httpfs).Dir("assets")).ServeHTTP(w, r)
+		xfs := xformfs.New(assets)
+		xfs.Transform(".jsx", transformJSX)
+		xfs.Transform(".tsx", transformTSX)
+		xfs.Transform(".ts", transformTSX)
+		http.FileServer(http.FS(xfs)).ServeHTTP(w, r)
 	}))
 	fmt.Println("Serving at http://localhost:7070/ ...")
 	http.ListenAndServe(":7070", nil)
