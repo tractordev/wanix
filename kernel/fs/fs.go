@@ -21,8 +21,13 @@ import (
 	"tractor.dev/wanix/internal/mountablefs"
 )
 
+var DebugLog string
+var doLogging bool = DebugLog == "true"
+
 func log(args ...any) {
-	js.Global().Get("console").Call("log", args...)
+	if doLogging {
+		js.Global().Get("console").Call("log", args...)
+	}
 }
 
 type Service struct {
