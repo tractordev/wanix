@@ -101,6 +101,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
       load("./sys/dev/local/bin/kernel"),
       load("./sys/dev/local/bin/shell"),
       load("./sys/dev/local/bin/build"),
+      load("./sys/dev/local/bin/micro"),
     ]);
     
     globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"]));
