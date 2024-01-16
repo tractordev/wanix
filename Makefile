@@ -16,8 +16,12 @@ kernel: kernel/main.go local/bin
 shell: shell/main.go local/bin
 	cd shell && GOOS=js GOARCH=wasm go build -o ../local/bin/shell .
 
-micro: external/micro/
+micro: external/micro/ local/bin
 	cd external/micro && make build
+	mv external/micro/repo/micro.wasm local/bin/micro
+
+dev-micro: external/micro/ local/bin
+	cd external/micro/repo/ && make wasm
 	mv external/micro/repo/micro.wasm local/bin/micro
 
 build/pkg.zip: build/build-pkgs/imports/imports.go build/build-pkgs/main.go

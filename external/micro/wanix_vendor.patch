@@ -36,7 +36,7 @@ new file mode 100644
 index 00000000..d56e4524
 --- /dev/null
 +++ b/vendor/github.com/zyedidia/tcell/v2/tscreen_js.go
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,30 @@
 +//go:build js
 +
 +package tcell
@@ -53,7 +53,6 @@ index 00000000..d56e4524
 +func (t *tScreen) termioInit() error {
 +	t.in = os.Stdin
 +	t.out = os.Stdout
-+	t.resize()
 +	return nil
 +}
 +
@@ -105,8 +104,32 @@ index fc9601aa..34c7ce1e 100644
  build-quick:
  	go build -trimpath -ldflags "-s -w $(GOVARS) $(ADDITIONAL_GO_LINKER_FLAGS)" ./cmd/micro
  
+diff --git a/internal/action/actions_other.go b/internal/action/actions_other.go
+index 6d62581b..71fccc6e 100644
+--- a/internal/action/actions_other.go
++++ b/internal/action/actions_other.go
+@@ -1,4 +1,5 @@
+-// +build plan9 nacl windows
++//go:build plan9 || nacl || windows || js
++// +build plan9 nacl windows js
+ 
+ package action
+ 
+diff --git a/vendor/github.com/zyedidia/tcell/v2/tscreen.go b/vendor/github.com/zyedidia/tcell/v2/tscreen.go
+index 5d1ec0b1..af4a3823 100644
+--- a/vendor/github.com/zyedidia/tcell/v2/tscreen.go
++++ b/vendor/github.com/zyedidia/tcell/v2/tscreen.go
+@@ -950,7 +950,7 @@ func (t *tScreen) nColors() int {
+ func (t *tScreen) PollEvent() Event {
+ 	select {
+ 	case <-t.quit:
+-		return nil
++		return NewEventError(io.EOF)
+ 	case ev := <-t.evch:
+ 		return ev
+ 	}
 diff --git a/cmd/micro/micro.go b/cmd/micro/micro.go
-index 3e6756bc..413e449c 100644
+index 3e6756bc..9f71377b 100644
 --- a/cmd/micro/micro.go
 +++ b/cmd/micro/micro.go
 @@ -361,8 +361,7 @@ func main() {
@@ -119,14 +142,21 @@ index 3e6756bc..413e449c 100644
  
  	// Here is the event loop which runs in a separate thread
  	go func() {
-diff --git a/internal/action/actions_other.go b/internal/action/actions_other.go
-index 6d62581b..71fccc6e 100644
---- a/internal/action/actions_other.go
-+++ b/internal/action/actions_other.go
-@@ -1,4 +1,5 @@
--// +build plan9 nacl windows
-+//go:build plan9 || nacl || windows || js
-+// +build plan9 nacl windows js
+@@ -450,8 +449,6 @@ func DoEvent() {
+ 	}
  
- package action
- 
+ 	if e, ok := event.(*tcell.EventError); ok {
+-		log.Println("tcell event error: ", e.Error())
+-
+ 		if e.Err() == io.EOF {
+ 			// shutdown due to terminal closing/becoming inaccessible
+ 			for _, b := range buffer.OpenBuffers {
+@@ -464,6 +461,8 @@ func DoEvent() {
+ 				screen.Screen.Fini()
+ 			}
+ 			os.Exit(0)
++		} else {
++			log.Println("tcell event error: ", e.Error())
+ 		}
+ 		return
+ 	}
