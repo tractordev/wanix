@@ -71,15 +71,30 @@
 					fs.stat(path, (err, stat) => {
 						if (err) return reject(err);
 						const buf = new Uint8Array(stat.size);
-						fs.open(path, 0, 0, (err, fd) => {
+						fs.open(path, 0, 0, async (err, fd) => {
 							if (err) return reject(err);
-							fs.read(fd, buf, 0, buf.byteLength, 0, (err, n) => {
-								if (err) return reject(err);
-								// TODO: dont assume full buf was read
-								fs.close(fd, (err) => {
-									if (err) return reject(err);
-									resolve(buf);
+
+							const pinkyPromiseRead = function(fd, buffer, length) {
+								return new Promise((res, rej) => {
+									fs.read(fd, buffer, 0, length, 0, (err, n) => {
+										if (err)
+											rej(err)
+										else
+											res(n);
+									});
 								});
+							};
+
+							let cursor = 0;
+							while (cursor < buf.byteLength) {
+								const result = await pinkyPromiseRead(fd, buf.subarray(cursor), buf.byteLength - cursor);
+								if (typeof result !== 'number') return reject(result);
+								cursor += result;
+							}
+
+							fs.close(fd, (err) => {
+								if (err) return reject(err);
+								resolve(buf);
 							});
 						});
 					});

@@ -6,10 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
-	"unsafe"
 
 	"tractor.dev/toolkit-go/engine/fs/fsutil"
 	"tractor.dev/wanix/kernel/proc/exec"
@@ -160,11 +158,6 @@ func checkErr(w io.Writer, err error) (hadError bool) {
 		return true
 	}
 	return false
-}
-
-// TEMP: just for fsdata debug command
-func GetUnexportedField(field reflect.Value) interface{} {
-	return reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface()
 }
 
 type SwitchableWriter struct {

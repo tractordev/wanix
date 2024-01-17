@@ -24,6 +24,8 @@ func PackFilesTo(w io.Writer) {
 		"./internal/indexedfs/indexedfs.js",
 		"./local/bin/kernel",
 		"./local/bin/shell",
+		"./local/bin/build",
+		"./local/bin/micro",
 	} {
 		typ := "application/octet-stream"
 		if strings.HasSuffix(path, ".js") {

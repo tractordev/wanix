@@ -151,8 +151,6 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 			}
 		}
 
-		fmt.Println(args)
-
 		ctx := cli.ContextWithIO(context.Background(), m.defaultStdin, os.Stdout, os.Stderr)
 		if err := cli.Execute(ctx, m.cmd, args); err != nil {
 			m.printErr(fmt.Errorf("exec error: %w", err))
