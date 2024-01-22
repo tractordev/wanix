@@ -3,7 +3,7 @@
 VERSION=0.1
 DEBUG?=false
 
-all: kernel shell
+all: kernel shell build micro
 
 dev: all
 	go run ./dev
@@ -17,13 +17,10 @@ kernel: kernel/main.go local/bin
 shell: shell/main.go local/bin
 	cd shell && GOOS=js GOARCH=wasm go build -o ../local/bin/shell .
 
-micro: external/micro/ local/bin
-	cd external/micro && make build
-	mv external/micro/repo/micro.wasm local/bin/micro
+micro: local/bin/micro
 
-dev-micro: external/micro/ local/bin
-	cd external/micro/repo/ && make wasm
-	mv external/micro/repo/micro.wasm local/bin/micro
+local/bin/micro: external/micro/ local/bin
+	make -C external/micro build
 
 build/pkg.zip: build/build-pkgs/imports/imports.go build/build-pkgs/main.go
 	cd build && go run ./build-pkgs/main.go ./build-pkgs/imports ./pkg.zip

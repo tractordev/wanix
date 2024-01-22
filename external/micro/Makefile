@@ -1,5 +1,6 @@
 build: update
-	cd ./repo && make wasm
+	make -C repo wasm
+	mv ./repo/micro.wasm ./../../local/bin/micro
 
 repo: 
 	git clone -q https://github.com/zyedidia/micro ./repo
