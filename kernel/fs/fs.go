@@ -357,6 +357,27 @@ func (s *Service) readdir(this js.Value, args []js.Value) any {
 	return nil
 }
 
+func newStatEmpty() map[string]any {
+	return map[string]any{
+		"mode":    0,
+		"dev":     0,
+		"ino":     0,
+		"nlink":   0,
+		"uid":     0,
+		"gid":     0,
+		"rdev":    0,
+		"size":    0,
+		"blksize": 0,
+		"blocks":  0,
+		"atimeMs": 0,
+		"mtimeMs": 0,
+		"ctimeMs": 0,
+		"isDirectory": js.FuncOf(func(this js.Value, args []js.Value) any {
+			return false
+		}),
+	}
+}
+
 func (s *Service) _stat(path string, cb js.Value) {
 	fi, err := s.fsys.FS.(*mountablefs.FS).Stat(path)
 	if err != nil {
@@ -370,24 +391,14 @@ func (s *Service) _stat(path string, cb js.Value) {
 		m |= syscall.S_IFDIR
 	}
 	// log("stat", fi.Name(), fi.IsDir(), uint32(fi.Mode()), fi.Size())
-	cb.Invoke(nil, map[string]any{
-		"mode":    m,
-		"dev":     0,
-		"ino":     0,
-		"nlink":   0,
-		"uid":     0,
-		"gid":     0,
-		"rdev":    0,
-		"size":    fi.Size(),
-		"blksize": 0,
-		"blocks":  0,
-		"atimeMs": 0, // not supported by memmap fs
-		"mtimeMs": fi.ModTime().UnixMilli(),
-		"ctimeMs": 0, // not supported by memmap fs
-		"isDirectory": js.FuncOf(func(this js.Value, args []js.Value) any {
-			return fi.IsDir()
-		}),
+	stat := newStatEmpty()
+	stat["mode"] = m
+	stat["size"] = fi.Size()
+	stat["mtimeMs"] = fi.ModTime().UnixMilli()
+	stat["isDirectory"] = js.FuncOf(func(this js.Value, args []js.Value) any {
+		return fi.IsDir()
 	})
+	cb.Invoke(nil, stat)
 }
 
 // stat(path, callback)
@@ -423,6 +434,14 @@ func (s *Service) fstat(this js.Value, args []js.Value) any {
 
 	go func() {
 		log("fstat", fd)
+
+		if fd <= 2 {
+			// stdio
+			stat := newStatEmpty()
+			stat["mode"] = 69206416
+			cb.Invoke(nil, stat)
+			return
+		}
 
 		s.mu.Lock()
 		f, ok := s.fds[fd]
