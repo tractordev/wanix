@@ -161,7 +161,7 @@ func buildTool(zw *zip.Writer, name string) {
 	output := path.Join(tmpDir, name+".wasm")
 
 	cmd := exec.Command("go", "build", "-o", output, "-trimpath")
-	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm", "GOTOOLCHAIN=go1.21.1")
 	cmdOut, err := cmd.CombinedOutput()
 	if err != nil {
 		if cmdOut != nil {
