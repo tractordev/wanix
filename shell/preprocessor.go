@@ -3,20 +3,34 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/Parzival-3141/go-posix"
 	"github.com/anmitsu/go-shlex"
-	"github.com/mgood/go-posix"
 )
 
-// Command Preprocessor for shell input
+// Command Preprocessor for shell input.
 // Handles things like glob expansion ('*' and '?'),
-// environment variables, and shell variables
-
-func preprocess(input string) ([]string, error) {
+// environment variables, and shell variables.
+func (m *Shell) preprocess(input string) ([]string, error) {
 	args, err := shlex.Split(input, true)
 
-	mapping := envMap()
+	env := os.Environ()
+	mapping := posix.Map{}
+	for _, kv := range env {
+		split := strings.Split(kv, "=")
+		mapping[split[0]] = split[1]
+	}
+
+	if m.script != nil {
+		mapping["0"] = m.script.Name()
+		for i, scriptArg := range os.Args[2:] { // skip shell.wasm and script.sh
+			mapping[strconv.Itoa(i+1)] = scriptArg
+		}
+	} else {
+		mapping["0"] = "shell"
+	}
 
 	result := []string{}
 	for _, arg := range args {
@@ -33,7 +47,7 @@ func preprocess(input string) ([]string, error) {
 			continue
 		}
 
-		if arg[0] == '$' {
+		if strings.ContainsRune(arg, '$') {
 			val, err := posix.Expand(arg, mapping)
 			if err != nil {
 				return result, err
@@ -46,15 +60,4 @@ func preprocess(input string) ([]string, error) {
 	}
 
 	return result, err
-}
-
-func envMap() posix.Map {
-	env := os.Environ()
-	mapping := map[string]string{}
-	for _, kv := range env {
-		split := strings.Split(kv, "=")
-		k, v := split[0], split[1]
-		mapping[k] = v
-	}
-	return posix.Map(mapping)
 }
