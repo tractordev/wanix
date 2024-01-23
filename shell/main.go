@@ -143,7 +143,9 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 			m.printErr(fmt.Errorf("exec error: %w", err))
 		}
 
-		fmt.Println()
+		if m.script == nil {
+			fmt.Println()
+		}
 	}
 }
 
