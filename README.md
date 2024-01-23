@@ -2,6 +2,21 @@
 
 Experimental, local-first, web-native, Unix-like development environment
 
+[🎬 Demo from Mozilla Rise 25](https://www.youtube.com/watch?v=KJcd9IckJj8)
+
+## Features
+
+* Run and create command line, TUI, and web apps in the environment itself
+* Go compiler that runs in-browser capable of cross-compiling to native platforms
+* Pluggable filesystem API for custom filesystem behavior like FUSE/Plan9
+* Unix-like shell that can be live-edited/recompiled or replaced entirely
+* Built-in editor called micro, similar to nano
+* Environment filesystem exposed to web apps via Service Worker
+* Support for TypeScript and JSX in web applications without extra tooling
+* Processes run as Web Workers
+* Bootstrap entire system with a single JS file and include
+* ...lots more
+
 ## Getting started
 
 Until a bundled release or live demo is online, you'll need to use Wanix as a developer, which means you'll need Go installed on your system. Then you can run:
@@ -10,47 +25,113 @@ Until a bundled release or live demo is online, you'll need to use Wanix as a de
 make dev
 ```
 
-This will run a dev server that you can use to access a Wanix environment on localhost in your browser. 
+This will build everything and run a dev server that you can use to access a Wanix environment on localhost in your browser. Here are a few things you can do in the environment in this early state:
+
+### See available built-in commands
+
+A number of common Unix command are available in the shell, which you can see by running `help`. Currently this does not list user or system commands found in `/cmd` or `/sys/cmd`, but you can list those using `ls`. Notable system commands include `build` and `micro`.
+
+### Work with the filesystem
+
+Use common Unix commands (`cd`, `ls`, `pwd`, ...) to navigate around the filesystem. The root filesystem is [indexedfs](internal/indexedfs), which stores files in IndexedDB. However, by implementing the [filesystem API](https://github.com/tractordev/toolkit-go/tree/main/engine/fs) you can create new filesystems to mount. For example, `/sys/dev` is mounted when run with the dev server using [httpfs](internal/httpfs) to expose the project repository from the host. 
+
+The Wanix filesystem layout is different than Unix/Linux, so here are some relevant paths used by Wanix:
+
+ * `/app` - For user applications.
+ * `/cmd` - For user commands.
+ * `/sys` - For Wanix system paths:
+   * `/sys/app` - For system applications.
+   * `/sys/cmd` - For system commands.
+   * `/sys/bin` - Cache for wasm binaries.
+   * `/sys/tmp` - For temporary files, held in-memory.
+   * `/sys/dev` - Read-only mount of project repo from host dev server.
+
+### Create a shell script command
+
+You can create commands by putting them in the `/cmd` directory. Commands can be shell scripts, wasm binaries, or buildable source directories. Shell scripts ending in `.sh` can contain commands that would run on the shell. For example, you can use `micro` to create a script to `echo` "Hello world":
+
+```
+micro /cmd/hello.sh
+```
+
+Add this line to the newly created file in micro:
+
+```
+echo Hello world
+```
+
+Use `ctrl-s` to save and `ctrl-q` to quit. Now you can run `hello` in the shell.
+
+### Create a command from source directory
+
+You can use `build` to compile a wasm binary from any directory containing a Go main package, then move or copy it into `/cmd`. However, you can also just create a directory in `/cmd` with Go source and use it like a command. Wanix will compile and run it for you. Make a new directory under `/cmd` with `mkdir`:
+```
+mkdir /cmd/gohello
+```
+
+Use `micro` to create and edit a `main.go` file:
+```
+micro /cmd/gohello/main.go
+```
+
+Then write a small Go program:
+```go
+package main
+
+import "fmt"
+
+func main() {
+        fmt.Println("Hello world from Go")
+}
+
+```
+
+Use `ctrl-s` then `ctrl-q` to save and quit. Now if you run `gohello`, the program will be compiled and run. If you run it again, it will run the cached binary. If you modify the source and run the command again, it *should* recompile and use an updated binary, but there is currently [an issue](https://github.com/tractordev/wanix/issues/66) waiting for you to implement this.
+
+### Create a web application
+
+Wanix applications are simply web applications under `/app`. If you create a directory like `/app/webhello` with an `index.html`, you can then open the application with `open webhello`.
+
+This will load `/app/webhello/index.html` into a full page iframe. You can get back to and toggle the console in visor mode with Control + the `~` key. Changes made to any file in `/app/webhello` will cause the frame to reload. 
+
+Any TypeScript source files ending in `.ts` will be converted to JavaScript when loaded in this frame. The same for any files using JSX ending in `.jsx` or `.tsx`.
+
+### Build a third party Go program for Wanix
+
+Wanix will eventually [support any WASI program](https://github.com/tractordev/wanix/issues/67), but for now it runs Go programs compiled with `GOOS=js` and `GOARCH=wasm`. If it compiles without a problem, it should be able to run in Wanix. However, larger programs may have dependencies that won't build for this target without some modification. You can see the changes we made to `micro` under `external/micro`, but it will really be different for every project. For now, here is an example program compiled outside Wanix brought in via `/sys/dev`.
+
+We use the `local` directory in checkouts of this repo for local changes not intended to be contributed. This is a good place to build a program that will be easy to copy into Wanix. For example, you can create `./local/example` with a `main.go`:
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+        fmt.Println("Hello world from a Go program made outside Wanix")
+}
+
+```
+
+Build it with js/wasm target, *outside* Wanix:
+
+```
+GOOS=js GOARCH=wasm go build -o example.wasm
+```
+
+Now from *inside* Wanix, you can copy the resulting file into `/cmd` from `/sys/dev`:
+
+```
+cp /sys/dev/local/example/example.wasm /cmd/example.wasm
+```
+
+You should now be able to run `example`.
 
 ## Contributing
 
+We are currently developing a roadmap to convey the direction we're exploring with Wanix, but this is an open and modular project that you can take and experiment with for your own purposes. If you're interested in how it works, take a look at our quick [overview](doc/overview.md) and then check out the source. Most of Wanix exists in the `kernel` directory, which is a good place to start. The `build` and `shell` directories are where you'll find the source for those two components.
+
 Take a look at our [issues](https://github.com/tractordev/wanix/issues) to see how you can help out. You can also ask questions and participate in [discussions](https://github.com/tractordev/wanix/discussions), however right now most discussion takes place in our [Discord](https://discord.gg/nbrwNXVvVa).
-
-## How it works
-
-#### Dev server
-
-The dev server serves an empty HTML page that just includes the bootloader, which is a single JavaScript file used to bootstrap a Wanix environment. In development, the dev server serves the Wanix project directory to the environment, but a production bundle of the bootloader would include all files needed to bootstrap an environment. 
-
-#### Bootloader
-
-The bootloader JS file has several functions to bootstrap a Wanix environment and start the Wanix kernel. In a production bundle it would include compressed files and the code to inflate them into a pseudo filesystem called initfs. It also registers itself as a service worker to intercept requests, so some of its code will only run when loaded as a service worker. As a service worker it either handles requests to access initfs files, or hands requests off to the gateway component of the kernel once the kernel is running.
-
-Most importantly, it starts the kernel in a web worker using an abstraction called a task. A task is a thin layer around a web worker made to run WebAssembly that sets it up with a Duplex pipe for two-way RPC communication. This task primitive is also used by the kernel for processes. Finally, it sets up a "pagehost API", allowing the kernel to perform operations on the host page. 
-
-#### Kernel
-
-The kernel is a WebAssembly module written in Go made of several components. There is an `fs` component that sets up and manages the root filesystem and other filesystems that can be mounted on it. There is a `web` component that sets up the host page with iframes of loaded "apps", initially just the default console. The `web` component also provides a gateway service for the service worker to access the root filesystem, which can also transform files on the fly, such as transpiling TS and JSX files. There is a `tty` service that manages terminal sessions, for example for the default console. Finally there is a `proc` service that manages processes, which are simply tasks. So processes are WebAssembly modules running in their own web worker with a two way connection to the kernel. 
-
-#### Tasks
-
-Process tasks expose an API to the kernel to start them, connect standard IO, and anything else that needs to be done from inside the web worker. The API the exposed to the task from the kernel is for the Wanix equivalent of syscalls. This API is defined by the kernel components, such as `proc` to spawn subprocesses, and `fs` to interact with the filesystem. 
-
-Tasks are currently designed specifically to run WebAssembly modules written in Go for the "js" runtime (GOOS), but should eventually run any WebAssembly conforming to WASI. One possible issue in the way of supporting WASI is that the WASI API is synchronous and our syscalls must be asynchronous since they happen across web workers. In the meantime, since Wanix is written in Go and we only have a Go compiler in the Wanix environment, we are aligning Wanix around Go regardless of support for other toolchains. Go is to Wanix what C is to Unix. 
-
-#### Initial Compiler (build)
-
-The compiler inside Wanix, `build`, is a subset of the Go toolchain, namely the `compile` and `link` tools. This is because the full Go binary doesn't function in the Wanix environment yet. The `build` module also contains precompiled package archives for the standard library. This makes it more self-contained, eliminating the need for a GOROOT. But also because the standard library hasn't been able to be compiled within Wanix yet.
-
-This compiler is also limited to linking against packages built into its precompiled package archive, which is currently the standard library. Although other packages can be added to this, it's currently easier to compile outside of Wanix and bring executables in via initfs. The other problem is 3rd party packages must be downloaded from other domains, and from the browser CORS typically prevents this. At some point we can tunnel downloads through the dev server, but it's unlikely we can support 3rd party packages without the dev server unless somebody wants to run a public proxy service. However, for security and change management reasons, we are okay with this constraint. Either you explicitly add precompiled package archives, or you must be in dev mode. 
-
-Despite this limitation, the `build` compiler is otherwise a full Go compiler and is even capable of cross compilation.
-
-#### Shell
-
-The kernel initially launches a console on the host page connected to a tty running `shell`. Like `build`, this is a fully independent and standalone program. It is not an existing shell, nor is it POSIX compliant. However, it is POSIX-ish with the intention of approaching POSIX compliance but also exploring new ideas for this new kind of environment. It uses kernel syscalls to launch processes like any other task. We want to make sure you can build and rebuild the shell from inside Wanix to dogfood and showcase the self-modifiable nature of the Wanix environment. This `shell` can also run shell scripts.
-
-
 
 ## License
 
