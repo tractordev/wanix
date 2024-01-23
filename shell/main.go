@@ -132,22 +132,10 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 			continue
 		}
 
-		args, err := preprocess(line)
+		args, err := m.preprocess(line)
 		if err != nil {
 			m.printErr(fmt.Errorf("parsing error: %w", err))
 			continue
-		}
-
-		if err = parseEnvArgs(&args, os.Environ()); err != nil {
-			m.printErr(err)
-			continue
-		}
-
-		if m.script != nil {
-			if err = m.parseScriptArgs(&args); err != nil {
-				m.printErr(err)
-				continue
-			}
 		}
 
 		ctx := cli.ContextWithIO(context.Background(), m.defaultStdin, os.Stdout, os.Stderr)
@@ -277,35 +265,4 @@ func findCommand(name string, args []string) (*exec.Cmd, error) {
 	}
 
 	return nil, fmt.Errorf("unable to find command: %s", name)
-}
-
-// Parses $0-255 arguments, replacing with script input args.
-func (m *Shell) parseScriptArgs(args *[]string) error {
-	// TODO: actually parse arguments
-	// for i, arg := range *args {
-	// numArg, found := strings.CutPrefix(arg, "$")
-	// if !found {
-	// 	continue
-	// }
-
-	// j, err := strconv.ParseUint(numArg, 10, 8)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// if uint(j) >= uint(len(os.Args)) {
-	// 	return fmt.Errorf("%w: positional argument %d >= number of arguments %d", os.ErrInvalid, j, len(os.Args))
-	// }
-
-	// (*args)[i] = os.Args[j]
-	// }
-
-	scriptArgs := os.Args[1:]
-	if len(scriptArgs) > 1 {
-		for i, arg := range *args {
-			(*args)[i] = strings.ReplaceAll(arg, "$1", scriptArgs[1])
-		}
-	}
-
-	return nil
 }
