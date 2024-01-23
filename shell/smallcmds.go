@@ -24,6 +24,16 @@ func exitCmd() *cli.Command {
 	return cmd
 }
 
+func helpCmd(root *cli.Command) *cli.Command {
+	cmd := &cli.Command{
+		Usage: "help",
+		Run: func(ctx *cli.Context, args []string) {
+			(&cli.CommandHelp{root}).WriteHelp(ctx)
+		},
+	}
+	return cmd
+}
+
 func echoCmd() *cli.Command {
 	cmd := &cli.Command{
 		Usage: "echo [text]...",

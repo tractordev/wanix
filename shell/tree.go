@@ -96,7 +96,7 @@ func treeCmd() *cli.Command {
 	return &cli.Command{
 		Usage: "tree [directory]",
 		Args:  cli.MaxArgs(1),
-		Short: "Prints a file tree rooted at the given directory, or the working directory if none is specified.",
+		Short: "Prints the current or provided file tree.",
 		Run: func(ctx *cli.Context, args []string) {
 			var dir string
 			if len(args) > 0 {

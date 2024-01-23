@@ -59,6 +59,7 @@ func (m *Shell) buildCmds() {
 	m.cmd.AddCommand(treeCmd())
 	m.cmd.AddCommand(watchCmd())
 	m.cmd.AddCommand(unwatchCmd())
+	m.cmd.AddCommand(helpCmd(m.cmd))
 	m.cmd.Run = m.ExecuteExternalCommand
 }
 
