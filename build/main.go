@@ -119,6 +119,9 @@ func setupCLI() *cli.Command {
 	return cmd
 }
 
+// TODO: support compiling packages
+// TODO: experiment with including the stdlib source instead of our hacky link archives.
+
 func main() {
 	if err := cli.Execute(context.Background(), setupCLI(), os.Args[1:]); err != nil {
 		fmt.Println(err)

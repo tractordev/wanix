@@ -74,11 +74,7 @@ func buildArchives(zw *zip.Writer, importsDir, target string) []string {
 		fatal(err.Error())
 	}
 
-	rgx, err := regexp.Compile("WORK=(.*)")
-	if err != nil {
-		fatal(err.Error())
-	}
-
+	rgx := regexp.MustCompile("WORK=(.*)")
 	rgxMatches := rgx.FindSubmatch(output)
 	if rgxMatches == nil || rgxMatches[1] == nil {
 		fatal("install output missing WORK path")
@@ -94,10 +90,7 @@ func buildArchives(zw *zip.Writer, importsDir, target string) []string {
 		fatal(err.Error())
 	}
 
-	rgx, err = regexp.Compile("packagefile (.*)")
-	if err != nil {
-		fatal(err.Error())
-	}
+	rgx = regexp.MustCompile("packagefile (.*)")
 
 	visited := map[string]struct{}{}
 	unique := []string{}
