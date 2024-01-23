@@ -110,7 +110,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     globalThis.sys = new task.Task(initfs);
     
     // start kernel
-    console.log("Staring kernel...")
+    console.log("Starting kernel...")
     await sys.exec("kernel");
 
     // load host API
