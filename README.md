@@ -1,31 +1,29 @@
 # WANIX
 
-Experimental, local-first, web-native, Unix-like development environment
+Experimental, local-first, web-native, Unix-like operating and development environment
 
 [🎬 Demo from Mozilla Rise 25](https://www.youtube.com/watch?v=KJcd9IckJj8)
 
 ## Features
 
 * Run and create command line, TUI, and web apps in the environment itself
-* Go compiler that runs in-browser capable of cross-compiling to native platforms
+* Go compiler that runs in-browser, capable of cross-compiling to native platforms
 * Pluggable filesystem API for custom filesystem behavior like FUSE/Plan9
 * Unix-like shell that can be live-edited/recompiled or replaced entirely
-* Built-in editor called micro, similar to nano
-* Environment filesystem exposed to web apps via Service Worker
-* Support for TypeScript and JSX in web applications without extra tooling
-* Processes run as Web Workers
-* Bootstrap entire system with a single JS file and include
+* Built-in [micro](https://github.com/zyedidia/micro) editor, similar to nano
+* Supports TypeScript and JSX in web applications without extra tooling
+* Bootstraps entire system with a single JS file and include
 * ...lots more
 
 ## Getting started
 
-Until a bundled release or live demo is online, you'll need to use Wanix as a developer, which means you'll need Go installed on your system. Then you can run:
+Until a bundled release or live demo is online, you'll need to run Wanix locally as a developer, which means you'll need [Go installed](https://go.dev/doc/install) on your system. Then you can run:
 
 ```
 make dev
 ```
 
-This will build everything and run a dev server that you can use to access a Wanix environment on localhost in your browser. Here are a few things you can do in the environment in this early state:
+This will build everything and run a dev server to access a Wanix environment on localhost in your browser. Here are a few things you can do in the environment in this early state:
 
 ### See available built-in commands
 
@@ -65,16 +63,19 @@ Use `ctrl-s` to save and `ctrl-q` to quit. Now you can run `hello` in the shell.
 ### Create a command from source directory
 
 You can use `build` to compile a wasm binary from any directory containing a Go main package, then move or copy it into `/cmd`. However, you can also just create a directory in `/cmd` with Go source and use it like a command. Wanix will compile and run it for you. Make a new directory under `/cmd` with `mkdir`:
+
 ```
 mkdir /cmd/gohello
 ```
 
 Use `micro` to create and edit a `main.go` file:
+
 ```
 micro /cmd/gohello/main.go
 ```
 
 Then write a small Go program:
+
 ```go
 package main
 
@@ -90,15 +91,15 @@ Use `ctrl-s` then `ctrl-q` to save and quit. Now if you run `gohello`, the progr
 
 ### Create a web application
 
-Wanix applications are simply web applications under `/app`. If you create a directory like `/app/webhello` with an `index.html`, you can then open the application with `open webhello`.
+Wanix applications are simply web applications under `/app`. If you create a directory like `/app/webapp` with an `index.html`, you can then open the application with `open webapp`.
 
-This will load `/app/webhello/index.html` into a full page iframe. You can get back to and toggle the console in visor mode with Control + the `~` key. Changes made to any file in `/app/webhello` will cause the frame to reload. 
+This will load `/app/webapp/index.html` into a full page iframe. You can get back to and toggle the console in visor mode with Control + the `~` key. Changes made to any file in `/app/webapp` will cause the frame to reload. 
 
 Any TypeScript source files ending in `.ts` will be converted to JavaScript when loaded in this frame. The same for any files using JSX ending in `.jsx` or `.tsx`.
 
-### Build a third party Go program for Wanix
+### Build a 3rd party Go program for Wanix
 
-Wanix will eventually [support any WASI program](https://github.com/tractordev/wanix/issues/67), but for now it runs Go programs compiled with `GOOS=js` and `GOARCH=wasm`. If it compiles without a problem, it should be able to run in Wanix. However, larger programs may have dependencies that won't build for this target without some modification. You can see the changes we made to `micro` under `external/micro`, but it will really be different for every project. For now, here is an example program compiled outside Wanix brought in via `/sys/dev`.
+Wanix will eventually [support any WASI program](https://github.com/tractordev/wanix/issues/67), but for now it runs Go programs compiled with `GOOS=js` and `GOARCH=wasm`. If it compiles without a problem, it should be able to run in Wanix. However, larger programs may have dependencies that won't build for this target without some modification. You can see the changes we made to `micro` under [external/micro](external/micro), but it will really be different for every project. For now, here is an example program compiled outside Wanix brought in via the `/sys/dev` mount.
 
 We use the `local` directory in checkouts of this repo for local changes not intended to be contributed. This is a good place to build a program that will be easy to copy into Wanix. For example, you can create `./local/example` with a `main.go`:
 
