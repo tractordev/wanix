@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"go/build"
 	"io"
@@ -24,22 +25,8 @@ func main() {
 		fatal(err.Error())
 	}
 
-	zf, err := os.Create(pkgZipPath)
-	if err != nil {
-		fatal(err.Error())
-	}
-	defer func() {
-		if err := zf.Close(); err != nil {
-			fatal(err.Error())
-		}
-	}()
-
-	zw := zip.NewWriter(zf)
-	defer func() {
-		if err := zw.Close(); err != nil {
-			fatal(err.Error())
-		}
-	}()
+	zbuf := bytes.Buffer{}
+	zw := zip.NewWriter(&zbuf)
 
 	targets := []string{"js_wasm", "darwin_amd64"}
 	for _, target := range targets {
@@ -50,6 +37,24 @@ func main() {
 
 	buildTool(zw, "compile")
 	buildTool(zw, "link")
+
+	if err := zw.Close(); err != nil {
+		fatal(err.Error())
+	}
+
+	zf, err := os.Create(pkgZipPath)
+	if err != nil {
+		fatal(err.Error())
+	}
+
+	if _, err = zbuf.WriteTo(zf); err != nil {
+		fatal(err.Error())
+	}
+
+	if err := zf.Close(); err != nil {
+		fatal(err.Error())
+	}
+
 }
 
 func buildArchives(zw *zip.Writer, importsDir, target string) []string {
