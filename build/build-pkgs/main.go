@@ -66,22 +66,26 @@ func buildArchives(zw *zip.Writer, importsDir, target string) []string {
 	cmd := exec.Command("go", "install", "-work", "-a", "-trimpath", "./...")
 	cmd.Env = append(os.Environ(), "GOOS="+GOOS, "GOARCH="+GOARCH)
 
-	// fmt.Println(cmd.String())
 	output, err := cmd.CombinedOutput()
 
 	// Ignoring "imported but not used" errors.
-	// It should have compiled the archives anyway.
-	if err != nil && cmd.ProcessState.ExitCode() == 0 {
-		if output != nil {
-			fmt.Println(string(output))
+	// If output contains the working dir then we can (probably)
+	// safely ignore any errors.
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			if output != nil {
+				fmt.Println(string(output))
+			}
+			fatal(err.Error())
 		}
-
-		fatal(err.Error())
 	}
 
 	rgx := regexp.MustCompile("WORK=(.*)")
 	rgxMatches := rgx.FindSubmatch(output)
 	if rgxMatches == nil || rgxMatches[1] == nil {
+		if output != nil {
+			fmt.Println(string(output))
+		}
 		fatal("install output missing WORK path")
 	}
 
@@ -146,7 +150,7 @@ func generateLinkConfig(zw *zip.Writer, target string, packages []string) {
 	}
 
 	for _, pkg := range packages {
-		io.WriteString(wr, "packagefile "+pkg+"=/tmp/build/pkg/targets/"+target+"/"+pkg+".a\n")
+		io.WriteString(wr, "packagefile "+pkg+"=/sys/tmp/build/pkg/targets/"+target+"/"+pkg+".a\n")
 	}
 }
 

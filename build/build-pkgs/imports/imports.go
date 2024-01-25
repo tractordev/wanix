@@ -1,5 +1,9 @@
 package imports
 
+// ======================== IMPORTANT ========================
+// Run `go mod tidy` in this directory after modifying imports.
+// You will get compile errors if you don't!
+
 import (
 	"embed"
 	"fmt"
@@ -8,7 +12,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Parzival-3141/go-posix"
+	"github.com/anmitsu/go-shlex"
 	"github.com/evanw/esbuild/pkg/api"
+	"golang.org/x/term"
 	"tractor.dev/toolkit-go/engine"
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/daemon"
@@ -21,4 +28,6 @@ import (
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
 	"tractor.dev/toolkit-go/engine/fs/workingpathfs"
 	"tractor.dev/toolkit-go/engine/fs/xformfs"
+	"tractor.dev/wanix/internal/fsutil"
+	"tractor.dev/wanix/internal/osfs"
 )
