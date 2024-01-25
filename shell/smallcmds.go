@@ -212,7 +212,7 @@ func moveCmd() *cli.Command {
 	return &cli.Command{
 		Usage: "mv SOURCE DEST | SOURCE... DIRECTORY",
 		Args:  cli.MinArgs(2),
-		Short: "Rename SOURCE to DEST, or move multiple SOURCE(s) to DIRECTORY.",
+		Short: "Rename SOURCE to DEST, or move SOURCE(s) to DIRECTORY.",
 		Run: func(ctx *cli.Context, args []string) {
 			// TODO: prevent file overwrite if dest file already exits (should this already be an error?)
 			// TODO: error when dest directory doesn't exist and args.len > 2
