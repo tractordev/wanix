@@ -15,7 +15,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 
@@ -136,7 +135,7 @@ func main2(flags BuildFlags, args []string) int {
 	filePaths := make([]string, 0, len(pkg.Files))
 
 	for fpath, file := range pkg.Files {
-		patterns := findEmbedDirectives2(file.Comments)
+		patterns := findEmbedDirectives(file.Comments)
 		for _, p := range patterns {
 			if _, ok := embedPatterns[p]; !ok {
 				embedPatterns[p] = struct{}{}
@@ -255,7 +254,7 @@ func main2(flags BuildFlags, args []string) int {
 	return 0
 }
 
-func findEmbedDirectives2(comments []*ast.CommentGroup) (patterns []string) {
+func findEmbedDirectives(comments []*ast.CommentGroup) (patterns []string) {
 	for _, group := range comments {
 		for _, cmnt := range group.List {
 			pattern, found := strings.CutPrefix(cmnt.Text, "//go:embed ")
@@ -364,27 +363,6 @@ func openZipPkg(dest string, tgt Target) error {
 		}
 	}
 	return nil
-}
-
-func findEmbedDirectives(src []byte) (patterns []string, ok bool) {
-	r := regexp.MustCompile(`//go:embed (.*)`)
-	matches := r.FindAllSubmatch(src, -1)
-
-	if matches == nil {
-		return nil, false
-	}
-
-	// append patterns without duplicates
-	allKeys := make(map[string]bool)
-	for _, m := range matches {
-		p := strings.TrimSpace(string(m[1]))
-		if _, value := allKeys[p]; !value {
-			allKeys[p] = true
-			patterns = append(patterns, string(m[1]))
-		}
-	}
-
-	return patterns, true
 }
 
 func generateEmbedConfig(patterns map[string]struct{}, srcDir string) (cfgPath string, err error) {
