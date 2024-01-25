@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
@@ -45,53 +46,6 @@ var supportedTargets = []Target{
 	{"js", "wasm"}, {"darwin", "amd64"},
 }
 
-type SourceInfo struct {
-	dirPath  string
-	filename string
-}
-
-func (si SourceInfo) filePath() string {
-	return filepath.Join(si.dirPath, si.filename)
-}
-
-func getSourceInfo(path string) (SourceInfo, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return SourceInfo{}, err
-	}
-	defer f.Close()
-
-	fstat, err := f.Stat()
-	if err != nil {
-		return SourceInfo{}, err
-	}
-
-	// if path is a directory, search dir for main.go
-	// if path is a go file, get parent dir
-	if fstat.IsDir() {
-		entries, err := f.Readdirnames(-1)
-		if err != nil {
-			return SourceInfo{}, err
-		}
-
-		found := false
-		for _, e := range entries {
-			if e == "main.go" {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return SourceInfo{}, fmt.Errorf("%w: missing main.go in directory %s", os.ErrNotExist, path)
-		} else {
-			return SourceInfo{dirPath: filepath.Clean(path), filename: "main.go"}, nil
-		}
-	} else {
-		return SourceInfo{dirPath: filepath.Dir(path), filename: filepath.Base(path)}, nil
-	}
-}
-
 type BuildFlags struct {
 	Os, Arch, Output *string
 	PrintTargets     *bool
@@ -99,9 +53,9 @@ type BuildFlags struct {
 
 func setupCLI() *cli.Command {
 	cmd := &cli.Command{
-		Usage: "build [options] <srcPath>",
+		Usage: "build [options] <packagePath>",
 		Args:  cli.MinArgs(1),
-		Short: "Compiles a go file or source directory.",
+		Short: "Compiles a go package.",
 	}
 
 	cFlags := cmd.Flags()
@@ -113,13 +67,12 @@ func setupCLI() *cli.Command {
 	}
 
 	cmd.Run = func(ctx *cli.Context, args []string) {
-		os.Exit(mainWithExitCode(inFlags, args))
+		os.Exit(main2(inFlags, args))
 	}
 
 	return cmd
 }
 
-// TODO: support compiling packages
 // TODO: experiment with including the stdlib source instead of our hacky link archives.
 
 func main() {
@@ -132,7 +85,7 @@ func main() {
 //go:embed pkg.zip
 var zipEmbed []byte
 
-func mainWithExitCode(flags BuildFlags, args []string) int {
+func main2(flags BuildFlags, args []string) int {
 	if *flags.PrintTargets {
 		fmt.Println("Supported targets:")
 		for _, t := range supportedTargets {
@@ -149,48 +102,75 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		return 1
 	}
 
-	srcInfo, err := getSourceInfo(args[0])
+	absPkgPath, err := filepath.Abs(args[0])
 	if err != nil {
 		fmt.Println(err)
 		return 1
 	}
 
-	src, err := os.ReadFile(srcInfo.filePath())
+	pkgs, err := parser.ParseDir(token.NewFileSet(), absPkgPath, nil, parser.SkipObjectResolution|parser.ParseComments)
 	if err != nil {
-		fmt.Println("unable to read source file:", err)
+		if pkgs == nil {
+			fmt.Printf("error reading package directory '%s': %s", absPkgPath, err)
+		} else {
+			fmt.Printf("parse error: %s", err)
+		}
 		return 1
 	}
 
-	// parse src imports and generate an importcfg file
-	fset := token.NewFileSet()
-	ast, err := parser.ParseFile(fset, "", src, parser.ImportsOnly|parser.ParseComments)
-	if err != nil {
-		fmt.Println("unable to parse source file:", err)
+	// TODO:
+	// Should we compile directories containing multiple packages?
+	// You'd have to analyze the import-graph to figure out which subpackages to include though.
+	if len(pkgs) != 1 {
+		fmt.Println("Build only supports building a single package, found: %d", len(pkgs))
 		return 1
 	}
 
-	if err := os.MkdirAll("/tmp/build", 0755); err != nil {
+	var pkg *ast.Package
+	for _, pkg = range pkgs {
+	}
+
+	// using maps to ensure deduplication
+	embedPatterns := make(map[string]struct{})
+	imports := make(map[string]struct{})
+	filePaths := make([]string, 0, len(pkg.Files))
+
+	for fpath, file := range pkg.Files {
+		patterns := findEmbedDirectives2(file.Comments)
+		for _, p := range patterns {
+			if _, ok := embedPatterns[p]; !ok {
+				embedPatterns[p] = struct{}{}
+			}
+		}
+
+		for _, i := range file.Imports {
+			if _, ok := imports[i.Path.Value]; !ok {
+				imports[i.Path.Value] = struct{}{}
+			}
+		}
+
+		// fpath should be absolute since we passed an absolute path to ParseDir
+		filePaths = append(filePaths, fpath)
+	}
+
+	if err := os.MkdirAll("/sys/tmp/build", 0755); err != nil {
 		fmt.Println(err)
 		return 1
 	}
 
-	fmt.Println("Unpacking pkg.zip...")
-	if err := openZipPkg("/tmp/build", target); err != nil {
-		fmt.Println("unable to open pkg.zip:", err)
-		return 1
-	}
-
-	embedPatterns, hasEmbeds := findEmbedDirectives(src)
+	// Generate embedcfg
+	hasEmbeds := len(embedPatterns) > 0
 	var embedcfgPath string = ""
 	if hasEmbeds {
-		embedcfgPath, err = generateEmbedConfig(embedPatterns, srcInfo.dirPath)
+		embedcfgPath, err = generateEmbedConfig(embedPatterns, absPkgPath)
 		if err != nil {
 			fmt.Println("unable to generate embedcfg:", err)
 			return 1
 		}
 	}
 
-	importcfgPath := strings.Join([]string{"/tmp/build/importcfg", target.os, target.arch}, "_")
+	// Generate importcfg
+	importcfgPath := strings.Join([]string{"/sys/tmp/build/importcfg", target.os, target.arch}, "_")
 	importcfg, err := os.Create(importcfgPath)
 	if err != nil {
 		fmt.Println("unable to create importcfg:", err)
@@ -198,16 +178,25 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 	}
 
 	bw := bufio.NewWriter(importcfg)
-	for _, i := range ast.Imports {
-		fmt.Fprintf(bw, "packagefile %s=/tmp/build/pkg/targets/%s_%s/%[1]s.a\n", strings.Trim(i.Path.Value, "\""), target.os, target.arch)
+	for i := range imports {
+		fmt.Fprintf(bw, "packagefile %s=/sys/tmp/build/pkg/targets/%s_%s/%[1]s.a\n", strings.Trim(i, "\""), target.os, target.arch)
 	}
 	if err := bw.Flush(); err != nil {
 		fmt.Println("unable to write to importcfg:", err)
 		return 1
 	}
-	importcfg.Close()
+	if err := importcfg.Close(); err != nil {
+		fmt.Println("unable to write to importcfg:", err)
+		return 1
+	}
 
-	objPath := fmt.Sprintf("/tmp/build/%s.a", strings.TrimSuffix(srcInfo.filename, ".go"))
+	fmt.Println("Unpacking pkg.zip...")
+	if err := openZipPkg("/sys/tmp/build", target); err != nil {
+		fmt.Println("unable to open pkg.zip:", err)
+		return 1
+	}
+
+	objPath := fmt.Sprintf("/sys/tmp/build/%s.a", pkg.Name)
 
 	compileArgs := []string{
 		"-p=main",
@@ -216,41 +205,48 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 		"-pack",
 		"-o", objPath,
 		"-importcfg", importcfgPath,
-		// "-I", "/tmp/build/pkg/targets/js_wasm/", // TODO: I think this can replace our generated importcfg
-		srcInfo.filePath(),
 	}
 	if hasEmbeds {
-		compileArgs = append([]string{"-embedcfg", embedcfgPath}, compileArgs...)
+		compileArgs = append(compileArgs, "-embedcfg", embedcfgPath)
 	}
+	compileArgs = append(compileArgs, filePaths...)
 
-	fmt.Printf("Compiling %s to %s\n", args[0], objPath)
 	// run compile.wasm
-	if exitcode, err := run("/tmp/build/pkg/compile.wasm", compileArgs...); exitcode != 0 {
+	fmt.Printf("Compiling %s to %s\n", args[0], objPath)
+	exitcode, err := run("/sys/tmp/build/pkg/compile.wasm", compileArgs...)
+	if exitcode != 0 || err != nil {
 		if err != nil {
 			fmt.Println(err)
+			if exitcode == 0 {
+				exitcode = 1
+			}
 		}
 		return exitcode
 	}
 
-	linkcfg := fmt.Sprintf("/tmp/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
+	linkcfg := fmt.Sprintf("/sys/tmp/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
 
-	output, err := getOutputPath(target.arch, *flags.Output, &srcInfo)
+	output, err := getOutputPath(target.arch, *flags.Output, pkg.Name, absPkgPath)
 	if err != nil {
 		fmt.Println(err)
 		return 1
 	}
 
-	fmt.Println("Linking", objPath)
 	// run link.wasm using importcfg_$GOOS_$GOARCH.link
-	if exitcode, err := run(
-		"/tmp/build/pkg/link.wasm",
-		"-importcfg", linkcfg, // TODO: maybe we can use importcfgPath instead?
+	fmt.Println("Linking", objPath)
+	exitcode, err = run(
+		"/sys/tmp/build/pkg/link.wasm",
+		"-importcfg", linkcfg,
 		"-buildmode=exe",
 		"-o", output,
 		objPath,
-	); exitcode != 0 {
+	)
+	if exitcode != 0 || err != nil {
 		if err != nil {
 			fmt.Println(err)
+			if exitcode == 0 {
+				exitcode = 1
+			}
 		}
 		return exitcode
 	}
@@ -259,25 +255,46 @@ func mainWithExitCode(flags BuildFlags, args []string) int {
 	return 0
 }
 
-func getOutputPath(arch string, outputArg string, srcInfo *SourceInfo) (string, error) {
+func findEmbedDirectives2(comments []*ast.CommentGroup) (patterns []string) {
+	for _, group := range comments {
+		for _, cmnt := range group.List {
+			pattern, found := strings.CutPrefix(cmnt.Text, "//go:embed ")
+			if !found {
+				continue
+			}
+
+			patterns = append(patterns, pattern)
+		}
+	}
+	return
+}
+
+func getOutputPath(arch, outputArg, pkgName, pkgDir string) (string, error) {
 	var output string
 
-	var name string
-	if srcInfo.dirPath == "." || srcInfo.dirPath == "/" {
-		name, _, _ = strings.Cut(srcInfo.filename, ".")
+	// var moduleName string
+	// if pkg.Name == "main" && absPkgPath != "/" {
+	// 	moduleName = filepath.Base(absPkgPath)
+	// } else {
+	// 	moduleName = pkg.Name
+	// }
+
+	var moduleName string
+	if pkgDir == "." || pkgDir == "/" {
+		moduleName = pkgName
 	} else {
-		name = filepath.Base(srcInfo.dirPath)
+		moduleName = filepath.Base(pkgDir)
 	}
 
 	if arch == "wasm" {
-		name += ".wasm"
+		moduleName += ".wasm"
 	}
 
 	if outputArg != "" {
 		outputArg = filepath.Clean(outputArg)
 
 		if isdir, err := fsutil.DirExists(os.DirFS("/"), strings.TrimLeft(outputArg, "/")); isdir {
-			output = filepath.Join(outputArg, name)
+			output = filepath.Join(outputArg, moduleName)
 		} else if err != nil {
 			return output, err
 		} else {
@@ -289,7 +306,7 @@ func getOutputPath(arch string, outputArg string, srcInfo *SourceInfo) (string, 
 			return output, err
 		}
 
-		output = filepath.Join(wd, name)
+		output = filepath.Join(wd, moduleName)
 	}
 
 	return output, nil
@@ -370,7 +387,7 @@ func findEmbedDirectives(src []byte) (patterns []string, ok bool) {
 	return patterns, true
 }
 
-func generateEmbedConfig(patterns []string, srcDir string) (cfgPath string, err error) {
+func generateEmbedConfig(patterns map[string]struct{}, srcDir string) (cfgPath string, err error) {
 	jsonObj := struct {
 		Patterns map[string][]string
 		Files    map[string]string
@@ -379,8 +396,8 @@ func generateEmbedConfig(patterns []string, srcDir string) (cfgPath string, err 
 	}
 
 	dfs := os.DirFS(srcDir)
-	for _, p := range patterns {
-		matches, err := fs.Glob(dfs, patterns[0])
+	for pattern := range patterns {
+		matches, err := fs.Glob(dfs, pattern)
 		if err != nil {
 			return "", err
 		}
@@ -398,7 +415,7 @@ func generateEmbedConfig(patterns []string, srcDir string) (cfgPath string, err 
 					}
 
 					if !d.IsDir() {
-						jsonObj.Patterns[p] = append(jsonObj.Patterns[p], path)
+						jsonObj.Patterns[pattern] = append(jsonObj.Patterns[pattern], path)
 						jsonObj.Files[path], _ = filepath.Abs(filepath.Join(srcDir, path))
 					}
 
@@ -408,7 +425,7 @@ func generateEmbedConfig(patterns []string, srcDir string) (cfgPath string, err 
 					return "", err
 				}
 			} else {
-				jsonObj.Patterns[p] = append(jsonObj.Patterns[p], m)
+				jsonObj.Patterns[pattern] = append(jsonObj.Patterns[pattern], m)
 				jsonObj.Files[m], _ = filepath.Abs(filepath.Join(srcDir, m))
 			}
 
@@ -416,7 +433,7 @@ func generateEmbedConfig(patterns []string, srcDir string) (cfgPath string, err 
 		}
 	}
 
-	cfgPath = "/tmp/build/embedcfg"
+	cfgPath = "/sys/tmp/build/embedcfg"
 	cfg, err := os.Create(cfgPath)
 	if err != nil {
 		return cfgPath, err
