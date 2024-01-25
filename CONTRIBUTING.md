@@ -2,6 +2,13 @@
 
 ## Development
 
+### Docker
+
+```bash
+ > docker build -t wanix:dev .
+ > docker run -p 7777:7777 wanix:dev
+```
+
 ### Editors
 
 **VSCODE**
