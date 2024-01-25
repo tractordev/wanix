@@ -14,6 +14,7 @@ import (
 
 	"tractor.dev/toolkit-go/engine/fs"
 
+	"tractor.dev/toolkit-go/engine/fs/memfs"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
@@ -62,6 +63,7 @@ func (s *Service) Initialize() {
 	fs.MkdirAll(s.fsys.FS, "sys/bin", 0755)
 	fs.MkdirAll(s.fsys.FS, "sys/cmd", 0755)
 	fs.MkdirAll(s.fsys.FS, "sys/dev", 0755)
+	fs.MkdirAll(s.fsys.FS, "sys/tmp", 0755)
 
 	// copy builtin exe's into filesystem
 	s.copyInitFileIntoFS("sys/cmd/build.wasm", "build")
@@ -76,6 +78,10 @@ func (s *Service) Initialize() {
 		if err := s.fsys.FS.(*mountablefs.FS).Mount(httpfs.New(devURL), "/sys/dev"); err != nil {
 			panic(err)
 		}
+	}
+
+	if err := s.fsys.FS.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"); err != nil {
+		panic(err)
 	}
 }
 
