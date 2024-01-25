@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"go/build"
 	"io"
@@ -24,22 +25,8 @@ func main() {
 		fatal(err.Error())
 	}
 
-	zf, err := os.Create(pkgZipPath)
-	if err != nil {
-		fatal(err.Error())
-	}
-	defer func() {
-		if err := zf.Close(); err != nil {
-			fatal(err.Error())
-		}
-	}()
-
-	zw := zip.NewWriter(zf)
-	defer func() {
-		if err := zw.Close(); err != nil {
-			fatal(err.Error())
-		}
-	}()
+	zbuf := bytes.Buffer{}
+	zw := zip.NewWriter(&zbuf)
 
 	targets := []string{"js_wasm", "darwin_amd64"}
 	for _, target := range targets {
@@ -50,6 +37,24 @@ func main() {
 
 	buildTool(zw, "compile")
 	buildTool(zw, "link")
+
+	if err := zw.Close(); err != nil {
+		fatal(err.Error())
+	}
+
+	zf, err := os.Create(pkgZipPath)
+	if err != nil {
+		fatal(err.Error())
+	}
+
+	if _, err = zbuf.WriteTo(zf); err != nil {
+		fatal(err.Error())
+	}
+
+	if err := zf.Close(); err != nil {
+		fatal(err.Error())
+	}
+
 }
 
 func buildArchives(zw *zip.Writer, importsDir, target string) []string {
@@ -61,26 +66,26 @@ func buildArchives(zw *zip.Writer, importsDir, target string) []string {
 	cmd := exec.Command("go", "install", "-work", "-a", "-trimpath", "./...")
 	cmd.Env = append(os.Environ(), "GOOS="+GOOS, "GOARCH="+GOARCH)
 
-	// fmt.Println(cmd.String())
 	output, err := cmd.CombinedOutput()
 
 	// Ignoring "imported but not used" errors.
-	// It should have compiled the archives anyway.
-	if err != nil && cmd.ProcessState.ExitCode() == 0 {
+	// If output contains the working dir then we can (probably)
+	// safely ignore any errors.
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			if output != nil {
+				fmt.Println(string(output))
+			}
+			fatal(err.Error())
+		}
+	}
+
+	rgx := regexp.MustCompile("WORK=(.*)")
+	rgxMatches := rgx.FindSubmatch(output)
+	if rgxMatches == nil || rgxMatches[1] == nil {
 		if output != nil {
 			fmt.Println(string(output))
 		}
-
-		fatal(err.Error())
-	}
-
-	rgx, err := regexp.Compile("WORK=(.*)")
-	if err != nil {
-		fatal(err.Error())
-	}
-
-	rgxMatches := rgx.FindSubmatch(output)
-	if rgxMatches == nil || rgxMatches[1] == nil {
 		fatal("install output missing WORK path")
 	}
 
@@ -94,10 +99,7 @@ func buildArchives(zw *zip.Writer, importsDir, target string) []string {
 		fatal(err.Error())
 	}
 
-	rgx, err = regexp.Compile("packagefile (.*)")
-	if err != nil {
-		fatal(err.Error())
-	}
+	rgx = regexp.MustCompile("packagefile (.*)")
 
 	visited := map[string]struct{}{}
 	unique := []string{}
@@ -148,7 +150,7 @@ func generateLinkConfig(zw *zip.Writer, target string, packages []string) {
 	}
 
 	for _, pkg := range packages {
-		io.WriteString(wr, "packagefile "+pkg+"=/tmp/build/pkg/targets/"+target+"/"+pkg+".a\n")
+		io.WriteString(wr, "packagefile "+pkg+"=/sys/tmp/build/pkg/targets/"+target+"/"+pkg+".a\n")
 	}
 }
 
@@ -168,7 +170,7 @@ func buildTool(zw *zip.Writer, name string) {
 	output := path.Join(tmpDir, name+".wasm")
 
 	cmd := exec.Command("go", "build", "-o", output, "-trimpath")
-	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm")
+	cmd.Env = append(os.Environ(), "GOOS=js", "GOARCH=wasm", "GOTOOLCHAIN=local")
 	cmdOut, err := cmd.CombinedOutput()
 	if err != nil {
 		if cmdOut != nil {
