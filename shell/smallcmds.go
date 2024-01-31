@@ -174,7 +174,7 @@ func removeCmd() *cli.Command {
 				}
 			} else {
 				if isdir, err := fs.IsDir(os.DirFS("/"), unixToFsPath(args[0])); isdir {
-					fmt.Fprintf(ctx, "cant remove file %s: is a directory\n(try using the `-r` flag)\n", absPath(args[0]))
+					fmt.Fprintf(ctx, "Can't remove file %s: is a directory\n(try using the `-r` flag)\n", absPath(args[0]))
 					return
 				} else if checkErr(ctx, err) {
 					return
@@ -209,14 +209,15 @@ func mkdirCmd() *cli.Command {
 }
 
 func moveCmd() *cli.Command {
-	return &cli.Command{
-		Usage: "mv SOURCE DEST | SOURCE... DIRECTORY",
+	var overwrite bool
+
+	cmd := &cli.Command{
+		Usage: "mv [-overwrite] SOURCE DEST | SOURCE... DIRECTORY",
 		Args:  cli.MinArgs(2),
 		Short: "Rename SOURCE to DEST, or move SOURCE(s) to DIRECTORY.",
 		Run: func(ctx *cli.Context, args []string) {
-			// TODO: prevent file overwrite if dest file already exits (should this already be an error?)
-			// TODO: error when dest directory doesn't exist and args.len > 2
-			isdir, err := fs.DirExists(os.DirFS("/"), unixToFsPath(args[len(args)-1]))
+			dfs := os.DirFS("/")
+			isdir, err := fs.DirExists(dfs, unixToFsPath(args[len(args)-1]))
 			if checkErr(ctx, err) {
 				return
 			}
@@ -224,15 +225,28 @@ func moveCmd() *cli.Command {
 				// move all paths into this directory
 				dir := absPath(args[len(args)-1])
 				for _, path := range args[:len(args)-1] {
-					src := filepath.Base(path)
-					dest := filepath.Join(dir, src)
-					err := os.Rename(absPath(path), absPath(dest))
-					if err != nil {
-						io.WriteString(ctx, fmt.Sprintln(err))
+					src := absPath(path)
+					dest := filepath.Join(dir, filepath.Base(src))
+					destExists, err := fs.Exists(dfs, unixToFsPath(dest))
+					if checkErr(ctx, err) {
+						return
+					}
+
+					if destExists && !overwrite {
+						fmt.Fprintf(ctx, "Destination '%s' already exists. (Try using the `-overwrite` flag) Skipping...\n", dest)
+						continue
+					}
+
+					err = os.Rename(src, dest)
+					if checkErr(ctx, err) {
 						continue
 					}
 				}
 			} else {
+				if len(args) > 2 {
+					io.WriteString(ctx, "Cannot rename multiple sources to a single path. Did you mean to move them to a directory instead?\n")
+					return
+				}
 				err := os.Rename(absPath(args[0]), absPath(args[1]))
 				if checkErr(ctx, err) {
 					return
@@ -240,6 +254,9 @@ func moveCmd() *cli.Command {
 			}
 		},
 	}
+
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite files/directories at the destination if they already exist.")
+	return cmd
 }
 
 func pwdCmd() *cli.Command {

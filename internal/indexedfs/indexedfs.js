@@ -93,6 +93,7 @@ export function updateFile(db, pathOrKey, updateCallback) {
 			fileStore.openCursor(pathOrKey);
 
 		const onFailure = (event) => {
+			event.stopPropagation();
 			reject(goError(`Couldn't find file with key ${pathOrKey}: ${event.target.error}`, "ErrNotExist"));
 		};
 
@@ -127,7 +128,6 @@ export function getFileKey(db, path) {
 			if(event.target.result) {
 				resolve(req.result);
 			} else {
-				console.warn("inside getFileKey, no data error")
 				reject(goError(`Failed to find file at path: ${path}`, "ErrNotExist"));
 			}
 		};

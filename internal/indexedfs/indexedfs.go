@@ -269,10 +269,30 @@ func (ifs *FS) Rename(oldname, newname string) error {
 		return &fs.PathError{Op: "rename", Path: newname, Err: fs.ErrInvalid}
 	}
 
-	key, err := callHelperAwait("getFileKey", ifs.db, oldname)
+	if oldname == newname {
+		return nil
+	}
+
+	oldKey, err := callHelperAwait("getFileKey", ifs.db, oldname)
 	if err != nil {
 		return &fs.PathError{Op: "rename", Path: oldname, Err: err}
 	}
+
+	// if new-file already exists, delete it so we can replace it with old-file
+	newKey, err := callHelperAwait("getFileKey", ifs.db, newname)
+	if err == nil {
+		_, err = callHelperAwait("deleteFile", ifs.db, newKey)
+		if err != nil {
+			return &fs.PathError{Op: "rename", Path: oldname, Err: err}
+		}
+	}
+
+	// TODO: handle case where oldname and newname are directories.
+	// Do we move oldname and its contents to newname/oldname?
+	// Should we just match the man page?
+	// "oldpath can specify a directory.  In this case, newpath must
+	// either not exist, or it must specify an empty directory."
+	// (https://man7.org/linux/man-pages/man2/rename.2.html)
 
 	updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
 		file := args[0]
@@ -282,7 +302,7 @@ func (ifs *FS) Rename(oldname, newname string) error {
 	})
 	defer updateFunc.Release()
 
-	if _, err = callHelperAwait("updateFile", ifs.db, key, updateFunc); err != nil {
+	if _, err = callHelperAwait("updateFile", ifs.db, oldKey, updateFunc); err != nil {
 		return &fs.PathError{Op: "rename", Path: oldname, Err: err}
 	}
 
