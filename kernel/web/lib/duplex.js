@@ -2498,7 +2498,7 @@ var Client = class {
       const resp = new Response(ch, framer);
       resp.error = header.E;
       if (resp.error !== void 0 && resp.error !== null) {
-        throw resp.error;
+        throw new Error(resp.error);
       }
       resp.value = await dec.decode();
       resp.continue = header.C;
@@ -2591,7 +2591,7 @@ var RespondMux = class {
   }
   handle(selector, handler) {
     if (selector === "") {
-      throw "handle: invalid selector";
+      throw new Error("handle: invalid selector");
     }
     let pattern = cleanSelector(selector);
     const matcher = handler;
@@ -2599,10 +2599,10 @@ var RespondMux = class {
       pattern = pattern + "/";
     }
     if (!handler) {
-      throw "handle: invalid handler";
+      throw new Error("handle: invalid handler");
     }
     if (this.match(pattern)) {
-      throw "handle: selector already registered";
+      throw new Error("handle: selector already registered");
     }
     this.handlers[pattern] = handler;
   }
@@ -2823,7 +2823,7 @@ function Marshal(obj) {
     data.setUint32(5, m.additionalBytes);
     return new Uint8Array(data.buffer);
   }
-  throw `marshal of unknown type: ${obj}`;
+  throw new Error(`marshal of unknown type: ${obj}`);
 }
 
 // mux/util.ts
@@ -2844,7 +2844,7 @@ var queue = class {
   }
   push(obj) {
     if (this.closed)
-      throw "closed queue";
+      throw new Error("closed queue");
     if (this.waiters.length > 0) {
       const waiter = this.waiters.shift();
       if (waiter)
@@ -3039,7 +3039,7 @@ function Unmarshal(packet) {
         additionalBytes: data.getUint32(5)
       };
     default:
-      throw `unmarshal of unknown type: ${packet[0]}`;
+      throw new Error(`unmarshal of unknown type: ${packet[0]}`);
   }
 }
 
@@ -3074,7 +3074,7 @@ var Session = class {
     if (await ch.ready.shift()) {
       return ch;
     }
-    throw "failed to open";
+    throw new Error("failed to open");
   }
   accept() {
     return this.incoming.shift();
@@ -3108,7 +3108,7 @@ var Session = class {
           if (this.closed) {
             return;
           }
-          throw `invalid channel (${cmsg.channelID}) on op ${cmsg.ID}`;
+          throw new Error(`invalid channel (${cmsg.channelID}) on op ${cmsg.ID}`);
         }
         await ch.handle(cmsg);
       }
@@ -3299,7 +3299,7 @@ var Channel = class {
   }
   send(msg) {
     if (this.sentClose) {
-      throw "EOF";
+      throw new Error("EOF");
     }
     this.sentClose = msg.ID === CloseID;
     return this.session.enc.encode(msg);
@@ -3323,7 +3323,7 @@ var Channel = class {
     }
     if (msg.ID === OpenConfirmID) {
       if (msg.maxPacketSize < minPacketLength || msg.maxPacketSize > maxPacketLength) {
-        throw "invalid max packet size";
+        throw new Error("invalid max packet size");
       }
       this.remoteId = msg.senderID;
       this.maxRemotePayload = msg.maxPacketSize;
@@ -3337,10 +3337,10 @@ var Channel = class {
   }
   handleData(msg) {
     if (msg.length > this.maxIncomingPayload) {
-      throw "incoming packet exceeds maximum payload size";
+      throw new Error("incoming packet exceeds maximum payload size");
     }
     if (this.myWindow < msg.length) {
-      throw "remote side wrote too much";
+      throw new Error("remote side wrote too much");
     }
     this.myWindow -= msg.length;
     this.readBuf.write(msg.data);

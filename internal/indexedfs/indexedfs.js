@@ -17,7 +17,7 @@ export function initialize() {
 		const OpenDBRequest = indexedDB.open("indexedFS");
 
 		OpenDBRequest.onerror = (event) => {
-			reject(new Error(`Unable to open IndexedDB: ${event.target.error}`));
+			reject(goError(`Unable to open IndexedDB: ${event.target.error}`), null);
 		};
 		OpenDBRequest.onsuccess = (reqEvent) => {
 			const db = reqEvent.target.result;
@@ -57,29 +57,28 @@ export function initialize() {
 
 export function addFile(db, path, perms, isdir, unixTime) {
 	return new Promise((resolve, reject) => {
-		const transaction = db.transaction("files", "readwrite");
+		const req = 
+			db.transaction("files", "readwrite")
+			.objectStore("files")
+			.add({
+				path: path,
+				perms: perms,
+				size: 0,
+				isdir: isdir,
+				ctime: unixTime,
+				mtime: unixTime,
+				atime: unixTime,
+				blob: new Blob([""], {
+					type: "text/plain"
+				}),
+			});
 
-		transaction.onerror = (event) => {
-			event.stopPropagation();
-			reject(new Error(`addFile transaction failed: ${event.target.error}`));
+		req.onsuccess = (event) => {
+			resolve(event.target.result) // return key
 		};
 
-		const fileStore = transaction.objectStore("files");
-		const addRequest = fileStore.add({
-			path: path,
-			perms: perms,
-			size: 0,
-			isdir: isdir,
-			ctime: unixTime,
-			mtime: unixTime,
-			atime: unixTime,
-			blob: new Blob([""], {
-				type: "text/plain"
-			}),
-		});
-
-		addRequest.onsuccess = (event) => {
-			resolve(event.target.result) // return key
+		req.onerror = (event) => {
+			reject(goError(`Failed to add file at path ${path}: ${event.target.error}`), "ErrExist");
 		};
 	});
 }
@@ -87,29 +86,33 @@ export function addFile(db, path, perms, isdir, unixTime) {
 // updateCallback takes a file object, modifies, and returns it.
 export function updateFile(db, pathOrKey, updateCallback) {
 	return new Promise((resolve, reject) => {
-		const transaction = db.transaction("files", "readwrite");
-
-		// any errors should bubble up to this handler
-		transaction.onerror = (event) => {
-			event.stopPropagation();
-			reject(new Error(`updateFile transaction failed: ${event.target.error}`));
-		};
-
-		const fileStore = transaction.objectStore("files");
-		const cursorRequest =
+		const fileStore = db.transaction("files", "readwrite").objectStore("files");
+		const request =
 			typeof pathOrKey === "string" ?
 			fileStore.index("path").openCursor(pathOrKey) :
 			fileStore.openCursor(pathOrKey);
 
-		cursorRequest.onsuccess = (event) => {
+		const onFailure = (event) => {
+			event.stopPropagation();
+			reject(goError(
+				`Couldn't find file with key ${pathOrKey}: ${event.target.error}`, 
+				event.target.error.name === "ConstraintError" ? "ErrExist" : "ErrNotExist"
+			));
+		};
+
+		request.onsuccess = (event) => {
 			const cursor = event.target.result;
 			if(cursor) {
 				const file = updateCallback(cursor.value);
-				cursor.update(file).onsuccess = () => resolve();
+				const updateReq = cursor.update(file)
+				updateReq.onsuccess = () => resolve();
+				updateReq.onerror = onFailure;
 			} else {
-				reject(new Error(`Couldn't find file with key ${pathOrKey}`));
+				reject(goError(`Couldn't find file with key ${pathOrKey}`, "ErrNotExist"));
 			}
 		};
+
+		request.onerror = onFailure;
 	});
 }
 
@@ -128,12 +131,12 @@ export function getFileKey(db, path) {
 			if(event.target.result) {
 				resolve(req.result);
 			} else {
-				reject(new Error(`ErrNotExist: Failed to find file at path: ${path}`));
+				reject(goError(`Failed to find file at path: ${path}`, "ErrNotExist"));
 			}
 		};
 
 		req.onerror = (event) => {
-			reject(new Error(`Failed to find file at path ${path}: ${event.target.error}`));
+			reject(goError(`Failed to find file at path ${path}: ${event.target.error}`, "ErrNotExist"));
 		};
 	});
 }
@@ -172,7 +175,7 @@ export function getDirEntries(db, path) {
 		};
 
 		getRequest.onerror = (event) => {
-			reject(new Error(`Failed to find dir at path ${path}: ${event.target.error}`));
+			reject(goError(`Failed to find dir at path ${path}: ${event.target.error}`, "ErrNotExist"));
 		};
 	});
 }
@@ -189,12 +192,12 @@ export function getFileByPath(db, path) {
 			if(event.target.result) {
 				resolve(getRequest.result);
 			} else {
-				reject(new Error(`ErrNotExist: Failed to find file at path: ${path}`));
+				reject(goError(`Failed to find file at path: ${path}`, "ErrNotExist"));
 			}
 		};
 
 		getRequest.onerror = (event) => {
-			reject(new Error(`Failed to find file at path ${path}: ${event.target.error}`));
+			reject(goError(`Failed to find file at path ${path}: ${event.target.error}`, "ErrNotExist"));
 		};
 	});
 }
@@ -206,16 +209,21 @@ export function readFile(db, key) {
 			.objectStore("files")
 			.get(key);
 
-		getRequest.onsuccess = (event) => {
+		getRequest.onsuccess = async (event) => {
 			if(event.target.result) {
-				resolve(blobToUint8Array(event.target.result.blob));
+				try {
+					const data = await event.target.result.blob.arrayBuffer();
+					resolve(new Uint8Array(data));
+				} catch (rejected) {
+					reject(goError(rejected instanceof Error ? rejected.message : String(rejected), "ErrReadingBlob"));
+				}
 			} else {
-				reject(new Error(`ErrNotExist: Failed to read file with key ${key}`))
+				reject(goError(`Failed to read file with key ${key}`, "ErrNotExist"));
 			}
 		};
 
 		getRequest.onerror = (event) => {
-			reject(new Error(`Failed to read file with key ${key}: ${event.target.error}`))
+			reject(goError(`Failed to read file with key ${key}: ${event.target.error}`, "ErrNotExist"));
 		};
 	})
 }
@@ -229,17 +237,15 @@ export function deleteFile(db, key) {
 
 		req.onsuccess = () => resolve();
 		req.onerror = (event) => {
-			reject(new Error(`Failed to delete file with key ${key}: ${event.target.error}`))
+			reject(goError(`Failed to delete file with key ${key}: ${event.target.error}`, "ErrNotExist"));
 		};
 	})
 }
 
 
 export function deleteAll(db, path) {
-	if (path === "." || path === "") {
-		console.warn("deleteAll invalid path:", path)
-		return; // error? allow it? 
-	}
+	// Assumes path !== "." or ""
+	// This is asserted by the caller.
 
 	let dirpath = path;
 	if (path && path[path.length - 1] !== '/') {
@@ -264,38 +270,15 @@ export function deleteAll(db, path) {
 
 		tx.oncomplete = () => resolve();
 		tx.onerror = (event) => {
-			reject(new Error(`DeleteAll failure: ${path}: ${event.target.errorCode}`));
+			reject(goError(`DeleteAll failure: ${path}: ${event.target.errorCode}`, "ErrNotExist"));
 		};
 	});
 }
 
-export function blobToUint8Array(blob) {
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-
-		reader.onloadend = function() {
-			resolve(new Uint8Array(reader.result));
-		};
-
-		reader.onerror = function() {
-			reject(new Error("Failed to read blob"));
-		};
-
-		reader.readAsArrayBuffer(blob);
-	});
+function goError(message, goErrorName) {
+	let err = new Error(message);
+	if(goErrorName) {
+		err.goErrorName = goErrorName;
+	}
+	return err;
 }
-
-// function writefile(path, content) {
-// 	path = cleanPath(path);
-// 	let node = makeNode(path);
-// 	if (typeof content === "string") {
-// 		content = new Blob([content], {
-// 			type: "text/plain"
-// 		});
-// 	}
-// 	let bs = await createBinaryStreamFromBlob(content, window.wanix.collab.group);
-// 	node.mutate(n => {
-// 		n.set("dataID", bs.id);
-// 		n.set("dataSize", content.size);
-// 	})
-// }

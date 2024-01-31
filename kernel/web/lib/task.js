@@ -61,7 +61,7 @@ export class Task {
 
   async terminate() {
     if (!this.worker) {
-      throw "no worker";
+      throw new Error("no worker");
     }
 
     await this.pipe.close();
@@ -70,7 +70,7 @@ export class Task {
 
   async wait() {
     if (!this.worker) {
-      throw "no worker";
+      throw new Error("no worker");
     }
 
     const resp = await this.finished;
@@ -79,7 +79,7 @@ export class Task {
 
   async stdout() {
     if (!this.worker) {
-      throw "no worker";
+      throw new Error("no worker");
     }
     const resp = await this.call("stdout");
     return resp.channel;
@@ -87,7 +87,7 @@ export class Task {
 
   async stderr() {
     if (!this.worker) {
-      throw "no worker";
+      throw new Error("no worker");
     }
     const resp = await this.call("stderr");
     return resp.channel;
@@ -95,7 +95,7 @@ export class Task {
 
   async output() {
     if (!this.worker) {
-      throw "no worker";
+      throw new Error("no worker");
     }
     const resp = await this.call("output");
     return resp.channel;
@@ -103,7 +103,7 @@ export class Task {
 
   async stdin() {
     if (!this.worker) {
-      throw "no worker";
+      throw new Error("no worker");
     }
     const resp = await this.call("stdin");
     return resp.channel;
