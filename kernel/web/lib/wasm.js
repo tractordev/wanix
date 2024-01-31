@@ -20,17 +20,16 @@
 	}
 
 	const inflateErr = (err) => {
-		if (!err.includes(";")) {
+		if (!err.message.includes(";")) {
 			return err;
 		}
-		const [msg, params] = err.split(";");
+		const [msg, params] = err.message.split(";");
 		const obj = params.split(",").reduce((obj, pair) => {
 			const [key, value] = pair.split('=');
 			obj[key.trim()] = value.trim();
 			return obj;
 		}, {});
-		const e = new Error(msg);
-		return Object.assign(e, obj);
+		return Object.assign(new Error(msg), obj);
 	}
 
   if (!globalThis.stdin) {
