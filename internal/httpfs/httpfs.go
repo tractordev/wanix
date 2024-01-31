@@ -3,6 +3,7 @@ package httpfs
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"io/fs"
 	"net/http"
@@ -22,6 +23,10 @@ func FileServer(fsys fs.FS) http.Handler {
 		}
 		fi, err := fs.Stat(fsys, name)
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -46,6 +51,10 @@ func FileServer(fsys fs.FS) http.Handler {
 		if fi.IsDir() && r.URL.RawQuery == "readdir" {
 			de, err := fs.ReadDir(fsys, name)
 			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					http.Error(w, err.Error(), http.StatusNotFound)
+					return
+				}
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -89,6 +98,9 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
+	if resp.StatusCode == 404 {
+		return nil, fs.ErrNotExist
+	}
 	return &file{
 		ReadCloser: resp.Body,
 		Name:       name,
@@ -101,6 +113,9 @@ func (fsys *FS) stat(name string) (*info, error) {
 	resp, err := http.DefaultClient.Get(url + "?stat")
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode == 404 {
+		return nil, fs.ErrNotExist
 	}
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -129,6 +144,9 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	resp, err := http.DefaultClient.Get(url + "?readdir")
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode == 404 {
+		return nil, fs.ErrNotExist
 	}
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
