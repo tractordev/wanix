@@ -94,7 +94,10 @@ export function updateFile(db, pathOrKey, updateCallback) {
 
 		const onFailure = (event) => {
 			event.stopPropagation();
-			reject(goError(`Couldn't find file with key ${pathOrKey}: ${event.target.error}`, "ErrNotExist"));
+			reject(goError(
+				`Couldn't find file with key ${pathOrKey}: ${event.target.error}`, 
+				event.target.error.name === "ConstraintError" ? "ErrExist" : "ErrNotExist"
+			));
 		};
 
 		request.onsuccess = (event) => {
