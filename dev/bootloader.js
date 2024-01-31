@@ -168,7 +168,11 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
         resolve(Response.error());
         return;
       }
-      resolve(new Response(reply.body, {headers: reply.headers}))
+      resolve(new Response(reply.body, {
+        headers: reply.headers, 
+        status: reply.headers["Wanix-Status-Code"], 
+        statusText: reply.headers["Wanix-Status-Text"]
+      }))
     }))
   });
   
