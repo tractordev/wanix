@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"syscall/js"
 
 	"tractor.dev/wanix/internal/jsutil"
@@ -42,13 +43,15 @@ func (s *Gateway) request(this js.Value, args []js.Value) any {
 		}
 		rr := httptest.NewRecorder()
 
-		// fmt.Println("SW", fullURL)
+		//fmt.Println("SW", fullURL)
 		s.ServeHTTP(rr, req)
 
 		headers := make(map[string]any)
 		for k, v := range rr.Result().Header {
 			headers[k] = v[0]
 		}
+		headers["Wanix-Status-Code"] = strconv.Itoa(rr.Code)
+		headers["Wanix-Status-Text"] = rr.Result().Status
 
 		ch := jsutil.Await(responder.Call("continue", headers))
 		chw := &jsutil.Writer{ch}

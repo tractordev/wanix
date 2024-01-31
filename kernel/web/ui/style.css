@@ -14,10 +14,10 @@ iframe:has(+ #main).visor.open { animation: visor-open 0.25s; animation-fill-mod
   to    {height: var(--visor-height);} 
 }
 @keyframes visor-open {
-  from  {margin-top: -100%;} 
-  to    {margin-top: 0; height: var(--visor-height); }
+  from  {margin-top: -100%; opacity: 0%; } 
+  to    {margin-top: 0; height: var(--visor-height); opacity: 100%; }
 }
 @keyframes visor-close {
-  from  {margin-top: 0; height: var(--visor-height);} 
-  to    {margin-top: -100%;} 
+  from  {margin-top: 0; height: var(--visor-height); opacity: 100%; } 
+  to    {margin-top: -100%; opacity: 0%; } 
 }
