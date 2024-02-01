@@ -81,29 +81,22 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     await setupServiceWorker();
 
     globalThis.initfs = {};
-    const load = async (path) => {
-      const basename = (path) => path.replace(/\\/g,'/').split('/').pop();
-      if (globalThis.initdata) {
-        // use embedded data if present
-        path = `./~init/${basename(path)}`;
+    const load = async (name, file) => {
+      // Determine if file contains a path to fetch or embedded file contents to load.
+      if(file.type === "text/plain") {
+        globalThis.initfs[name] = await (await fetch(`./sys/dev/${file.data}`)).blob();
+      } else {
+        globalThis.initfs[name] = await (await fetch(`./~init/${name}`)).blob();
       }
-      globalThis.initfs[basename(path)] = await (await fetch(path)).blob();
+    };
+
+    // allow loading concurrently
+    let loads = [];
+    for(const property in globalThis.initdata) {
+      loads.push(load(property, globalThis.initdata[property]));
     }
-    // TODO: define these in one place. duplicated in initdata.go
-    await Promise.all([
-      load("./sys/dev/kernel/web/lib/duplex.js"),
-      load("./sys/dev/kernel/web/lib/worker.js"),
-      load("./sys/dev/kernel/web/lib/syscall.js"),
-      load("./sys/dev/kernel/web/lib/task.js"),
-      load("./sys/dev/kernel/web/lib/wasm.js"),
-      load("./sys/dev/kernel/web/lib/host.js"),
-      load("./sys/dev/internal/indexedfs/indexedfs.js"), // maybe load from kernel?
-      load("./sys/dev/local/bin/kernel"),
-      load("./sys/dev/local/bin/shell"),
-      load("./sys/dev/local/bin/build"),
-      load("./sys/dev/local/bin/micro"),
-    ]);
-    
+    await Promise.all(loads);
+
     globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"]));
     globalThis.task = await import(URL.createObjectURL(initfs["task.js"]));
 

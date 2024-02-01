@@ -14,7 +14,7 @@ func main() {
 	fatal(err)
 	defer f.Close()
 
-	PackFilesTo(f)
+	PackFilesTo(f, PackFileData)
 
 	src, err := os.ReadFile("./dev/bootloader.js")
 	fatal(err)
