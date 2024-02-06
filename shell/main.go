@@ -249,18 +249,13 @@ func findCommand(name string, args []string) (*exec.Cmd, error) {
 
 	if scriptPath != "" {
 		shellArgs := append([]string{scriptPath}, args...)
-		// TODO: shell is currently only available in the initfs,
-		// but the process worker is able to exec it from there anyway.
-		// We should really mount the shell exe in /sys/bin though.
-		return exec.Command("shell", shellArgs...), nil
+		return exec.Command("/sys/bin/shell.wasm", shellArgs...), nil
 	}
 
-	var err error
 	if buildPath != "" {
-		wasmPath, err = buildCmdSource(buildPath)
-		if err != nil {
-			return nil, err
-		}
+		// kernel/proc will automatically build and execute the program if you
+		// pass it the path to it's source code.
+		return exec.Command(buildPath, args...), nil
 	}
 
 	if wasmPath != "" {

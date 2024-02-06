@@ -8,34 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"tractor.dev/toolkit-go/engine/fs/fsutil"
-	"tractor.dev/wanix/kernel/proc/exec"
 )
-
-// returns an empty wasmPath on error or non-zero exit code
-func buildCmdSource(path string) (wasmPath string, err error) {
-	wasmPath = filepath.Join("/sys/bin", filepath.Base(path)+".wasm")
-
-	// TODO: could also just change the search order in shell.go:findCommand()
-	wasmExists, err := fsutil.Exists(os.DirFS("/"), unixToFsPath(wasmPath))
-	if err != nil {
-		return "", err
-	}
-
-	if !wasmExists {
-		cmd := exec.Command("build", "-output", wasmPath, path)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-
-		exitCode, err := cmd.Run()
-		if exitCode != 0 {
-			return "", err
-		}
-	}
-
-	return wasmPath, nil
-}
 
 var WASM_MAGIC = []byte{0, 'a', 's', 'm'}
 

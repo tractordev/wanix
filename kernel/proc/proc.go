@@ -3,9 +3,13 @@ package proc
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"syscall/js"
 
+	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/internal/jsutil"
 )
 
@@ -32,6 +36,25 @@ func (s *Service) Get(pid int) (*Process, error) {
 func (s *Service) Spawn(path string, args []string, env map[string]string, dir string) (*Process, error) {
 	// TODO: check path exists, execute bit
 
+	// can't use jsutil.WanixSyscall inside the kernel
+	stat, err := jsutil.AwaitErr(js.Global().Get("api").Get("fs").Call("stat", path))
+	if err != nil {
+		return nil, err
+	}
+
+	if stat.Get("isDirectory").Bool() {
+		matches, _ := fs.Glob(os.DirFS(unixToFsPath(path)), "*.go")
+		if matches != nil && len(matches) > 0 {
+			path, err = s.buildCmdSource(path, dir)
+			if err != nil {
+				return nil, err
+			}
+			if path == "" {
+				return nil, os.ErrInvalid
+			}
+		}
+	}
+
 	if env == nil {
 		// TODO: set from os.Environ()
 	}
@@ -53,7 +76,7 @@ func (s *Service) Spawn(path string, args []string, env map[string]string, dir s
 	s.mu.Unlock()
 
 	p.Task = js.Global().Get("task").Get("Task").New(js.Global().Get("initfs"), p.ID)
-	_, err := jsutil.AwaitErr(p.Task.Call("exec", p.Path, jsutil.ToJSArray(p.Args), map[string]any{
+	_, err = jsutil.AwaitErr(p.Task.Call("exec", p.Path, jsutil.ToJSArray(p.Args), map[string]any{
 		"env": jsutil.ToJSMap(p.Env),
 		"dir": p.Dir,
 	}))
@@ -102,4 +125,38 @@ func (p *Process) Terminate() error {
 func (p *Process) Wait() (int, error) {
 	v, err := jsutil.AwaitErr(p.Task.Call("wait"))
 	return v.Int(), err
+}
+
+func unixToFsPath(path string) string {
+	return filepath.Clean(strings.TrimLeft(path, "/"))
+}
+
+// returns an empty wasmPath on error or non-zero exit code
+func (s *Service) buildCmdSource(path, workingDir string) (wasmPath string, err error) {
+	wasmPath = filepath.Join("/sys/bin", filepath.Base(path)+".wasm")
+
+	// TODO: use mtime and ctime to determine if cmd needs rebuilding.
+	wasmExists, err := fs.Exists(os.DirFS("/"), unixToFsPath(wasmPath))
+	if err != nil {
+		return "", err
+	}
+
+	if !wasmExists {
+		p, err := s.Spawn(
+			"/sys/cmd/build.wasm",
+			[]string{"-output", wasmPath, path},
+			map[string]string{},
+			workingDir,
+		)
+		if err != nil {
+			return "", err
+		}
+
+		exitCode, err := p.Wait()
+		if exitCode != 0 {
+			return "", err
+		}
+	}
+
+	return wasmPath, nil
 }

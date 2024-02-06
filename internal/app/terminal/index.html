@@ -61,7 +61,7 @@
     const enc = new TextEncoder();
     const dec = new TextDecoder();
 
-    const resp = await sys.call("tty.open", ["shell", [], { TERM: "xterm-256color" }]);
+    const resp = await sys.call("tty.open", ["sys/cmd/shell", [], { TERM: "xterm-256color" }]);
     const pid = resp.value;
     const ch = resp.channel;
     //parent.wanix.termCh = ch;

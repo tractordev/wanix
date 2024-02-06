@@ -21,9 +21,20 @@ var files = []File{
 	{Name: "host.js", Path: "./kernel/web/lib/host.js"},
 	{Name: "indexedfs.js", Path: "./internal/indexedfs/indexedfs.js"},
 	{Name: "kernel", Path: "./local/bin/kernel"},
-	{Name: "shell", Path: "./local/bin/shell"},
 	{Name: "build", Path: "./local/bin/build"},
 	{Name: "macro", Path: "./local/bin/micro"},
+
+	// {Name: "shell", Path: "./local/bin/shell"},
+	{Name: "shell/main.go", Path: "shell/main.go"},
+	{Name: "shell/copy.go", Path: "shell/copy.go"},
+	{Name: "shell/download.go", Path: "shell/download.go"},
+	{Name: "shell/main.go", Path: "shell/main.go"},
+	{Name: "shell/open.go", Path: "shell/open.go"},
+	{Name: "shell/preprocessor.go", Path: "shell/preprocessor.go"},
+	{Name: "shell/smallcmds.go", Path: "shell/smallcmds.go"},
+	{Name: "shell/tree.go", Path: "shell/tree.go"},
+	{Name: "shell/util.go", Path: "shell/util.go"},
+	{Name: "shell/watch.go", Path: "shell/watch.go"},
 }
 
 type PackMode int
