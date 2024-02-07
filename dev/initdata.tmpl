@@ -1,5 +1,5 @@
 globalThis.initdata = {
 {{range .}}
-  "{{.Name}}": {type: "{{.Type}}", data: "{{.Data}}"},
+  "{{.Name}}": {type: "{{.Type}}", mtimeMs: {{.Mtime}}, data: "{{.Data}}"},
 {{end}}
 }

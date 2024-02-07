@@ -24,7 +24,7 @@ var files = []File{
 	{Name: "build", Path: "./local/bin/build"},
 	{Name: "macro", Path: "./local/bin/micro"},
 
-	// {Name: "shell", Path: "./local/bin/shell"},
+	// Shell source files
 	{Name: "shell/main.go", Path: "shell/main.go"},
 	{Name: "shell/copy.go", Path: "shell/copy.go"},
 	{Name: "shell/download.go", Path: "shell/download.go"},
@@ -54,6 +54,10 @@ func PackFilesTo(w io.Writer, mode PackMode) {
 				files[i].Type = "application/octet-stream"
 			}
 
+			fi, err := os.Stat(files[i].Path)
+			fatal(err)
+			files[i].Mtime = fi.ModTime().UnixMilli()
+
 			data, err := os.ReadFile(files[i].Path)
 			fatal(err)
 			var gzipBuffer bytes.Buffer
@@ -68,6 +72,9 @@ func PackFilesTo(w io.Writer, mode PackMode) {
 		for i := range files {
 			files[i].Type = "text/plain"
 			files[i].Data = files[i].Path
+			fi, err := os.Stat(files[i].Path)
+			fatal(err)
+			files[i].Mtime = fi.ModTime().UnixMilli()
 		}
 	}
 
@@ -78,10 +85,11 @@ func PackFilesTo(w io.Writer, mode PackMode) {
 }
 
 type File struct {
-	Name string
-	Path string
-	Type string
-	Data string
+	Name  string
+	Path  string
+	Type  string
+	Data  string
+	Mtime int64
 }
 
 func fatal(err error) {

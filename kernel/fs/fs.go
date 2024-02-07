@@ -112,6 +112,11 @@ func getPrefixedInitFiles(prefix string) []string {
 }
 
 func (s *Service) copyFileFromInitFS(dst, src string) error {
+	initFile := js.Global().Get("initfs").Get(src)
+	if initFile.IsUndefined() {
+		return nil
+	}
+
 	var exists bool
 	fi, err := fs.Stat(s.fsys, dst)
 	if err == nil {
@@ -122,15 +127,8 @@ func (s *Service) copyFileFromInitFS(dst, src string) error {
 		return err
 	}
 
-	blob := js.Global().Get("initfs").Get(src)
-	if blob.IsUndefined() {
-		return nil
-	}
-
-	// TODO: use better heuristic. Editing a file will trigger this code and
-	// overwrite any changes. This is most definitely unintended.
-	// TODO: store the mtime for initfs files and compare them with the wanix mtime.
-	if !exists || int64(blob.Get("size").Int()) != fi.Size() {
+	if !exists || time.UnixMilli(int64(initFile.Get("mtimeMs").Float())).After(fi.ModTime()) {
+		blob := initFile.Get("blob")
 		buffer, err := jsutil.AwaitErr(blob.Call("arrayBuffer"))
 		if err != nil {
 			return err

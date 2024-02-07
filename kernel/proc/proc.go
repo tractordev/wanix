@@ -135,13 +135,45 @@ func unixToFsPath(path string) string {
 func (s *Service) buildCmdSource(path, workingDir string) (wasmPath string, err error) {
 	wasmPath = filepath.Join("/sys/bin", filepath.Base(path)+".wasm")
 
-	// TODO: use mtime and ctime to determine if cmd needs rebuilding.
-	wasmExists, err := fs.Exists(os.DirFS("/"), unixToFsPath(wasmPath))
-	if err != nil {
+	dfs := os.DirFS("/")
+	var wasmExists bool
+	wasmStat, err := fs.Stat(dfs, unixToFsPath(wasmPath))
+	if err == nil {
+		wasmExists = true
+	} else if os.IsNotExist(err) {
+		wasmExists = false
+	} else {
 		return "", err
 	}
 
+	var shouldBuild bool
 	if !wasmExists {
+		shouldBuild = true
+	} else {
+		wasmMtime := wasmStat.ModTime()
+		err = fs.WalkDir(dfs, unixToFsPath(path), func(walkPath string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+
+			fi, err := d.Info()
+			if err != nil {
+				return err
+			}
+
+			if fi.ModTime().After(wasmMtime) {
+				shouldBuild = true
+				return fs.SkipAll
+			}
+
+			return nil
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if shouldBuild {
 		p, err := s.Spawn(
 			"/sys/cmd/build.wasm",
 			[]string{"-output", wasmPath, path},
@@ -151,6 +183,10 @@ func (s *Service) buildCmdSource(path, workingDir string) (wasmPath string, err 
 		if err != nil {
 			return "", err
 		}
+
+		// TODO: https://github.com/tractordev/wanix/issues/69
+		// go io.Copy(os.Stdout, p.Stdout())
+		// go io.Copy(os.Stderr, p.Stderr())
 
 		exitCode, err := p.Wait()
 		if exitCode != 0 {

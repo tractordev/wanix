@@ -84,9 +84,9 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     const load = async (name, file) => {
       // Determine if file contains a path to fetch or embedded file contents to load.
       if(file.type === "text/plain") {
-        globalThis.initfs[name] = await (await fetch(`./sys/dev/${file.data}`)).blob();
+        globalThis.initfs[name] = { mtimeMs: file.mtimeMs, blob: await (await fetch(`./sys/dev/${file.data}`)).blob() };
       } else {
-        globalThis.initfs[name] = await (await fetch(`./~init/${name}`)).blob();
+        globalThis.initfs[name] = { mtimeMs: file.mtimeMs, blob: await (await fetch(`./~init/${name}`)).blob() };
       }
     };
 
@@ -97,8 +97,8 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     }
     await Promise.all(loads);
 
-    globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"]));
-    globalThis.task = await import(URL.createObjectURL(initfs["task.js"]));
+    globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"].blob));
+    globalThis.task = await import(URL.createObjectURL(initfs["task.js"].blob));
 
     globalThis.sys = new task.Task(initfs);
     
@@ -107,7 +107,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     await sys.exec("kernel");
 
     // load host API
-    await import(URL.createObjectURL(initfs["host.js"]));
+    await import(URL.createObjectURL(initfs["host.js"].blob));
 
   })();
 }
