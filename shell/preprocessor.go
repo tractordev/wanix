@@ -1,5 +1,6 @@
 package main
 
+//adasds
 import (
 	"os"
 	"path/filepath"
@@ -34,9 +35,16 @@ func (m *Shell) preprocess(input string) ([]string, error) {
 
 	result := []string{}
 	for _, arg := range args {
+		if strings.ContainsRune(arg, '$') {
+			val, err := posix.Expand(arg, mapping)
+			if err != nil {
+				return result, err
+			}
+			arg = val
+		}
 
 		if strings.ContainsAny(arg, "*?[") {
-			matches, err := filepath.Glob(arg)
+			matches, err := filepath.Glob(absPath(arg))
 			if err != nil {
 				return result, err
 			}
@@ -44,15 +52,6 @@ func (m *Shell) preprocess(input string) ([]string, error) {
 			for _, match := range matches {
 				result = append(result, match)
 			}
-			continue
-		}
-
-		if strings.ContainsRune(arg, '$') {
-			val, err := posix.Expand(arg, mapping)
-			if err != nil {
-				return result, err
-			}
-			result = append(result, val)
 			continue
 		}
 
