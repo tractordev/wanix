@@ -174,6 +174,9 @@ func (s *Service) buildCmdSource(path, workingDir string) (wasmPath string, err 
 	}
 
 	if shouldBuild {
+		if path == "sys/cmd/shell" {
+			jsutil.Log("Building Shell...")
+		}
 		p, err := s.Spawn(
 			"/sys/cmd/build.wasm",
 			[]string{"-output", wasmPath, path},

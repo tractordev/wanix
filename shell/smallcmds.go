@@ -166,25 +166,26 @@ func removeCmd() *cli.Command {
 		Usage: "rm [-r] <path>...",
 		Args:  cli.MinArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
-			// TODO: multiple files
-			if recursive {
-				err := os.RemoveAll(absPath(args[0]))
-				if checkErr(ctx, err) {
-					return
-				}
-			} else {
-				if isdir, err := fs.IsDir(os.DirFS("/"), unixToFsPath(args[0])); isdir {
-					fmt.Fprintf(ctx, "Can't remove file %s: is a directory\n(try using the `-r` flag)\n", absPath(args[0]))
-					return
-				} else if checkErr(ctx, err) {
-					return
-				}
+			for _, arg := range args {
+				if recursive {
+					err := os.RemoveAll(absPath(arg))
+					if checkErr(ctx, err) {
+						return
+					}
+				} else {
+					isdir, err := fs.IsDir(os.DirFS("/"), unixToFsPath(arg))
+					if checkErr(ctx, err) {
+						return
+					}
+					if isdir {
+						fmt.Fprintf(ctx, "Can't remove file %s: is a directory\n(try using the `-r` flag)\n", absPath(arg))
+						continue
+					}
 
-				// TODO: fs.Remove gives the wrong error if trying to delete a readonly file,
-				// (should be Operation not permitted)
-				err := os.Remove(absPath(args[0]))
-				if checkErr(ctx, err) {
-					return
+					err = os.Remove(absPath(arg))
+					if checkErr(ctx, err) {
+						return
+					}
 				}
 			}
 		},
