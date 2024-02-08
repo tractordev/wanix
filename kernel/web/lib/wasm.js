@@ -101,10 +101,11 @@
 			},
 			// writeSync used by runtime.wasmWrite
 			writeSync(fd, buf) {
+				if(!buf) return 0;
+
 				outputBuf += decoder.decode(buf);
 				const nl = outputBuf.lastIndexOf("\n");
 				if (nl != -1) {
-					console.log(outputBuf.substring(0, nl));
 					outputBuf = outputBuf.substring(nl + 1);
 				}
 				return buf.length;

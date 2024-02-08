@@ -54,7 +54,7 @@ type FS struct {
 
 func New() (*FS, error) {
 	if helper.IsUndefined() {
-		blob := js.Global().Get("initfs").Get("indexedfs.js")
+		blob := js.Global().Get("initfs").Get("indexedfs.js").Get("blob")
 		url := js.Global().Get("URL").Call("createObjectURL", blob)
 		helper = jsutil.Await(js.Global().Call("import", url))
 	}

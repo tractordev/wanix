@@ -34,7 +34,7 @@ type Kernel struct {
 
 func (k *Kernel) Run(ctx context.Context) error {
 	// import syscall.js
-	blob := js.Global().Get("initfs").Get("syscall.js")
+	blob := js.Global().Get("initfs").Get("syscall.js").Get("blob")
 	url := js.Global().Get("URL").Call("createObjectURL", blob)
 	jsutil.Await(js.Global().Call("import", url))
 

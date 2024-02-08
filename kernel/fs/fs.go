@@ -32,7 +32,9 @@ func log(args ...any) {
 }
 
 type Service struct {
-	fsys *watchfs.FS
+	fsys fs.MutableFS
+	// Wraps fsys, so it's actually the same filesystem.
+	watcher *watchfs.FS
 
 	fds    map[int]*fd
 	nextFd int
@@ -53,21 +55,30 @@ func (s *Service) Initialize() {
 	if err != nil {
 		panic(err)
 	}
-	mntfs := mountablefs.New(ifs)
-	s.fsys = watchfs.New(mntfs)
+	s.fsys = mountablefs.New(ifs)
+	s.watcher = watchfs.New(s.fsys)
 
 	// ensure basic system tree exists
-	fs.MkdirAll(s.fsys.FS, "app", 0755)
-	fs.MkdirAll(s.fsys.FS, "cmd", 0755)
-	fs.MkdirAll(s.fsys.FS, "sys/app", 0755)
-	fs.MkdirAll(s.fsys.FS, "sys/bin", 0755)
-	fs.MkdirAll(s.fsys.FS, "sys/cmd", 0755)
-	fs.MkdirAll(s.fsys.FS, "sys/dev", 0755)
-	fs.MkdirAll(s.fsys.FS, "sys/tmp", 0755)
+	fs.MkdirAll(s.fsys, "app", 0755)
+	fs.MkdirAll(s.fsys, "cmd", 0755)
+	fs.MkdirAll(s.fsys, "sys/app", 0755)
+	fs.MkdirAll(s.fsys, "sys/bin", 0755)
+	fs.MkdirAll(s.fsys, "sys/cmd", 0755)
+	fs.MkdirAll(s.fsys, "sys/dev", 0755)
+	fs.MkdirAll(s.fsys, "sys/tmp", 0755)
 
 	// copy builtin exe's into filesystem
-	s.copyInitFileIntoFS("sys/cmd/build.wasm", "build")
-	s.copyInitFileIntoFS("cmd/micro.wasm", "micro")
+	s.copyFileFromInitFS("sys/cmd/build.wasm", "build")
+	s.copyFileFromInitFS("cmd/micro.wasm", "micro")
+
+	// copy shell source into filesystem
+	fs.MkdirAll(s.fsys, "sys/cmd/shell", 0755)
+	shellFiles := getPrefixedInitFiles("shell/")
+	for _, path := range shellFiles {
+		if err = s.copyFileFromInitFS(filepath.Join("sys/cmd", path), path); err != nil {
+			panic(err)
+		}
+	}
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	resp, err := http.DefaultClient.Get(devURL)
@@ -75,19 +86,39 @@ func (s *Service) Initialize() {
 		panic(err)
 	}
 	if resp.StatusCode == 200 {
-		if err := s.fsys.FS.(*mountablefs.FS).Mount(httpfs.New(devURL), "/sys/dev"); err != nil {
+		if err := s.fsys.(*mountablefs.FS).Mount(httpfs.New(devURL), "/sys/dev"); err != nil {
 			panic(err)
 		}
 	}
 
-	if err := s.fsys.FS.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"); err != nil {
+	if err := s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"); err != nil {
 		panic(err)
 	}
 }
 
-func (s *Service) copyInitFileIntoFS(dst, src string) error {
+func getPrefixedInitFiles(prefix string) []string {
+	names := js.Global().Get("Object").Call("getOwnPropertyNames", js.Global().Get("initfs"))
+	length := names.Length()
+
+	var result []string
+	for i := 0; i < length; i += 1 {
+		name := names.Index(i).String()
+		if strings.HasPrefix(name, prefix) {
+			result = append(result, name)
+		}
+	}
+
+	return result
+}
+
+func (s *Service) copyFileFromInitFS(dst, src string) error {
+	initFile := js.Global().Get("initfs").Get(src)
+	if initFile.IsUndefined() {
+		return nil
+	}
+
 	var exists bool
-	fi, err := fs.Stat(s.fsys.FS, dst)
+	fi, err := fs.Stat(s.fsys, dst)
 	if err == nil {
 		exists = true
 	} else if os.IsNotExist(err) {
@@ -96,12 +127,8 @@ func (s *Service) copyInitFileIntoFS(dst, src string) error {
 		return err
 	}
 
-	blob := js.Global().Get("initfs").Get(src)
-	if blob.IsUndefined() {
-		return nil
-	}
-
-	if !exists || int64(blob.Get("size").Int()) != fi.Size() {
+	if !exists || time.UnixMilli(int64(initFile.Get("mtimeMs").Float())).After(fi.ModTime()) {
+		blob := initFile.Get("blob")
 		buffer, err := jsutil.AwaitErr(blob.Call("arrayBuffer"))
 		if err != nil {
 			return err
@@ -110,7 +137,7 @@ func (s *Service) copyInitFileIntoFS(dst, src string) error {
 		// TODO: creating the file and applying the blob directly in indexedfs would be faster.
 		data := make([]byte, blob.Get("size").Int())
 		js.CopyBytesToGo(data, js.Global().Get("Uint8Array").New(buffer))
-		err = fs.WriteFile(s.fsys.FS, dst, data, 0644)
+		err = fs.WriteFile(s.fsys, dst, data, 0644)
 		if err != nil {
 			return err
 		}
@@ -197,7 +224,7 @@ func (s *Service) open(this js.Value, args []js.Value) any {
 	go func() {
 		log("open", path, s.nextFd, strings.Join(flags, ","), fmt.Sprintf("%o\n", mode))
 
-		f, err := s.fsys.FS.(*mountablefs.FS).OpenFile(path, flag, fs.FileMode(mode))
+		f, err := s.fsys.OpenFile(path, flag, fs.FileMode(mode))
 		if err != nil {
 			if f != nil {
 				log("opened")
@@ -346,7 +373,7 @@ func (s *Service) readdir(this js.Value, args []js.Value) any {
 	go func() {
 		log("readdir", path)
 
-		fi, err := fs.ReadDir(s.fsys.FS, path)
+		fi, err := fs.ReadDir(s.fsys, path)
 		if err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
@@ -385,7 +412,7 @@ func newStatEmpty() map[string]any {
 }
 
 func (s *Service) _stat(path string, cb js.Value) {
-	fi, err := s.fsys.FS.(*mountablefs.FS).Stat(path)
+	fi, err := s.fsys.Stat(path)
 	if err != nil {
 		cb.Invoke(jsutil.ToJSError(err))
 		return
@@ -504,7 +531,7 @@ func (s *Service) chown(this js.Value, args []js.Value) any {
 	go func() {
 		log("chown", path)
 
-		if err := s.fsys.FS.(*mountablefs.FS).Chown(path, uid, gid); err != nil {
+		if err := s.fsys.Chown(path, uid, gid); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -533,7 +560,7 @@ func (s *Service) fchown(this js.Value, args []js.Value) any {
 			return
 		}
 
-		if err := s.fsys.FS.(*mountablefs.FS).Chown(f.Path, uid, gid); err != nil {
+		if err := s.fsys.Chown(f.Path, uid, gid); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -554,7 +581,7 @@ func (s *Service) lchown(this js.Value, args []js.Value) any {
 	go func() {
 		log("lchown", path)
 
-		if err := s.fsys.FS.(*mountablefs.FS).Chown(path, uid, gid); err != nil {
+		if err := s.fsys.Chown(path, uid, gid); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -574,7 +601,7 @@ func (s *Service) chmod(this js.Value, args []js.Value) any {
 	go func() {
 		log("chmod", path)
 
-		if err := s.fsys.FS.(*mountablefs.FS).Chmod(path, fs.FileMode(mode)); err != nil {
+		if err := s.fsys.Chmod(path, fs.FileMode(mode)); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -602,7 +629,7 @@ func (s *Service) fchmod(this js.Value, args []js.Value) any {
 			return
 		}
 
-		if err := s.fsys.FS.(*mountablefs.FS).Chmod(f.Path, fs.FileMode(mode)); err != nil {
+		if err := s.fsys.Chmod(f.Path, fs.FileMode(mode)); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -622,7 +649,7 @@ func (s *Service) mkdir(this js.Value, args []js.Value) any {
 	go func() {
 		log("mkdir", path)
 
-		if err := s.fsys.FS.(*mountablefs.FS).MkdirAll(path, os.FileMode(perm)); err != nil {
+		if err := s.fsys.MkdirAll(path, os.FileMode(perm)); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -641,7 +668,7 @@ func (s *Service) rename(this js.Value, args []js.Value) any {
 	go func() {
 		log("rename", from, to)
 
-		if err := s.fsys.FS.(*mountablefs.FS).Rename(from, to); err != nil {
+		if err := s.fsys.Rename(from, to); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -661,7 +688,7 @@ func (s *Service) rmdir(this js.Value, args []js.Value) any {
 		log("rmdir", path)
 
 		// TODO: should only remove if dir is empty i think?
-		if err := s.fsys.FS.(*mountablefs.FS).RemoveAll(path); err != nil {
+		if err := s.fsys.RemoveAll(path); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -681,7 +708,7 @@ func (s *Service) unlink(this js.Value, args []js.Value) any {
 		log("unlink", path)
 
 		// GOOS=js calls unlink for os.RemoveAll so we use RemoveAll here
-		if err := s.fsys.FS.(*mountablefs.FS).RemoveAll(path); err != nil {
+		if err := s.fsys.RemoveAll(path); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -733,7 +760,7 @@ func (s *Service) utimes(this js.Value, args []js.Value) any {
 	go func() {
 		log("utimes", path)
 
-		if err := s.fsys.FS.(*mountablefs.FS).Chtimes(path, atime, mtime); err != nil {
+		if err := s.fsys.Chtimes(path, atime, mtime); err != nil {
 			cb.Invoke(jsutil.ToJSError(err))
 			return
 		}
@@ -762,7 +789,7 @@ func (s *Service) watchRPC(this js.Value, args []js.Value) any {
 
 		log("watch", path, recursive, eventMask, params.Index(3))
 
-		w, err := s.fsys.Watch(path, &watchfs.Config{
+		w, err := s.watcher.Watch(path, &watchfs.Config{
 			Recursive: recursive,
 			EventMask: eventMask,
 			Ignores:   ignores,

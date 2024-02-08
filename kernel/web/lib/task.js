@@ -11,8 +11,8 @@ export class Task {
     const name = `${path.split('/').pop()}.${this.pid}`;
 
     const blob = new Blob([
-      this.initfs["worker.js"], 
-      this.initfs["wasm.js"],
+      this.initfs["worker.js"].blob, 
+      this.initfs["wasm.js"].blob,
       `\n//# sourceURL=${name}\n` // names the worker in logs
     ], { type: 'application/javascript' });
     
@@ -34,7 +34,7 @@ export class Task {
       })
     });
 
-    const duplex = await import(URL.createObjectURL(this.initfs["duplex.js"]));
+    const duplex = await import(URL.createObjectURL(this.initfs["duplex.js"].blob));
     this.pipe = duplex.open(new duplex.WorkerConn(this.worker), new duplex.CBORCodec());
     this.pipe.respond();
 

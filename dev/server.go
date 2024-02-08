@@ -38,17 +38,21 @@ func main() {
 	mux.Handle(fmt.Sprintf("%s/wanix-bootloader.js", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/javascript")
 
-		if os.Getenv("PROD") != "1" {
-			http.ServeFile(w, r, "./dev/bootloader.js")
-			return
+		var packMode PackMode
+		if os.Getenv("PROD") == "1" {
+			log.Printf("Packing self-contained bootloader...\n")
+			packMode = PackFileData
+		} else {
+			packMode = PackFilePaths
 		}
 
-		// emulate a build
-		PackFilesTo(w)
+		// TODO: Does this need to pack on every request for the bootloader?
+		// I don't think you want to be changing PROD at runtime, so we can
+		// probably cache this.
+		PackFilesTo(w, packMode)
 		f, err := os.ReadFile("./dev/bootloader.js")
 		fatal(err)
 		w.Write(f)
-
 	}))
 	mux.Handle(fmt.Sprintf("%s/~init/", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not found", http.StatusNotFound)
