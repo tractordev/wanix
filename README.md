@@ -97,6 +97,10 @@ This will load `/app/webapp/index.html` into a full page iframe. You can get bac
 
 Any TypeScript source files ending in `.ts` will be converted to JavaScript when loaded in this frame. The same for any files using JSX ending in `.jsx` or `.tsx`.
 
+### Editing the shell in Wanix
+
+Since source commands are compiled when launched, they are also re-compiled after being edited. The shell is one example of this. If you edit the shell source under `/sys/cmd/shell`, such as the banner found in `main.go`, reloading the page will cause the shell to be re-compiled with the new source.
+
 ### Build a 3rd party Go program for Wanix
 
 Wanix will eventually [support any WASI program](https://github.com/tractordev/wanix/issues/67), but for now it runs Go programs compiled with `GOOS=js` and `GOARCH=wasm`. If it compiles without a problem, it should be able to run in Wanix. However, larger programs may have dependencies that won't build for this target without some modification. You can see the changes we made to `micro` under [external/micro](external/micro), but it will really be different for every project. For now, here is an example program compiled outside Wanix brought in via the `/sys/dev` mount.
