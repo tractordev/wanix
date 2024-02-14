@@ -14,10 +14,11 @@ import (
 	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
-
 	"tractor.dev/toolkit-go/engine/fs/memfs"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
+
 	"tractor.dev/wanix/internal"
+	"tractor.dev/wanix/internal/githubfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
@@ -112,6 +113,21 @@ func (s *Service) Initialize() {
 	if err := s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"); err != nil {
 		panic(err)
 	}
+
+	fs.MkdirAll(s.fsys, "sys/git", 0755)
+	err = s.fsys.(*mountablefs.FS).Mount(
+		githubfs.New(
+			"tractordev",
+			"wanix",
+			"main",
+			"INSERT_TOKEN_HERE",
+		),
+		"/sys/git",
+	)
+	if err != nil {
+		panic(err)
+	}
+
 }
 
 func getPrefixedInitFiles(prefix string) []string {

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -23,15 +24,23 @@ import (
 // GitHub API to expose a read-write filesystem of the repository contents.
 // If not given a branch, its root will contain all branches as directories.
 type FS struct {
-	owner       string
-	repo        string
-	token       string
+	owner  string
+	repo   string
+	branch string
+
+	token string
+
 	tree        Tree
 	treeExpired bool
 }
 
-func New(owner, repoName, accessToken string) *FS {
-	return &FS{owner: owner, repo: repoName, token: accessToken, treeExpired: true}
+func New(owner, repoName, branch, accessToken string) *FS {
+	return &FS{owner: owner,
+		repo:        repoName,
+		branch:      branch,
+		token:       accessToken,
+		treeExpired: true,
+	}
 }
 
 type Tree struct {
@@ -49,10 +58,16 @@ type TreeItem struct {
 	URL  string `json:"url"`
 }
 
-func (ti *TreeItem) toFileInfo() *fileInfo {
+func (ti *TreeItem) toFileInfo(isDirEntry bool) *fileInfo {
 	// TODO: mtime?
 	mode, _ := strconv.ParseUint(ti.Mode, 8, 32)
-	return &fileInfo{name: ti.Path, size: ti.Size, isDir: ti.Type == "tree", mode: fs.FileMode(mode)}
+	return &fileInfo{
+		name:       ti.Path,
+		size:       ti.Size,
+		isDir:      ti.Type == "tree",
+		mode:       fs.FileMode(mode),
+		isDirEntry: isDirEntry,
+	}
 }
 
 func (g *FS) maybeUpdateTree(branch string) error {
@@ -82,7 +97,7 @@ func (g *FS) maybeUpdateTree(branch string) error {
 	if err != nil {
 		return err
 	}
-	jsutil.Log("GET", branch, resp.Status)
+	jsutil.Log("GET tree", branch, resp.Status)
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("BadStatus: %d", resp.StatusCode)
 	}
@@ -125,9 +140,8 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 
 	// TODO: handle flags. Depending on flags we can avoid some API requests.
 	// TODO: handle perm, both mode and permissions.
-	// TODO: handle directories
 
-	// OpenFile(name, O_RDWR, perm)
+	// Only readonly opens implemented for now (OpenFile(name, O_RDWR, perm))
 
 	// Request file in repo at subpath "name"
 	// Decode file contents into memory buffer
@@ -136,11 +150,11 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 
 	fi, err := g.Stat(name)
 	if err != nil {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+		return nil, &fs.PathError{Op: "open", Path: name, Err: err.(*fs.PathError).Err}
 	}
 
 	if fi.IsDir() {
-		return &file{gfs: g, name: fi.Name(), size: 0, isDir: true, ReadCloser: NopReadCloser{}}, nil
+		return &file{gfs: g, ReadCloser: NopReadCloser{}, FileInfo: fi}, nil
 	}
 
 	req, err := http.NewRequest(
@@ -152,23 +166,23 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 		nil,
 	)
 	if err != nil {
-		fatal(err)
+		return nil, err
 	}
-	req.Header.Add("Accept", "application/vnd.github+json")
+	req.Header.Add("Accept", "application/vnd.github.raw+json") // TODO: base64 encoding
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", g.token))
 	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fatal(err)
+		return nil, err
 	}
 
-	jsutil.Log("GET", name, resp.Status)
-	return &file{ReadCloser: resp.Body, name: name, size: resp.ContentLength}, nil
+	jsutil.Log("GET contents", name, resp.Status)
+	return &file{gfs: g, ReadCloser: resp.Body, FileInfo: fi}, nil
 }
 
 func (g *FS) ReadDir(name string) ([]fs.DirEntry, error) {
-	err := g.maybeUpdateTree("main")
+	err := g.maybeUpdateTree(g.branch)
 	if err != nil {
 		return nil, err
 	}
@@ -181,9 +195,11 @@ func (g *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	var res []fs.DirEntry
 	for _, file := range g.tree.Tree {
 		after, found := strings.CutPrefix(file.Path, prefix)
+		after = strings.TrimLeft(after, "/")
 		// Only get immediate children
 		if found && after != "" && !strings.ContainsRune(after, '/') {
-			res = append(res, file.toFileInfo())
+			jsutil.Log(after, file.Path)
+			res = append(res, file.toFileInfo(true))
 		}
 	}
 
@@ -211,7 +227,7 @@ func (g *FS) Stat(name string) (fs.FileInfo, error) {
 		return &fileInfo{name: name, size: 0, isDir: true}, nil
 	}
 
-	err := g.maybeUpdateTree("main")
+	err := g.maybeUpdateTree(g.branch)
 	if err != nil {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 	}
@@ -228,52 +244,55 @@ func (g *FS) Stat(name string) (fs.FileInfo, error) {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 	}
 
-	return file.toFileInfo(), nil
-}
-
-func fatal(err error) {
-	jsutil.Err(err.Error())
-	panic(err)
+	return file.toFileInfo(false), nil
 }
 
 type file struct {
 	gfs *FS
-
 	io.ReadCloser
-	name  string
-	size  int64
-	isDir bool
+	fs.FileInfo
 }
 
 func (f *file) ReadDir(n int) ([]fs.DirEntry, error) {
-	if !f.isDir {
+	if !f.IsDir() {
 		return nil, syscall.ENOTDIR
 	}
-	return f.gfs.ReadDir(f.name)
+	return f.gfs.ReadDir(f.Name())
 }
 
 func (f *file) Stat() (fs.FileInfo, error) {
-	return &fileInfo{name: f.name, size: f.size, isDir: f.isDir}, nil
+	return f.FileInfo, nil
 }
 
+// Implements the `FileInfo` and `DirEntry` interfaces
 type fileInfo struct {
-	name    string
-	size    int64
-	mode    fs.FileMode
-	modTime int64
-	isDir   bool
+	name       string
+	size       int64
+	mode       fs.FileMode
+	modTime    int64
+	isDir      bool
+	isDirEntry bool
 }
 
-func (i *fileInfo) Name() string       { return i.name }
+func (i *fileInfo) Name() string {
+	if i.isDirEntry {
+		return filepath.Base(i.name)
+	} else {
+		return i.name
+	}
+}
 func (i *fileInfo) Size() int64        { return i.size }
 func (i *fileInfo) Mode() fs.FileMode  { return i.mode }
 func (i *fileInfo) ModTime() time.Time { return time.Unix(i.modTime, 0) }
 func (i *fileInfo) IsDir() bool        { return i.isDir }
 func (i *fileInfo) Sys() any           { return nil }
 
-// These allow it to act as DirInfo as well
+// These allow it to act as DirEntry as well
+
 func (i *fileInfo) Info() (fs.FileInfo, error) {
-	return i, nil
+	fi := *i
+	fi.isDirEntry = false
+	return &fi, nil
 }
 func (i *fileInfo) Type() fs.FileMode {
 	return i.Mode()
