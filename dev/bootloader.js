@@ -142,6 +142,7 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
       url.pathname.startsWith(`${basePath}sys/dev`) || 
       url.pathname.startsWith(`${basePath}bootloader`) || 
       url.pathname.startsWith(`${basePath}index.html`) ||
+      url.hostname !== "localhost" || // TEMPORARY WORKAROUND
       !host) return;
 
     reqId++;
