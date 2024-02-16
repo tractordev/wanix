@@ -119,7 +119,6 @@ func (s *Service) Initialize() {
 		githubfs.New(
 			"tractordev",
 			"wanix",
-			"main",
 			"INSERT_TOKEN_HERE",
 		),
 		"/sys/git",

@@ -24,21 +24,20 @@ import (
 // GitHub API to expose a read-write filesystem of the repository contents.
 // If not given a branch, its root will contain all branches as directories.
 type FS struct {
-	owner  string
-	repo   string
-	branch string
-
+	owner string
+	repo  string
 	token string
 
-	tree        Tree
+	branches    map[string]Tree
 	treeExpired bool
 }
 
-func New(owner, repoName, branch, accessToken string) *FS {
-	return &FS{owner: owner,
+func New(owner, repoName, accessToken string) *FS {
+	return &FS{
+		owner:       owner,
 		repo:        repoName,
-		branch:      branch,
 		token:       accessToken,
+		branches:    make(map[string]Tree),
 		treeExpired: true,
 	}
 }
@@ -46,7 +45,7 @@ func New(owner, repoName, branch, accessToken string) *FS {
 type Tree struct {
 	Sha       string     `json:"sha"`
 	URL       string     `json:"url"`
-	Tree      []TreeItem `json:"tree"`
+	Items     []TreeItem `json:"tree"` // TODO: use map[Path]TreeItem instead?
 	Truncated bool       `json:"truncated"`
 }
 type TreeItem struct {
@@ -99,10 +98,17 @@ func (g *FS) maybeUpdateTree(branch string) error {
 	}
 	jsutil.Log("GET tree", branch, resp.Status)
 	if resp.StatusCode != 200 {
+		delete(g.branches, branch)
 		return fmt.Errorf("BadStatus: %d", resp.StatusCode)
 	}
 
-	return json.NewDecoder(resp.Body).Decode(&g.tree)
+	var t Tree
+	if err = json.NewDecoder(resp.Body).Decode(&t); err != nil {
+		return err
+	}
+
+	g.branches[branch] = t
+	return nil
 }
 
 func (g *FS) Chmod(name string, mode fs.FileMode) error {
@@ -144,9 +150,9 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 	// Only readonly opens implemented for now (OpenFile(name, O_RDWR, perm))
 
 	// Request file in repo at subpath "name"
-	// Decode file contents into memory buffer
+	// Read file contents into memory buffer
 	// User can read & modify buffer
-	// Re-encode buffer to Base64 and make a update file (PUT) request
+	// Make a update file (PUT) request
 
 	fi, err := g.Stat(name)
 	if err != nil {
@@ -157,18 +163,23 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 		return &file{gfs: g, ReadCloser: NopReadCloser{}, FileInfo: fi}, nil
 	}
 
+	branch, subpath, found := strings.Cut(name, "/")
+	if !found {
+		return &file{gfs: g, ReadCloser: NopReadCloser{}, FileInfo: fi}, nil
+	}
+
 	req, err := http.NewRequest(
 		"GET",
 		fmt.Sprintf(
-			"https://api.github.com/repos/%s/%s/contents/%s",
-			g.owner, g.repo, name,
+			"https://api.github.com/repos/%s/%s/contents/%s?ref=%s",
+			g.owner, g.repo, subpath, branch,
 		),
 		nil,
 	)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Accept", "application/vnd.github.raw+json") // TODO: base64 encoding
+	req.Header.Add("Accept", "application/vnd.github.raw+json")
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", g.token))
 	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
 
@@ -177,29 +188,41 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 		return nil, err
 	}
 
-	jsutil.Log("GET contents", name, resp.Status)
+	jsutil.Log("GET contents", branch, subpath, resp.Status)
 	return &file{gfs: g, ReadCloser: resp.Body, FileInfo: fi}, nil
 }
 
 func (g *FS) ReadDir(name string) ([]fs.DirEntry, error) {
-	err := g.maybeUpdateTree(g.branch)
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrInvalid}
+	}
+
+	if name == "." {
+		// TODO: should query branch list here
+		var res []fs.DirEntry
+		for branch := range g.branches {
+			res = append(res, &fileInfo{name: branch, size: 0, isDir: true, isDirEntry: true})
+		}
+		return res, nil
+	}
+
+	branch, subpath, _ := strings.Cut(name, "/")
+	if err := g.maybeUpdateTree(branch); err != nil {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: err}
+	}
+
+	err := g.maybeUpdateTree(branch)
 	if err != nil {
 		return nil, err
 	}
 
-	var prefix string
-	if name != "." {
-		prefix = name
-	}
-
 	var res []fs.DirEntry
-	for _, file := range g.tree.Tree {
-		after, found := strings.CutPrefix(file.Path, prefix)
+	for _, item := range g.branches[branch].Items {
+		after, found := strings.CutPrefix(item.Path, subpath)
 		after = strings.TrimLeft(after, "/")
 		// Only get immediate children
 		if found && after != "" && !strings.ContainsRune(after, '/') {
-			jsutil.Log(after, file.Path)
-			res = append(res, file.toFileInfo(true))
+			res = append(res, item.toFileInfo(true))
 		}
 	}
 
@@ -227,16 +250,23 @@ func (g *FS) Stat(name string) (fs.FileInfo, error) {
 		return &fileInfo{name: name, size: 0, isDir: true}, nil
 	}
 
-	err := g.maybeUpdateTree(g.branch)
-	if err != nil {
+	branch, subpath, found := strings.Cut(name, "/")
+	if err := g.maybeUpdateTree(branch); err != nil {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 	}
+	if !found {
+		return &fileInfo{name: branch, size: 0, isDir: true}, nil
+	}
 
-	// TODO: use map[Path]TreeItem instead?
+	tree, ok := g.branches[branch]
+	if !ok {
+		jsutil.Log("Missing", branch)
+		panic(branch)
+	}
 	var file *TreeItem = nil
-	for i := range g.tree.Tree {
-		if g.tree.Tree[i].Path == name {
-			file = &g.tree.Tree[i]
+	for i := 0; i < len(tree.Items); i++ {
+		if tree.Items[i].Path == subpath {
+			file = &tree.Items[i]
 		}
 	}
 
@@ -266,7 +296,7 @@ func (f *file) Stat() (fs.FileInfo, error) {
 
 // Implements the `FileInfo` and `DirEntry` interfaces
 type fileInfo struct {
-	name       string
+	name       string // TODO: should this always be base name?
 	size       int64
 	mode       fs.FileMode
 	modTime    int64
