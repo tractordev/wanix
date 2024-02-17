@@ -17,32 +17,34 @@ import (
 	"tractor.dev/wanix/internal/jsutil"
 )
 
-// TODO: Some file operations require a commit message. See if there's a nice way
+// TODO: Some write operations require a commit message. See if there's a nice way
 // to expose this to the user instead of a hardcoded message.
 
 // Given a GitHub repository and access token, this filesystem will use the
 // GitHub API to expose a read-write filesystem of the repository contents.
-// If not given a branch, its root will contain all branches as directories.
+// Its root will contain all branches as directories.
 type FS struct {
 	owner string
 	repo  string
 	token string
 
-	branches    map[string]Tree
-	treeExpired bool
+	branches        map[string]Tree
+	branchesExpired bool
 }
 
 func New(owner, repoName, accessToken string) *FS {
 	return &FS{
-		owner:       owner,
-		repo:        repoName,
-		token:       accessToken,
-		branches:    make(map[string]Tree),
-		treeExpired: true,
+		owner:           owner,
+		repo:            repoName,
+		token:           accessToken,
+		branches:        make(map[string]Tree),
+		branchesExpired: true,
 	}
 }
 
 type Tree struct {
+	Expired bool `json:"-"`
+
 	Sha       string     `json:"sha"`
 	URL       string     `json:"url"`
 	Items     []TreeItem `json:"tree"` // TODO: use map[Path]TreeItem instead?
@@ -57,25 +59,89 @@ type TreeItem struct {
 	URL  string `json:"url"`
 }
 
-func (ti *TreeItem) toFileInfo(isDirEntry bool) *fileInfo {
+func (ti *TreeItem) toFileInfo(branch string) *fileInfo {
 	// TODO: mtime?
 	mode, _ := strconv.ParseUint(ti.Mode, 8, 32)
 	return &fileInfo{
-		name:       ti.Path,
-		size:       ti.Size,
-		isDir:      ti.Type == "tree",
-		mode:       fs.FileMode(mode),
-		isDirEntry: isDirEntry,
+		name:    filepath.Base(ti.Path),
+		size:    ti.Size,
+		isDir:   ti.Type == "tree",
+		mode:    fs.FileMode(mode),
+		branch:  branch,
+		subpath: ti.Path,
 	}
 }
 
-func (g *FS) maybeUpdateTree(branch string) error {
-	if !g.treeExpired {
+// Every filesystem query is prefixed by a branch name, so `maybeUpdateBranches()`
+// must be called for every query before accessing it's Tree. `maybeUpdateTree()`
+// is only necessary when accessing Tree contents.
+
+// Both in seconds.
+// Optimize for least amount of Requests without visible loss of sync with remote.
+const branchesExpiryPeriod = 5
+const treeExpiryPeriod = 1
+
+func (g *FS) maybeUpdateBranches() error {
+	if !g.branchesExpired {
 		return nil
 	}
 
-	g.treeExpired = false
-	defer time.AfterFunc(time.Second, func() { g.treeExpired = true })
+	g.branchesExpired = false
+	defer time.AfterFunc(branchesExpiryPeriod*time.Second, func() { g.branchesExpired = true })
+
+	req, err := http.NewRequest(
+		"GET",
+		fmt.Sprintf(
+			"https://api.github.com/repos/%s/%s/branches",
+			g.owner, g.repo,
+		),
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+	req.Header.Add("Accept", "application/vnd.github+json")
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", g.token))
+	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	jsutil.Log("GET branches", resp.Status)
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("BadStatus: %d", resp.StatusCode)
+	}
+
+	var branches []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&branches); err != nil {
+		return err
+	}
+
+	// TODO: apply diff instead of clearing the whole thing?
+	clear(g.branches)
+	for _, branch := range branches {
+		g.branches[branch.Name] = Tree{Expired: true}
+	}
+	return nil
+}
+
+func (g *FS) maybeUpdateTree(branch string) error {
+	existingTree, ok := g.branches[branch]
+	if !ok {
+		return fs.ErrNotExist
+	}
+
+	if !existingTree.Expired {
+		return nil
+	}
+
+	existingTree.Expired = false
+	defer time.AfterFunc(treeExpiryPeriod*time.Second, func() { existingTree.Expired = true })
 
 	req, err := http.NewRequest(
 		"GET",
@@ -96,18 +162,20 @@ func (g *FS) maybeUpdateTree(branch string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	jsutil.Log("GET tree", branch, resp.Status)
 	if resp.StatusCode != 200 {
 		delete(g.branches, branch)
 		return fmt.Errorf("BadStatus: %d", resp.StatusCode)
 	}
 
-	var t Tree
-	if err = json.NewDecoder(resp.Body).Decode(&t); err != nil {
+	var newTree Tree
+	if err = json.NewDecoder(resp.Body).Decode(&newTree); err != nil {
 		return err
 	}
 
-	g.branches[branch] = t
+	g.branches[branch] = newTree
 	return nil
 }
 
@@ -160,12 +228,12 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 	}
 
 	if fi.IsDir() {
-		return &file{gfs: g, ReadCloser: NopReadCloser{}, FileInfo: fi}, nil
+		return &file{gfs: g, ReadCloser: NopReadCloser{}, fileInfo: *fi.(*fileInfo)}, nil
 	}
 
-	branch, subpath, found := strings.Cut(name, "/")
-	if !found {
-		return &file{gfs: g, ReadCloser: NopReadCloser{}, FileInfo: fi}, nil
+	branch, subpath, hasSubpath := strings.Cut(name, "/")
+	if !hasSubpath {
+		return &file{gfs: g, ReadCloser: NopReadCloser{}, fileInfo: *fi.(*fileInfo)}, nil
 	}
 
 	req, err := http.NewRequest(
@@ -189,44 +257,7 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 	}
 
 	jsutil.Log("GET contents", branch, subpath, resp.Status)
-	return &file{gfs: g, ReadCloser: resp.Body, FileInfo: fi}, nil
-}
-
-func (g *FS) ReadDir(name string) ([]fs.DirEntry, error) {
-	if !fs.ValidPath(name) {
-		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrInvalid}
-	}
-
-	if name == "." {
-		// TODO: should query branch list here
-		var res []fs.DirEntry
-		for branch := range g.branches {
-			res = append(res, &fileInfo{name: branch, size: 0, isDir: true, isDirEntry: true})
-		}
-		return res, nil
-	}
-
-	branch, subpath, _ := strings.Cut(name, "/")
-	if err := g.maybeUpdateTree(branch); err != nil {
-		return nil, &fs.PathError{Op: "readdir", Path: name, Err: err}
-	}
-
-	err := g.maybeUpdateTree(branch)
-	if err != nil {
-		return nil, err
-	}
-
-	var res []fs.DirEntry
-	for _, item := range g.branches[branch].Items {
-		after, found := strings.CutPrefix(item.Path, subpath)
-		after = strings.TrimLeft(after, "/")
-		// Only get immediate children
-		if found && after != "" && !strings.ContainsRune(after, '/') {
-			res = append(res, item.toFileInfo(true))
-		}
-	}
-
-	return res, nil
+	return &file{gfs: g, ReadCloser: resp.Body, fileInfo: *fi.(*fileInfo)}, nil
 }
 
 func (g *FS) Remove(name string) error {
@@ -250,23 +281,29 @@ func (g *FS) Stat(name string) (fs.FileInfo, error) {
 		return &fileInfo{name: name, size: 0, isDir: true}, nil
 	}
 
-	branch, subpath, found := strings.Cut(name, "/")
-	if err := g.maybeUpdateTree(branch); err != nil {
+	branch, subpath, hasSubpath := strings.Cut(name, "/")
+	if err := g.maybeUpdateBranches(); err != nil {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 	}
-	if !found {
-		return &fileInfo{name: branch, size: 0, isDir: true}, nil
+	if !hasSubpath {
+		if _, ok := g.branches[branch]; !ok {
+			return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist} // TODO: add "BranchNotExist" error
+		}
+		return &fileInfo{name: name, size: 0, isDir: true, branch: branch}, nil
+	}
+	if err := g.maybeUpdateTree(branch); err != nil {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 	}
 
 	tree, ok := g.branches[branch]
 	if !ok {
-		jsutil.Log("Missing", branch)
-		panic(branch)
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist} // TODO: add "BranchNotExist" error
 	}
 	var file *TreeItem = nil
 	for i := 0; i < len(tree.Items); i++ {
 		if tree.Items[i].Path == subpath {
 			file = &tree.Items[i]
+			break
 		}
 	}
 
@@ -274,43 +311,77 @@ func (g *FS) Stat(name string) (fs.FileInfo, error) {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 	}
 
-	return file.toFileInfo(false), nil
+	return file.toFileInfo(branch), nil
 }
 
 type file struct {
 	gfs *FS
 	io.ReadCloser
-	fs.FileInfo
+	fileInfo
 }
 
 func (f *file) ReadDir(n int) ([]fs.DirEntry, error) {
 	if !f.IsDir() {
 		return nil, syscall.ENOTDIR
 	}
-	return f.gfs.ReadDir(f.Name())
+
+	if f.name == "." {
+		if err := f.gfs.maybeUpdateBranches(); err != nil {
+			return nil, &fs.PathError{Op: "readdir", Path: f.name, Err: err}
+		}
+		var res []fs.DirEntry
+		for branch := range f.gfs.branches {
+			res = append(res, &fileInfo{name: branch, size: 0, isDir: true})
+		}
+		return res, nil
+	}
+
+	if err := f.gfs.maybeUpdateBranches(); err != nil {
+		return nil, &fs.PathError{Op: "readdir", Path: f.name, Err: err}
+	}
+	if err := f.gfs.maybeUpdateTree(f.branch); err != nil {
+		return nil, &fs.PathError{Op: "readdir", Path: f.name, Err: err}
+	}
+
+	tree, ok := f.gfs.branches[f.branch]
+	if !ok {
+		// TODO: "ErrOutdatedFile"?
+		// Linux allows reads on open file handles that are outdated, maybe we should do the same?
+		// Could embed the TreeItem inside `file`.
+		return nil, &fs.PathError{Op: "readdir", Path: f.name, Err: fs.ErrNotExist}
+	}
+
+	var res []fs.DirEntry
+	for _, item := range tree.Items {
+		after, found := strings.CutPrefix(item.Path, f.subpath)
+		after = strings.TrimLeft(after, "/")
+		// Only get immediate children
+		if found && after != "" && !strings.ContainsRune(after, '/') {
+			res = append(res, item.toFileInfo(f.branch))
+		}
+	}
+
+	return res, nil
 }
 
 func (f *file) Stat() (fs.FileInfo, error) {
-	return f.FileInfo, nil
+	return &f.fileInfo, nil
 }
 
 // Implements the `FileInfo` and `DirEntry` interfaces
 type fileInfo struct {
-	name       string // TODO: should this always be base name?
-	size       int64
-	mode       fs.FileMode
-	modTime    int64
-	isDir      bool
-	isDirEntry bool
+	// Base name
+	name    string
+	size    int64
+	mode    fs.FileMode
+	modTime int64
+	isDir   bool
+
+	branch  string
+	subpath string
 }
 
-func (i *fileInfo) Name() string {
-	if i.isDirEntry {
-		return filepath.Base(i.name)
-	} else {
-		return i.name
-	}
-}
+func (i *fileInfo) Name() string       { return i.name }
 func (i *fileInfo) Size() int64        { return i.size }
 func (i *fileInfo) Mode() fs.FileMode  { return i.mode }
 func (i *fileInfo) ModTime() time.Time { return time.Unix(i.modTime, 0) }
@@ -319,14 +390,8 @@ func (i *fileInfo) Sys() any           { return nil }
 
 // These allow it to act as DirEntry as well
 
-func (i *fileInfo) Info() (fs.FileInfo, error) {
-	fi := *i
-	fi.isDirEntry = false
-	return &fi, nil
-}
-func (i *fileInfo) Type() fs.FileMode {
-	return i.Mode()
-}
+func (i *fileInfo) Info() (fs.FileInfo, error) { return i, nil }
+func (i *fileInfo) Type() fs.FileMode          { return i.Mode() }
 
 type NopReadCloser struct{}
 
