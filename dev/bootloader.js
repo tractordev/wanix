@@ -136,6 +136,7 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
     const req = event.request;
     const url = new URL(req.url);
     if (url.pathname === "/favicon.ico" || 
+      url.hostname !== "localhost" || // TODO: something else to allow cross-domain requests
       url.pathname === basePath ||
       url.pathname.startsWith(`${basePath}wanix-bootloader.js`) ||
       url.pathname.startsWith(`${basePath}sys/dev`) || 
