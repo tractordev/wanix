@@ -11,9 +11,11 @@ import (
 
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/internal/jsutil"
+	kfs "tractor.dev/wanix/kernel/fs"
 )
 
 type Service struct {
+	FS      *kfs.Service
 	nextPID int
 	running map[int]*Process
 	mu      sync.Mutex

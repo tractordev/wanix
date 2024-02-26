@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"embed"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 
 	"tractor.dev/toolkit-go/engine/fs/memfs"
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
+	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
@@ -32,6 +34,10 @@ func log(args ...any) {
 }
 
 type Service struct {
+	// don't love passing this here but kernel
+	// package is a main package so cant reference it
+	KernelSource embed.FS
+
 	fsys fs.MutableFS
 	// Wraps fsys, so it's actually the same filesystem.
 	watcher *watchfs.FS
@@ -45,6 +51,10 @@ type Service struct {
 type fd struct {
 	fs.File
 	Path string
+}
+
+func (s *Service) FS() fs.FS {
+	return s.fsys
 }
 
 func (s *Service) Initialize() {
@@ -67,18 +77,25 @@ func (s *Service) Initialize() {
 	fs.MkdirAll(s.fsys, "sys/dev", 0755)
 	fs.MkdirAll(s.fsys, "sys/tmp", 0755)
 
-	// copy builtin exe's into filesystem
-	s.copyFileFromInitFS("sys/cmd/build.wasm", "build")
-	s.copyFileFromInitFS("cmd/micro.wasm", "micro")
+	// copy terminal app
+	s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal")
+
+	// copy of kernel source into filesystem.
+	s.copyAllFS(s.fsys, "sys/cmd/kernel", s.KernelSource, ".")
 
 	// copy shell source into filesystem
 	fs.MkdirAll(s.fsys, "sys/cmd/shell", 0755)
 	shellFiles := getPrefixedInitFiles("shell/")
 	for _, path := range shellFiles {
-		if err = s.copyFileFromInitFS(filepath.Join("sys/cmd", path), path); err != nil {
+		if err = s.copyFromInitFS(filepath.Join("sys/cmd", path), path); err != nil {
 			panic(err)
 		}
 	}
+
+	// copy builtin exe's into filesystem
+	s.copyFromInitFS("sys/cmd/build.wasm", "build")
+	s.copyFromInitFS("cmd/micro.wasm", "micro")
+	s.copyFromInitFS("sys/bin/shell.wasm", "shell")
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	resp, err := http.DefaultClient.Get(devURL)
@@ -111,7 +128,28 @@ func getPrefixedInitFiles(prefix string) []string {
 	return result
 }
 
-func (s *Service) copyFileFromInitFS(dst, src string) error {
+func (s *Service) copyAllFS(dstFS fs.MutableFS, dstDir string, srcFS fs.FS, srcDir string) error {
+	if err := fs.MkdirAll(dstFS, dstDir, 0755); err != nil {
+		return err
+	}
+	return fs.WalkDir(srcFS, srcDir, fs.WalkDirFunc(func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			srcData, err := fs.ReadFile(srcFS, path)
+			if err != nil {
+				return err
+			}
+			dstPath := filepath.Join(dstDir, strings.TrimPrefix(path, srcDir))
+			fs.MkdirAll(dstFS, filepath.Dir(dstPath), 0755)
+			return fs.WriteFile(dstFS, dstPath, srcData, 0644)
+		}
+		return nil
+	}))
+}
+
+func (s *Service) copyFromInitFS(dst, src string) error {
 	initFile := js.Global().Get("initfs").Get(src)
 	if initFile.IsUndefined() {
 		return nil

@@ -22,7 +22,8 @@ var files = []File{
 	{Name: "indexedfs.js", Path: "./internal/indexedfs/indexedfs.js"},
 	{Name: "kernel", Path: "./local/bin/kernel"},
 	{Name: "build", Path: "./local/bin/build"},
-	{Name: "macro", Path: "./local/bin/micro"},
+	{Name: "micro", Path: "./local/bin/micro"},
+	{Name: "shell", Path: "./local/bin/shell"},
 
 	// Shell source files
 	{Name: "shell/main.go", Path: "shell/main.go"},

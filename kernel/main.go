@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine"
@@ -12,15 +13,18 @@ import (
 	"tractor.dev/wanix/kernel/web"
 )
 
+//go:embed *
+var Source embed.FS
+
 var Version string
 
 func main() {
 	engine.Run(Kernel{},
 		proc.Service{},
 		tty.Service{},
-		web.UI{},
 		web.Gateway{},
-		fs.Service{},
+		fs.Service{KernelSource: Source},
+		web.UI{},
 	)
 }
 
