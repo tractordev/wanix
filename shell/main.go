@@ -112,6 +112,13 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 			fmt.Printf("Logged in as %s.\n\n", user)
 		}
 
+		ctx := cli.ContextWithIO(context.Background(), m.defaultStdin, os.Stdout, os.Stderr)
+
+		// quick and dirty implementation of autorun
+		if _, err := os.Stat("/cmd/autorun.sh"); !os.IsNotExist(err) {
+			m.ExecuteExternalCommand(ctx, []string{"/cmd/autorun.sh"})
+		}
+
 		terminal := term.NewTerminal(struct {
 			io.Reader
 			io.Writer
@@ -153,7 +160,6 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 			continue
 		}
 
-		ctx := cli.ContextWithIO(context.Background(), m.defaultStdin, os.Stdout, os.Stderr)
 		if err := cli.Execute(ctx, m.cmd, args); err != nil {
 			m.printErr(fmt.Errorf("exec error: %w", err))
 		}
