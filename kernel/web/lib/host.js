@@ -1,12 +1,26 @@
 const baseURL = window.location.pathname.replace("index.html", "").replace(/\/$/, '');
 
+globalThis.sys.pipe.handle("host.currentUser", duplex.handlerFrom(() => {
+    const login = localStorage.getItem("auth:login");
+    if (!login) {
+        return null;
+    }
+    return JSON.parse(login)["user"] || null;
+}));
+globalThis.sys.pipe.handle("host.login", duplex.handlerFrom(() => {
+    window.location.href = "/auth/";  
+}));
+globalThis.sys.pipe.handle("host.logout", duplex.handlerFrom(() => {
+    window.location.href = "/auth/?logout";
+}));
+
+
 globalThis.sys.pipe.handle("host.loadStylesheet", duplex.handlerFrom((path) => {
   const style = document.createElement("link");
   style.rel = "stylesheet";
   style.href = baseURL+path;
   document.body.appendChild(style);
 }));
-
 globalThis.sys.pipe.handle("host.loadApp", duplex.handlerFrom((target, path, focus) => {
   let frame = document.querySelector("#"+target);
   if (frame) {

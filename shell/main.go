@@ -59,8 +59,18 @@ func (m *Shell) buildCmds() {
 	m.cmd.AddCommand(treeCmd())
 	m.cmd.AddCommand(watchCmd())
 	m.cmd.AddCommand(unwatchCmd())
+	m.cmd.AddCommand(loginCmd())
+	m.cmd.AddCommand(logoutCmd())
 	m.cmd.AddCommand(helpCmd(m.cmd))
 	m.cmd.Run = m.ExecuteExternalCommand
+}
+
+func (m *Shell) Login() string {
+	u, err := jsutil.WanixSyscall("host.currentUser")
+	if err != nil || u.IsNull() {
+		return ""
+	}
+	return u.Get("nickname").String()
 }
 
 func (m *Shell) Run(ctx context.Context) (err error) {
@@ -97,6 +107,10 @@ func (m *Shell) Run(ctx context.Context) (err error) {
 __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
                         -- v%s --
 `, version.String())
+		user := m.Login()
+		if user != "" {
+			fmt.Printf("Logged in as %s.\n\n", user)
+		}
 
 		terminal := term.NewTerminal(struct {
 			io.Reader

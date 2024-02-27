@@ -12,6 +12,7 @@ import (
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/toolkit-go/engine/fs"
+	"tractor.dev/wanix/internal/jsutil"
 )
 
 func exitCmd() *cli.Command {
@@ -55,6 +56,26 @@ func mtimeCmd() *cli.Command {
 				return
 			}
 			fmt.Fprintln(ctx, fi.ModTime())
+		},
+	}
+	return cmd
+}
+
+func loginCmd() *cli.Command {
+	cmd := &cli.Command{
+		Usage: "login",
+		Run: func(ctx *cli.Context, args []string) {
+			jsutil.WanixSyscall("host.login")
+		},
+	}
+	return cmd
+}
+
+func logoutCmd() *cli.Command {
+	cmd := &cli.Command{
+		Usage: "logout",
+		Run: func(ctx *cli.Context, args []string) {
+			jsutil.WanixSyscall("host.logout")
 		},
 	}
 	return cmd
