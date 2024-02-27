@@ -1,6 +1,6 @@
 .PHONY: boot dev kernel shell dev bundle micro
 
-VERSION=0.1
+VERSION=0.2dev
 DEBUG?=false
 
 all: kernel shell build micro
