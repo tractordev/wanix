@@ -77,8 +77,9 @@ func (s *Service) Initialize() {
 	fs.MkdirAll(s.fsys, "sys/dev", 0755)
 	fs.MkdirAll(s.fsys, "sys/tmp", 0755)
 
-	// copy terminal app
+	// copy some apps include terminal
 	s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal")
+	s.copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo")
 
 	// copy of kernel source into filesystem.
 	s.copyAllFS(s.fsys, "sys/cmd/kernel", s.KernelSource, ".")
