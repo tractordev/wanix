@@ -1,6 +1,8 @@
 package githubfs
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,8 +19,11 @@ import (
 	"tractor.dev/wanix/internal/jsutil"
 )
 
-// TODO: Some write operations require a commit message. See if there's a nice way
+// TODO: Write requests require a commit message. See if there's a nice way
 // to expose this to the user instead of a hardcoded message.
+
+// TODO: Write requests can fail if requests are sent in parallel or too close together.
+// Automatically stagger write requests to avoid this.
 
 // Given a GitHub repository and access token, this filesystem will use the
 // GitHub API to expose a read-write filesystem of the repository contents.
@@ -69,7 +74,34 @@ func (ti *TreeItem) toFileInfo(branch string) *fileInfo {
 		mode:    fs.FileMode(mode),
 		branch:  branch,
 		subpath: ti.Path,
+		sha:     ti.Sha,
 	}
+}
+
+type ErrBadStatus struct {
+	status string
+}
+
+func (e ErrBadStatus) Error() string {
+	return "BadStatus: " + e.status
+}
+
+func (g *FS) apiRequest(method, url, acceptHeader string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Accept", acceptHeader)
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", g.token))
+	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	jsutil.Log(method, url, resp.Status)
+	return resp, nil
 }
 
 // Every filesystem query is prefixed by a branch name, so `maybeUpdateBranches()`
@@ -89,31 +121,22 @@ func (g *FS) maybeUpdateBranches() error {
 	g.branchesExpired = false
 	defer time.AfterFunc(branchesExpiryPeriod*time.Second, func() { g.branchesExpired = true })
 
-	req, err := http.NewRequest(
+	resp, err := g.apiRequest(
 		"GET",
 		fmt.Sprintf(
 			"https://api.github.com/repos/%s/%s/branches",
 			g.owner, g.repo,
 		),
+		"application/vnd.github+json",
 		nil,
 	)
 	if err != nil {
 		return err
 	}
-	req.Header.Add("Accept", "application/vnd.github+json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", g.token))
-	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
+	if resp.StatusCode != 200 {
+		return &ErrBadStatus{status: resp.Status}
 	}
 	defer resp.Body.Close()
-
-	jsutil.Log("GET branches", resp.Status)
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("BadStatus: %d", resp.StatusCode)
-	}
 
 	var branches []struct {
 		Name string `json:"name"`
@@ -143,32 +166,22 @@ func (g *FS) maybeUpdateTree(branch string) error {
 	existingTree.Expired = false
 	defer time.AfterFunc(treeExpiryPeriod*time.Second, func() { existingTree.Expired = true })
 
-	req, err := http.NewRequest(
+	resp, err := g.apiRequest(
 		"GET",
 		fmt.Sprintf(
 			"https://api.github.com/repos/%s/%s/git/trees/%s?recursive=1",
 			g.owner, g.repo, branch,
 		),
+		"application/vnd.github+json",
 		nil,
 	)
 	if err != nil {
 		return err
 	}
-	req.Header.Add("Accept", "application/vnd.github+json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", g.token))
-	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
+	if resp.StatusCode != 200 {
+		return &ErrBadStatus{status: resp.Status}
 	}
 	defer resp.Body.Close()
-
-	jsutil.Log("GET tree", branch, resp.Status)
-	if resp.StatusCode != 200 {
-		delete(g.branches, branch)
-		return fmt.Errorf("BadStatus: %d", resp.StatusCode)
-	}
 
 	var newTree Tree
 	if err = json.NewDecoder(resp.Body).Decode(&newTree); err != nil {
@@ -192,7 +205,7 @@ func (g *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 }
 
 func (g *FS) Create(name string) (fs.File, error) {
-	panic("TODO")
+	return g.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 }
 
 func (g *FS) Mkdir(name string, perm fs.FileMode) error {
@@ -212,52 +225,90 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 
-	// TODO: handle flags. Depending on flags we can avoid some API requests.
 	// TODO: handle perm, both mode and permissions.
-
-	// Only readonly opens implemented for now (OpenFile(name, O_RDWR, perm))
 
 	// Request file in repo at subpath "name"
 	// Read file contents into memory buffer
 	// User can read & modify buffer
 	// Make a update file (PUT) request
 
-	fi, err := g.Stat(name)
-	if err != nil {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: err.(*fs.PathError).Err}
-	}
-
-	if fi.IsDir() {
-		return &file{gfs: g, ReadCloser: NopReadCloser{}, fileInfo: *fi.(*fileInfo)}, nil
-	}
-
+	f := file{gfs: g, flags: flag}
 	branch, subpath, hasSubpath := strings.Cut(name, "/")
-	if !hasSubpath {
-		return &file{gfs: g, ReadCloser: NopReadCloser{}, fileInfo: *fi.(*fileInfo)}, nil
+	justCreated := false
+
+	{
+		fi, err := g.Stat(name)
+		if err == nil {
+			if flag&(os.O_EXCL|os.O_CREATE) == (os.O_EXCL | os.O_CREATE) {
+				return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrExist}
+			}
+
+			f.fileInfo = *fi.(*fileInfo)
+
+			if fi.IsDir() || !hasSubpath {
+				return &f, nil
+			}
+		}
+
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) && flag&os.O_CREATE > 0 {
+				// Defer creation on remote to avoid request conflicts. (See Sync)
+				f.buffer = []byte{}
+				f.dirty = true
+				f.fileInfo = fileInfo{
+					name:    filepath.Base(name),
+					mode:    perm,
+					modTime: time.Now().UnixMilli(),
+					branch:  branch,
+					subpath: subpath,
+					// sha:     respJson.sha,
+				}
+
+				justCreated = true
+			} else {
+				return nil, &fs.PathError{Op: "open", Path: name, Err: err.(*fs.PathError).Err}
+			}
+		}
 	}
 
-	req, err := http.NewRequest(
-		"GET",
-		fmt.Sprintf(
-			"https://api.github.com/repos/%s/%s/contents/%s?ref=%s",
-			g.owner, g.repo, subpath, branch,
-		),
-		nil,
-	)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Accept", "application/vnd.github.raw+json")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", g.token))
-	req.Header.Add("X-GitHub-Api-Version", "2022-11-28")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
+	if flag&os.O_TRUNC > 0 {
+		if !justCreated {
+			f.buffer = []byte{}
+		}
+		f.offset = 0
+		return &f, nil
 	}
 
-	jsutil.Log("GET contents", branch, subpath, resp.Status)
-	return &file{gfs: g, ReadCloser: resp.Body, fileInfo: *fi.(*fileInfo)}, nil
+	if !justCreated {
+		resp, err := g.apiRequest(
+			"GET",
+			fmt.Sprintf(
+				"https://api.github.com/repos/%s/%s/contents/%s?ref=%s",
+				g.owner, g.repo, subpath, branch,
+			),
+			"application/vnd.github.raw+json",
+			nil,
+		)
+		if err != nil {
+			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+		}
+		if resp.StatusCode != 200 {
+			return nil, &fs.PathError{Op: "open", Path: name, Err: &ErrBadStatus{status: resp.Status}}
+		}
+		defer resp.Body.Close()
+
+		f.buffer, err = io.ReadAll(resp.Body)
+		f.fileInfo.size = resp.ContentLength
+		if err != nil {
+			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
+		}
+	}
+
+	if flag&os.O_APPEND > 0 {
+		f.Seek(0, io.SeekEnd)
+	}
+
+	return &f, nil
 }
 
 func (g *FS) Remove(name string) error {
@@ -299,25 +350,156 @@ func (g *FS) Stat(name string) (fs.FileInfo, error) {
 	if !ok {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist} // TODO: add "BranchNotExist" error
 	}
-	var file *TreeItem = nil
+	var item *TreeItem = nil
 	for i := 0; i < len(tree.Items); i++ {
 		if tree.Items[i].Path == subpath {
-			file = &tree.Items[i]
+			item = &tree.Items[i]
 			break
 		}
 	}
 
-	if file == nil {
+	if item == nil {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 	}
 
-	return file.toFileInfo(branch), nil
+	return item.toFileInfo(branch), nil
 }
 
 type file struct {
 	gfs *FS
-	io.ReadCloser
+
+	buffer []byte
+	offset int64
+	dirty  bool
+
+	flags int
 	fileInfo
+}
+
+func (f *file) Read(b []byte) (int, error) {
+	if f.flags&os.O_WRONLY > 0 {
+		return 0, fs.ErrPermission
+	}
+
+	if f.offset >= int64(len(f.buffer)) {
+		return 0, io.EOF
+	}
+
+	var n int
+	rest := f.buffer[f.offset:]
+	if len(rest) < len(b) {
+		n = len(rest)
+	} else {
+		n = len(b)
+	}
+
+	copy(b, rest[:n])
+	f.offset += int64(n)
+	return n, nil
+}
+
+func (f *file) Write(b []byte) (int, error) {
+	if f.flags&os.O_RDONLY > 0 {
+		return 0, fs.ErrPermission
+	}
+
+	writeEnd := f.offset + int64(len(b))
+
+	if writeEnd > int64(cap(f.buffer)) {
+		var newCapacity int64
+		if cap(f.buffer) == 0 {
+			newCapacity = 8
+		} else {
+			newCapacity = int64(cap(f.buffer)) * 2
+		}
+
+		for ; writeEnd > newCapacity; newCapacity *= 2 {
+		}
+
+		newBuffer := make([]byte, len(f.buffer), newCapacity)
+		copy(newBuffer, f.buffer)
+		f.buffer = newBuffer
+	}
+
+	copy(f.buffer[f.offset:writeEnd], b)
+	if len(f.buffer) < int(writeEnd) {
+		f.buffer = f.buffer[:writeEnd]
+	}
+	f.offset = writeEnd
+	f.dirty = true
+	return len(b), nil
+}
+
+func (f *file) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+		f.offset = offset
+	case io.SeekCurrent:
+		f.offset += offset
+	case io.SeekEnd:
+		f.offset = int64(len(f.buffer)) + offset
+	}
+	if f.offset < 0 {
+		f.offset = 0
+		return 0, fmt.Errorf("%w: resultant offset cannot be negative", fs.ErrInvalid)
+	}
+	return f.offset, nil
+}
+
+func (f *file) Sync() error {
+	var encodedContent string
+	if len(f.buffer) > 0 {
+		encodedContent = base64.StdEncoding.EncodeToString(f.buffer)
+	}
+
+	const createBody = `{"message":"Create '%s'","branch":"%s","content":"%s"}`
+	const updateBody = `{"message":"Update '%s'","branch":"%s","content":"%s","sha":"%s"}`
+
+	// If f.sha == "" then we must've just created the file locally,
+	// so we want to create it on the remote too. Otherwise update the remote file.
+	// Deferring creation like this avoids 409 Conflict errors.
+	var body *bytes.Buffer
+	if f.sha == "" {
+		body = bytes.NewBufferString(fmt.Sprintf(createBody, f.subpath, f.branch, encodedContent))
+	} else {
+		body = bytes.NewBufferString(fmt.Sprintf(updateBody, f.subpath, f.branch, encodedContent, f.sha))
+	}
+
+	resp, err := f.gfs.apiRequest(
+		"PUT",
+		fmt.Sprintf(
+			"https://api.github.com/repos/%s/%s/contents/%s",
+			f.gfs.owner, f.gfs.repo, f.subpath,
+		),
+		"application/vnd.github+json",
+		body,
+	)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != 200 && resp.StatusCode != 201 {
+		return &ErrBadStatus{status: resp.Status}
+	}
+	defer resp.Body.Close()
+
+	var respJson struct {
+		sha string
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&respJson); err != nil {
+		return err
+	}
+
+	f.size = int64(len(f.buffer))
+	f.fileInfo.modTime = time.Now().Local().UnixMilli()
+	f.fileInfo.sha = respJson.sha
+	return nil
+}
+
+func (f *file) Close() error {
+	if f.dirty {
+		return f.Sync()
+	}
+	return nil
 }
 
 func (f *file) ReadDir(n int) ([]fs.DirEntry, error) {
@@ -379,6 +561,7 @@ type fileInfo struct {
 
 	branch  string
 	subpath string
+	sha     string
 }
 
 func (i *fileInfo) Name() string       { return i.name }
@@ -392,8 +575,3 @@ func (i *fileInfo) Sys() any           { return nil }
 
 func (i *fileInfo) Info() (fs.FileInfo, error) { return i, nil }
 func (i *fileInfo) Type() fs.FileMode          { return i.Mode() }
-
-type NopReadCloser struct{}
-
-func (NopReadCloser) Read(b []byte) (int, error) { return 0, nil }
-func (NopReadCloser) Close() error               { return nil }
