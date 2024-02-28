@@ -134,7 +134,7 @@ func (g *FS) maybeUpdateBranches() error {
 		return err
 	}
 	if resp.StatusCode != 200 {
-		return &ErrBadStatus{status: resp.Status}
+		return ErrBadStatus{status: resp.Status}
 	}
 	defer resp.Body.Close()
 
@@ -179,7 +179,7 @@ func (g *FS) maybeUpdateTree(branch string) error {
 		return err
 	}
 	if resp.StatusCode != 200 {
-		return &ErrBadStatus{status: resp.Status}
+		return ErrBadStatus{status: resp.Status}
 	}
 	defer resp.Body.Close()
 
@@ -293,7 +293,7 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 			return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 		}
 		if resp.StatusCode != 200 {
-			return nil, &fs.PathError{Op: "open", Path: name, Err: &ErrBadStatus{status: resp.Status}}
+			return nil, &fs.PathError{Op: "open", Path: name, Err: ErrBadStatus{status: resp.Status}}
 		}
 		defer resp.Body.Close()
 
@@ -312,11 +312,55 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 }
 
 func (g *FS) Remove(name string) error {
-	panic("TODO")
+	if !fs.ValidPath(name) {
+		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
+	}
+
+	fi, err := g.Stat(name)
+	if err != nil {
+		return &fs.PathError{Op: "remove", Path: name, Err: err.(*fs.PathError).Err}
+	}
+
+	if fi.IsDir() {
+		// Use RemoveAll instead
+		return &fs.PathError{Op: "remove", Path: name, Err: errors.ErrUnsupported}
+	}
+
+	fInfo := fi.(*fileInfo)
+
+	resp, err := g.apiRequest(
+		"DELETE",
+		fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s",
+			g.owner, g.repo, fInfo.subpath,
+		),
+		"application/vnd.github+json",
+		bytes.NewBufferString(
+			fmt.Sprintf(
+				`{"message":"Remove '%s'","branch":"%s","sha":"%s"}`,
+				fInfo.subpath, fInfo.branch, fInfo.sha,
+			),
+		),
+	)
+	if err != nil {
+		return &fs.PathError{Op: "remove", Path: name, Err: err}
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return &fs.PathError{Op: "remove", Path: name, Err: ErrBadStatus{status: resp.Status}}
+	}
+
+	// why can't I just update a map value's fields...
+	tree := g.branches[fInfo.branch]
+	tree.Expired = true
+	g.branches[fInfo.branch] = tree
+
+	return nil
 }
 
 func (g *FS) RemoveAll(path string) error {
-	panic("TODO")
+	// TODO
+	return g.Remove(path)
 }
 
 func (g *FS) Rename(oldname, newname string) error {
@@ -478,7 +522,7 @@ func (f *file) Sync() error {
 		return err
 	}
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		return &ErrBadStatus{status: resp.Status}
+		return ErrBadStatus{status: resp.Status}
 	}
 	defer resp.Body.Close()
 
