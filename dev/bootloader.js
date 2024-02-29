@@ -28,6 +28,11 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
         });
       });
     }
+    if (registration.active && !navigator.serviceWorker.controller) {
+      // Perform a soft reload to load everything from the SW and get
+      // a consistent set of resources.
+      window.location.reload();
+    }
     
     let readyResolver = undefined;
     const ready = new Promise((resolve) => {
