@@ -18,7 +18,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
       return new Uint8Array(buf);
     }
 
-    let registration = await navigator.serviceWorker.getRegistration("/");
+    let registration = await navigator.serviceWorker.getRegistration();
     if (!registration) {
       await navigator.serviceWorker.register("./wanix-bootloader.js?sw", {type: "module"});
       registration = await navigator.serviceWorker.ready;
