@@ -1,9 +1,9 @@
-.PHONY: boot dev kernel shell dev bundle micro
+.PHONY: boot dev kernel shell dev bundle micro hugo
 
 VERSION=0.2dev
 DEBUG?=false
 
-all: kernel shell build micro
+all: kernel shell build micro hugo
 
 dev: all
 	go run ./dev
@@ -21,6 +21,11 @@ micro: local/bin/micro
 
 local/bin/micro: external/micro/ local/bin
 	make -C external/micro build
+
+hugo: local/bin/hugo
+
+local/bin/hugo: external/hugo/ local/bin
+	make -C external/hugo build
 
 build/pkg.zip: build/build-pkgs/imports/imports.go build/build-pkgs/main.go
 	cd build && go run ./build-pkgs/main.go ./build-pkgs/imports ./pkg.zip

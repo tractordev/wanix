@@ -24,6 +24,7 @@ var files = []File{
 	{Name: "build", Path: "./local/bin/build"},
 	{Name: "micro", Path: "./local/bin/micro"},
 	{Name: "shell", Path: "./local/bin/shell"},
+	{Name: "hugo", Path: "./local/bin/hugo"},
 
 	// Shell source files
 	{Name: "shell/main.go", Path: "shell/main.go"},
