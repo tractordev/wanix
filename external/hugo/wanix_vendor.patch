@@ -1,0 +1,77 @@
+diff --git a/commands/commands.go b/commands/commands.go
+index e21d743ab..f5ae41e54 100644
+--- a/commands/commands.go
++++ b/commands/commands.go
+@@ -23,7 +23,6 @@ func newExec() (*simplecobra.Exec, error) {
+ 		commands: []simplecobra.Commander{
+ 			newVersionCmd(),
+ 			newEnvCommand(),
+-			newServerCommand(),
+ 			newDeployCommand(),
+ 			newConfigCommand(),
+ 			newNewCommand(),
+diff --git a/commands/server.go b/commands/server.go
+index d08bc5277..6fd691ac9 100644
+--- a/commands/server.go
++++ b/commands/server.go
+@@ -39,8 +39,6 @@ import (
+ 	"syscall"
+ 	"time"
+ 
+-	"github.com/bep/mclib"
+-
+ 	"github.com/bep/debounce"
+ 	"github.com/bep/simplecobra"
+ 	"github.com/fsnotify/fsnotify"
+@@ -104,33 +102,6 @@ func newHugoBuilder(r *rootCommand, s *serverCommand, onConfigLoaded ...func(rel
+ 	}
+ }
+ 
+-func newServerCommand() *serverCommand {
+-	// Flags.
+-	var uninstall bool
+-
+-	c := &serverCommand{
+-		quit: make(chan bool),
+-		commands: []simplecobra.Commander{
+-			&simpleCommand{
+-				name:  "trust",
+-				short: "Install the local CA in the system trust store.",
+-				run: func(ctx context.Context, cd *simplecobra.Commandeer, r *rootCommand, args []string) error {
+-					action := "-install"
+-					if uninstall {
+-						action = "-uninstall"
+-					}
+-					os.Args = []string{action}
+-					return mclib.RunMain()
+-				},
+-				withc: func(cmd *cobra.Command, r *rootCommand) {
+-					cmd.Flags().BoolVar(&uninstall, "uninstall", false, "Uninstall the local CA (but do not delete it).")
+-				},
+-			},
+-		},
+-	}
+-
+-	return c
+-}
+ 
+ func (c *serverCommand) Commands() []simplecobra.Commander {
+ 	return c.commands
+@@ -689,7 +660,7 @@ func (c *serverCommand) createCertificates(conf *commonConfig) error {
+ 	// Check if the certificate already exists and is valid.
+ 	certPEM, err := os.ReadFile(c.tlsCertFile)
+ 	if err == nil {
+-		rootPem, err := os.ReadFile(filepath.Join(mclib.GetCAROOT(), "rootCA.pem"))
++		rootPem, err := os.ReadFile(filepath.Join("rootCA.pem")) // mclib.GetCAROOT()
+ 		if err == nil {
+ 			if err := c.verifyCert(rootPem, certPEM, hostname); err == nil {
+ 				c.r.Println("Using existing", c.tlsCertFile, "and", c.tlsKeyFile)
+@@ -702,7 +673,7 @@ func (c *serverCommand) createCertificates(conf *commonConfig) error {
+ 
+ 	// Yes, this is unfortunate, but it's currently the only way to use Mkcert as a library.
+ 	os.Args = []string{"-cert-file", c.tlsCertFile, "-key-file", c.tlsKeyFile, hostname}
+-	return mclib.RunMain()
++	return errors.New("No mclib") // mclib.RunMain()
+ }
+ 
+ func (c *serverCommand) verifyCert(rootPEM, certPEM []byte, name string) error {

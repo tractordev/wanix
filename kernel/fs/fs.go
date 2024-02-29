@@ -95,8 +95,9 @@ func (s *Service) Initialize() {
 
 	// copy builtin exe's into filesystem
 	s.copyFromInitFS("sys/cmd/build.wasm", "build")
-	s.copyFromInitFS("cmd/micro.wasm", "micro")
 	s.copyFromInitFS("sys/bin/shell.wasm", "shell")
+	s.copyFromInitFS("cmd/micro.wasm", "micro")
+	s.copyFromInitFS("cmd/hugo.wasm", "hugo")
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	resp, err := http.DefaultClient.Get(devURL)
