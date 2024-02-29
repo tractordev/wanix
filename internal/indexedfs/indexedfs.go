@@ -220,6 +220,7 @@ func (ifs *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error
 	}
 
 	// if we didn't just create the file, update atime
+	// TODO: this isn't actually checking if we created a file.
 	if flag&os.O_CREATE == 0 {
 		updateFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
 			file := args[0]
@@ -389,7 +390,6 @@ func (f *indexedFile) getData() ([]byte, error) {
 	return f.readCache, nil
 }
 
-// Close implements fs.File.
 func (f *indexedFile) Close() error {
 	f.offset = 0
 
@@ -402,7 +402,6 @@ func (f *indexedFile) Close() error {
 	return nil
 }
 
-// Read implements fs.File.
 func (f *indexedFile) Read(p []byte) (n int, err error) {
 	if f.flags&os.O_WRONLY > 0 {
 		return 0, fs.ErrPermission
@@ -430,6 +429,10 @@ func (f *indexedFile) Read(p []byte) (n int, err error) {
 }
 
 func (f *indexedFile) Write(p []byte) (n int, err error) {
+	if f.flags&os.O_RDONLY > 0 {
+		return 0, fs.ErrPermission
+	}
+
 	if f.writeCache == nil {
 		if f.writeCache, err = f.getData(); err != nil {
 			return 0, err
@@ -497,12 +500,10 @@ func (f *indexedFile) Sync() error {
 	return nil
 }
 
-// Stat implements fs.File.
 func (f *indexedFile) Stat() (fs.FileInfo, error) {
 	return f.ifs.Stat(f.name)
 }
 
-// Stat implements fs.File.
 func (f *indexedFile) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
