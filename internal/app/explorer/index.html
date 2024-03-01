@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+    <title>File Explorer</title>
+</head>
+<body>
+    <header class="p-4 pb-8 mb-4">
+        <div class="username">taramk</div>
+        <div class="project font-bold mb-2 text-xl">taramk.github.io</div>
+
+        <div class="button-bar flex justify-between">
+            <div>
+                <input class="bg-gray-800 py-1 px-2 rounded-sm w-96 border border-gray-700" type="search" placeholder="Search for files" />
+                <button class="bg-lime-300 py-1 px-3 rounded-sm text-lime-900">Search</button>
+            </div>
+            <button class="bg-gray-600 p-1 px-2 rounded-sm">+ New File</button>
+        </div>
+
+    </header>
+
+
+    <div class="content">
+
+        <a href="edit.html">
+            <div class="file-row flex justify-start items-center gap-4 p-4">
+                <div class="filetype-image w-12 h-12 flex items-center justify-center bg-gray-800 rounded-sm">
+                    <svg id="icon-document" width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M182.071 84.9674C184.832 84.9674 187.071 87.206 187.071 89.9674V212C187.071 214.761 184.832 217 182.071 217H54C51.2386 217 49 214.761 49 212V30.7942C49 28.0328 51.2386 25.7942 54 25.7942H122.898C125.659 25.7942 127.898 28.0328 127.898 30.7942V79.7344C127.898 82.5521 130.313 84.9674 133.131 84.9674H182.071Z" fill="currentColor"/>
+                        <path d="M184.879 74.8787C186.769 76.7686 185.43 80 182.757 80H136C134.343 80 133 78.6569 133 77V30.2426C133 27.5699 136.231 26.2314 138.121 28.1213L184.879 74.8787Z" fill="currentColor"/>
+                    </svg>                    
+                </div>
+                
+                <div class="file-name">
+                    <div class="file-name-header">
+                        skycons.js
+                    </div>
+                    <div class="filepath text-gray-400 text-sm">
+                        scripts/skycons.js
+                    </div>
+                </div>
+            </div>
+        </a>
+
+        <div class="file-row flex justify-start items-center gap-4 p-4">
+            <div class="filetype-image w-12 h-12 flex items-center justify-center bg-gray-800 rounded-sm">
+                <svg class="icon-folder" width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M95.8586 62.2518H208.569C216 62.2518 217.097 64.0745 220 67V62.2518C220 53.5 217 51 208.569 51H89L95.8586 62.2518Z" fill="currentColor"/>
+                    <path d="M208.58 66.8788H93.3928L84.3478 51.7788C80.5 45 79 44 70.6433 44H30.4205C21.5 44 19 47 19 55.4394V183.561C19 192.5 19 195 30.4205 195H208.58C217.5 195 220 192 220 183.561V78.3182C220 70 217.5 66.8788 208.58 66.8788Z" fill="currentColor"/>
+                </svg>
+            </div>
+            
+            <div class="file-name">
+                <div class="file-name-header">
+                    README.md
+                </div>
+                <div class="filepath text-gray-400 text-sm">
+                    scripts/skycons.js
+                </div>
+            </div>
+        </div>
+
+        <div class="file-row flex justify-start items-center gap-4 p-4">
+            <div class="filetype-image w-12 h-12 flex items-center justify-center bg-gray-800 rounded-sm">
+                <svg class="icon-markdown" width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M231 57C231 54.2386 228.761 52 226 52L15 52C12.2386 52 10 54.2386 10 57V183C10 185.761 12.2386 188 15 188H226C228.761 188 231 185.761 231 183L231 57ZM110.652 156.124C107.89 156.124 105.652 153.885 105.652 151.124V123.237C105.652 120.401 102.08 119.148 100.309 121.363L88.3199 136.356C86.3183 138.859 82.5115 138.859 80.5099 136.356L68.5212 121.363C66.7499 119.148 63.1782 120.401 63.1782 123.237V151.124C63.1782 153.885 60.9396 156.124 58.1782 156.124H46.8724C44.1109 156.124 41.8724 153.885 41.8724 151.124V88.8761C41.8724 86.1146 44.1109 83.8761 46.8724 83.8761H60.7053C62.2246 83.8761 63.6615 84.5669 64.6103 85.7534L80.4408 105.55C82.4424 108.053 86.2492 108.053 88.2508 105.55L104.081 85.7534C105.03 84.5669 106.467 83.8761 107.986 83.8761H121.819C124.581 83.8761 126.819 86.1146 126.819 88.8761V151.124C126.819 153.885 124.581 156.124 121.819 156.124H110.652ZM177.405 152.759C175.41 155.09 171.807 155.091 169.81 152.761L148.809 128.253C146.03 125.01 148.334 120 152.606 120H157.973C160.735 120 162.973 117.761 162.973 115V88.8761C162.973 86.1146 165.212 83.8761 167.973 83.8761H179.21C181.972 83.8761 184.21 86.1146 184.21 88.8761V115C184.21 117.761 186.449 120 189.21 120H194.585C198.856 120 201.161 125.007 198.384 128.251L177.405 152.759Z" fill="currentColor"/>
+                </svg>
+                    
+            </div>
+            
+            <div class="file-name">
+                <div class="file-name-header">
+                    skycons.js
+                </div>
+                <div class="filepath text-gray-400 text-sm">
+                    scripts/skycons.js
+                </div>
+            </div>
+        </div>
+
+
+        
+    </div>
+</body>
+</html>

@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
+
+/*
+style notes:
+- inputs have a background color of gray-800 with a 1px border of gray-700
+- default buttons bg gray-600, primary button (1 per page is bg lime-300)
+- border radius for buttons/inputs is rounded-sm
+*/
+
+:root {
+    font-size: 16px;
+    --padding-xs: calc(var(--padding) / 4);
+    --padding-s: calc(var(--padding) / 2);
+    --padding: 1rem;
+    --padding-l: calc(var(--padding) * 2);
+    --padding-xl: calc(var(--padding) * 4);
+    --gray-50: rgba(249, 250, 251, 1);
+    --gray-100: rgba(243, 244, 246, 1);	
+    --gray-200: rgba(229, 231, 235, 1);	
+    --gray-300: rgba(209, 213, 219, 1);	
+    --gray-400: rgba(156, 163, 175, 1);	
+    --gray-500: rgba(107, 114, 128, 1);	
+    --gray-600: rgba(75, 85, 99, 1);	
+    --gray-700: rgba(55, 65, 81, 1);	
+    --gray-800: rgba(31, 41, 55, 1);	
+    --gray-900: rgba(17, 24, 39, 1);
+    --black: rgba(8, 12, 19, 1);
+    --border-color: var(--gray-700);
+}
+
+body {
+    font-family: Inter;
+    color: var(--gray-50);
+    margin: var(--padding-l) auto !important;
+    line-height: 1.5;
+    background-color: var(--black);
+    width: 900px;
+}
+
+header {
+    border-bottom: 1px solid var(--gray-500);
+}
+
+
+/* file rows (homepage) ------------------ */
+
+.file-row {
+    border-bottom: 1px solid var(--border-color);
+}
+a>.file-row:hover {
+    background-color: var(--gray-900);
+}
+
+.filetype-image svg {
+    width: 2.5rem;
+    height: 2.5rem;
+    color: var(--gray-400);
+}

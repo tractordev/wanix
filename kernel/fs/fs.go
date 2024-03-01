@@ -18,6 +18,7 @@ import (
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
 
 	"tractor.dev/wanix/internal"
+	"tractor.dev/wanix/internal/githubfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
@@ -86,6 +87,8 @@ func (s *Service) Initialize() {
 	// copy some apps include terminal
 	must(s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
 	must(s.copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo"))
+	must(s.copyAllFS(s.fsys, "sys/app/jazz-todo", internal.Dir, "app/jazz-todo"))
+	must(s.copyAllFS(s.fsys, "sys/app/explorer", internal.Dir, "app/explorer"))
 
 	// copy shell source into filesystem
 	fs.MkdirAll(s.fsys, "sys/cmd/shell", 0755)
@@ -111,15 +114,27 @@ func (s *Service) Initialize() {
 
 	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
 
-	// fs.MkdirAll(s.fsys, "sys/git", 0755)
-	// must(s.fsys.(*mountablefs.FS).Mount(
-	// 	githubfs.New(
-	// 		"tractordev",
-	// 		"wanix",
-	// 		"INSERT_TOKEN_HERE",
-	// 	),
-	// 	"/sys/git",
-	// ))
+	u, err := jsutil.WanixSyscall("host.currentUser")
+	if err != nil || u.IsNull() {
+		return
+	}
+	m := u.Get("user_metadata")
+	if m.IsUndefined() {
+		return
+	}
+	token := m.Get("gh_token")
+	if token.IsUndefined() {
+		return
+	}
+	fs.MkdirAll(s.fsys, "repo", 0755)
+	must(s.fsys.(*mountablefs.FS).Mount(
+		githubfs.New(
+			"wanixdev",
+			"wanix.sh",
+			token.String(),
+		),
+		"/repo",
+	))
 
 }
 
