@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -112,6 +113,10 @@ func getCmd() *cli.Command {
 			defer resp.Body.Close()
 
 			jsutil.Log("GET", args[0], resp.Status)
+			if resp.StatusCode < 200 || resp.StatusCode > 299 {
+				checkErr(ctx, errors.New("ErrBadStatus: "+resp.Status))
+				return
+			}
 
 			if outputPath == "" {
 				outputPath = filepath.Base(resp.Request.URL.Path)
