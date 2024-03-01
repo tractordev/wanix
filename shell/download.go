@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"syscall/js"
@@ -94,4 +95,34 @@ func downloadCmd() *cli.Command {
 			}
 		},
 	}
+}
+
+func getCmd() *cli.Command {
+	var outputPath string
+
+	cmd := &cli.Command{
+		Usage: "get [-output <path>] <http-url>",
+		Args:  cli.ExactArgs(1),
+		Short: "Download a file over HTTP.",
+		Run: func(ctx *cli.Context, args []string) {
+			resp, err := http.DefaultClient.Get(args[0])
+			if checkErr(ctx, err) {
+				return
+			}
+			defer resp.Body.Close()
+
+			jsutil.Log("GET", args[0], resp.Status)
+
+			if outputPath == "" {
+				outputPath = filepath.Base(resp.Request.URL.Path)
+			}
+
+			file, err := os.Create(absPath(outputPath))
+			io.Copy(file, resp.Body)
+			checkErr(ctx, file.Close())
+		},
+	}
+
+	cmd.Flags().StringVar(&outputPath, "output", "", "Output downloaded file to this path. Omitting outputs to working directory using the downloaded file's name.")
+	return cmd
 }
