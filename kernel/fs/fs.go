@@ -18,7 +18,6 @@ import (
 	"tractor.dev/toolkit-go/engine/fs/watchfs"
 
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/internal/githubfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
@@ -31,6 +30,12 @@ var doLogging bool = DebugLog == "true"
 func log(args ...any) {
 	if doLogging {
 		js.Global().Get("console").Call("log", args...)
+	}
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
 	}
 }
 
@@ -79,54 +84,42 @@ func (s *Service) Initialize() {
 	fs.MkdirAll(s.fsys, "sys/tmp", 0755)
 
 	// copy some apps include terminal
-	s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal")
-	s.copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo")
-
-	// copy of kernel source into filesystem.
-	s.copyAllFS(s.fsys, "sys/cmd/kernel", s.KernelSource, ".")
+	must(s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
+	must(s.copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo"))
 
 	// copy shell source into filesystem
 	fs.MkdirAll(s.fsys, "sys/cmd/shell", 0755)
 	shellFiles := getPrefixedInitFiles("shell/")
 	for _, path := range shellFiles {
-		if err = s.copyFromInitFS(filepath.Join("sys/cmd", path), path); err != nil {
-			panic(err)
-		}
+		must(s.copyFromInitFS(filepath.Join("sys/cmd", path), path))
 	}
 
-	// copy builtin exe's into filesystem
-	s.copyFromInitFS("sys/cmd/build.wasm", "build")
-	s.copyFromInitFS("sys/bin/shell.wasm", "shell")
-	s.copyFromInitFS("cmd/micro.wasm", "micro")
-	s.copyFromInitFS("cmd/hugo.wasm", "hugo")
+	// copy of kernel source into filesystem.
+	must(s.copyAllFS(s.fsys, "sys/cmd/kernel", s.KernelSource, "."))
+
+	// move builtin kernel exe's into filesystem
+	must(s.fsys.Rename("sys/cmd/kernel/bin/build", "sys/cmd/build.wasm"))
+	must(s.fsys.Rename("sys/cmd/kernel/bin/shell", "sys/bin/shell.wasm"))
+	must(s.fsys.Rename("sys/cmd/kernel/bin/micro", "sys/cmd/micro.wasm"))
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	resp, err := http.DefaultClient.Get(devURL)
-	if err != nil {
-		panic(err)
-	}
+	must(err)
 	if resp.StatusCode == 200 {
-		if err := s.fsys.(*mountablefs.FS).Mount(httpfs.New(devURL), "/sys/dev"); err != nil {
-			panic(err)
-		}
+		must(s.fsys.(*mountablefs.FS).Mount(httpfs.New(devURL), "/sys/dev"))
 	}
 
-	if err := s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"); err != nil {
-		panic(err)
-	}
+	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
 
-	fs.MkdirAll(s.fsys, "sys/git", 0755)
-	err = s.fsys.(*mountablefs.FS).Mount(
-		githubfs.New(
-			"tractordev",
-			"wanix",
-			"INSERT_TOKEN_HERE",
-		),
-		"/sys/git",
-	)
-	if err != nil {
-		panic(err)
-	}
+	// fs.MkdirAll(s.fsys, "sys/git", 0755)
+	// must(s.fsys.(*mountablefs.FS).Mount(
+	// 	githubfs.New(
+	// 		"tractordev",
+	// 		"wanix",
+	// 		"INSERT_TOKEN_HERE",
+	// 	),
+	// 	"/sys/git",
+	// ))
 
 }
 

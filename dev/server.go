@@ -3,10 +3,13 @@
 package main
 
 import (
+	"compress/gzip"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"tractor.dev/wanix/internal/httpfs"
@@ -35,6 +38,28 @@ func main() {
 	mux.Handle(fmt.Sprintf("%s/sys/dev/", basePath), http.StripPrefix(fmt.Sprintf("%s/sys/dev/", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gwutil.FileTransformer(os.DirFS(dir), httpfs.FileServer).ServeHTTP(w, r)
 	})))
+	mux.Handle(fmt.Sprintf("%s/wanix-kernel.gz", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/gzip")
+
+		file, err := os.Open(filepath.Join(dir, "local/bin/kernel"))
+		if err != nil {
+			http.Error(w, "File not found.", http.StatusNotFound)
+			return
+		}
+		defer file.Close()
+
+		gzipWriter := gzip.NewWriter(w)
+		defer gzipWriter.Close()
+
+		if _, err := io.Copy(gzipWriter, file); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := gzipWriter.Flush(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}))
 	mux.Handle(fmt.Sprintf("%s/wanix-bootloader.js", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/javascript")
 

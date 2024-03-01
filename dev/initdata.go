@@ -20,11 +20,6 @@ var files = []File{
 	{Name: "wasm.js", Path: "./kernel/web/lib/wasm.js"},
 	{Name: "host.js", Path: "./kernel/web/lib/host.js"},
 	{Name: "indexedfs.js", Path: "./internal/indexedfs/indexedfs.js"},
-	{Name: "kernel", Path: "./local/bin/kernel"},
-	{Name: "build", Path: "./local/bin/build"},
-	{Name: "micro", Path: "./local/bin/micro"},
-	{Name: "shell", Path: "./local/bin/shell"},
-	{Name: "hugo", Path: "./local/bin/hugo"},
 
 	// Shell source files
 	{Name: "shell/main.go", Path: "shell/main.go"},

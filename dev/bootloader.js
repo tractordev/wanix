@@ -4,6 +4,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
   // registers Service Worker using this file (see bottom) if none is registered,
   // and sets up a mechanism to fullfill requests from initfs or kernel
   async function setupServiceWorker() {
+    const timeout = (ms) => new Promise((resolve, reject) => setTimeout(() => reject(new Error("Timeout")), ms));
     const unzip = async (b64data) => {
       const gzipData = atob(b64data);
       const gzipBuf = new Uint8Array(gzipData.length);
@@ -20,13 +21,17 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
 
     let registration = await navigator.serviceWorker.getRegistration();
     if (!registration) {
+      console.log("Registering service worker...");
       await navigator.serviceWorker.register("./wanix-bootloader.js?sw", {type: "module"});
       registration = await navigator.serviceWorker.ready;
-      await new Promise((resolve) => {
-        navigator.serviceWorker.addEventListener("controllerchange", async (event) => {
-          resolve();
-        });
-      });
+      await Promise.race([
+        new Promise((resolve) => {
+          navigator.serviceWorker.addEventListener("controllerchange", async (event) => {
+            resolve();
+          });
+        }),
+        timeout(3000)
+      ]).catch(err => console.warn(err));
     }
     if (registration.active && !navigator.serviceWorker.controller) {
       // Perform a soft reload to load everything from the SW and get
@@ -76,16 +81,28 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
       registration.active.postMessage({response: { reqId: req.id, body: buf.bytes(), headers }});
     });
 
+    console.log("Initializing service worker...");
     registration.active.postMessage({init: true, basePath});
     await ready;
+  }
+
+  async function fetchKernel() {
+    const resp = await fetch("./wanix-kernel.gz");
+    const gzipBlob = await resp.blob();
+    const ds = new DecompressionStream('gzip');
+    const out = gzipBlob.stream().pipeThrough(ds);
+    const response = new Response(out);
+    globalThis.initfs["kernel"] = { mtimeMs: Date.now(), blob: await response.blob() };
   }
 
   // bootloader starts here
   (async function() {
     console.log("Wanix booting...")
+    
+    globalThis.initfs = {};
+    const kernelReady = fetchKernel();
     await setupServiceWorker();
 
-    globalThis.initfs = {};
     const load = async (name, file) => {
       // Determine if file contains a path to fetch or embedded file contents to load.
       if(file.type === "text/plain") {
@@ -105,6 +122,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"].blob));
     globalThis.task = await import(URL.createObjectURL(initfs["task.js"].blob));
 
+    await kernelReady;
     globalThis.sys = new task.Task(initfs);
     
     // start kernel
@@ -141,13 +159,14 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
     const req = event.request;
     const url = new URL(req.url);
     if (url.pathname === "/favicon.ico" || 
-      url.hostname !== "localhost" || // TODO: something else to allow cross-domain requests
       url.pathname === basePath ||
       url.pathname.startsWith(`${basePath}wanix-bootloader.js`) ||
       url.pathname.startsWith(`${basePath}sys/dev`) || 
       url.pathname.startsWith(`${basePath}bootloader`) || 
       url.pathname.startsWith(`${basePath}index.html`) ||
-      url.hostname !== "localhost" || // TEMPORARY WORKAROUND
+      url.pathname.startsWith(`${basePath}wanix-kernel.gz`) ||
+      url.pathname.startsWith("/auth") ||
+      !url.hostname.endsWith(location.hostname) ||
       !host) return;
 
     reqId++;
