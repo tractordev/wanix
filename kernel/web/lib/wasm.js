@@ -45,7 +45,6 @@
   }
 
 	if (!globalThis.fs) {
-		let outputBuf = "";
 		globalThis.fs = {
 			constants: { O_WRONLY: 1, O_RDWR: 2, O_CREAT: 64, O_TRUNC: 512, O_APPEND: 1024, O_EXCL: 128 },
 			// writeFile helper for working with fs in js
@@ -103,11 +102,8 @@
 			writeSync(fd, buf) {
 				if(!buf) return 0;
 
-				outputBuf += decoder.decode(buf);
-				const nl = outputBuf.lastIndexOf("\n");
-				if (nl != -1) {
-					outputBuf = outputBuf.substring(nl + 1);
-				}
+				console.log(decoder.decode(buf));
+
 				return buf.length;
 			},
 			// the actual fs api
