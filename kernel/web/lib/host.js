@@ -8,9 +8,11 @@ globalThis.sys.pipe.handle("host.currentUser", duplex.handlerFrom(() => {
     return JSON.parse(login)["user"] || null;
 }));
 globalThis.sys.pipe.handle("host.login", duplex.handlerFrom(() => {
+    localStorage.setItem("auth:redirect", window.location.href);
     window.location.href = "/auth/";  
 }));
 globalThis.sys.pipe.handle("host.logout", duplex.handlerFrom(() => {
+    localStorage.setItem("auth:redirect", window.location.href);
     window.location.href = "/auth/?logout";
 }));
 
