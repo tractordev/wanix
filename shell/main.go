@@ -47,6 +47,7 @@ func (m *Shell) buildCmds() {
 	m.cmd.AddCommand(catCmd())
 	m.cmd.AddCommand(reloadCmd())
 	m.cmd.AddCommand(downloadCmd())
+	m.cmd.AddCommand(getCmd())
 	m.cmd.AddCommand(touchCmd())
 	m.cmd.AddCommand(removeCmd())
 	m.cmd.AddCommand(mkdirCmd())
