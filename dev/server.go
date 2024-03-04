@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"tractor.dev/toolkit-go/engine/fs/watchfs"
 	"tractor.dev/wanix/internal/httpfs"
 	"tractor.dev/wanix/kernel/web/gwutil"
 )
@@ -36,7 +37,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle(fmt.Sprintf("%s/sys/dev/", basePath), http.StripPrefix(fmt.Sprintf("%s/sys/dev/", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gwutil.FileTransformer(os.DirFS(dir), httpfs.FileServer).ServeHTTP(w, r)
+		gwutil.FileTransformer(watchfs.New(os.DirFS(dir)), httpfs.FileServer).ServeHTTP(w, r)
 	})))
 	mux.Handle(fmt.Sprintf("%s/wanix-kernel.gz", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/gzip")
