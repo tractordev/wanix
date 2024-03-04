@@ -10,17 +10,28 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"tractor.dev/toolkit-go/engine/fs/watchfs"
 )
 
 // FileServer wraps http.FileServer with extra endpoints for metadata.
 // Requests to dir paths with `?readdir` will a return JSON array of dir entries.
 // Requests to paths with `?stat` will return a JSON object of file info.
+// Requests to paths with `?watch` will stream file change events.
 func FileServer(fsys fs.FS) http.Handler {
+	var wfs watchfs.WatchFS
+	if w, ok := fsys.(watchfs.WatchFS); ok {
+		wfs = w
+	} else {
+		wfs = watchfs.New(fsys)
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimSuffix(r.URL.Path, "/")
 		if name == "" {
 			name = "."
 		}
+
 		fi, err := fs.Stat(fsys, name)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -28,6 +39,45 @@ func FileServer(fsys fs.FS) http.Handler {
 				return
 			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if r.URL.RawQuery == "watch" {
+			watch, err := wfs.Watch(name, &watchfs.Config{
+				Recursive: true, // just always do recursively
+			})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// this long-polling impl won't catch every possible
+			// event but is good enough for noticing general changes
+			e := <-watch.Iter()
+			watch.Close()
+			eventErr := ""
+			if e.Err != nil {
+				eventErr = e.Err.Error()
+			}
+			b, err := json.Marshal(map[string]any{
+				"type":    uint(e.Type),
+				"path":    e.Path,
+				"oldpath": e.OldPath,
+				"err":     eventErr,
+				"isDir":   e.IsDir(),
+				"mode":    uint(e.Mode()),
+				"size":    e.Size(),
+				"name":    e.Name(),
+				"modTime": e.ModTime().Unix(),
+			})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if _, err := w.Write(b); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 			return
 		}
 
@@ -86,6 +136,70 @@ type FS struct {
 
 func New(baseURL string) *FS {
 	return &FS{baseURL}
+}
+
+func (fsys *FS) Watch(name string, cfg *watchfs.Config) (*watchfs.Watch, error) {
+	if cfg == nil {
+		cfg = &watchfs.Config{}
+	}
+	watch, inbox, closer := watchfs.NewWatch(name, *cfg)
+	if cfg.Handler != nil {
+		go func() {
+			for e := range watch.Iter() {
+				cfg.Handler(e)
+			}
+		}()
+	}
+	go func() {
+		defer close(inbox)
+		for {
+			url := filepath.Join(fsys.baseURL, name)
+			resp, err := http.DefaultClient.Get(url + "?watch")
+			if err != nil {
+				return
+			}
+			if resp.StatusCode == 404 {
+				return
+			}
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return
+			}
+			resp.Body.Close()
+			event := make(map[string]any)
+			if err := json.Unmarshal(b, &event); err != nil {
+				continue
+			}
+			inbox <- inflateEvent(event)
+			select {
+			case inbox <- inflateEvent(event):
+				continue
+			case _, ok := <-closer:
+				if !ok {
+					return
+				}
+			default:
+			}
+		}
+	}()
+	return watch, nil
+}
+
+func inflateEvent(e map[string]any) watchfs.Event {
+	fsInfo := &info{
+		name:    e["name"].(string),
+		size:    int64(e["size"].(float64)),
+		mode:    uint(e["mode"].(float64)),
+		modTime: int64(e["modTime"].(float64)),
+		isDir:   e["isDir"].(bool),
+	}
+	return watchfs.Event{
+		Path:     e["path"].(string),
+		OldPath:  e["oldpath"].(string),
+		Type:     watchfs.EventType(uint(e["type"].(float64))),
+		Err:      errors.New(e["err"].(string)),
+		FileInfo: fsInfo,
+	}
 }
 
 func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) {
