@@ -8,7 +8,7 @@ require (
 	github.com/evanw/esbuild v0.19.5
 	github.com/spf13/afero v1.10.0
 	golang.org/x/term v0.17.0
-	tractor.dev/toolkit-go v0.0.0-20231221004400-0208bc4b870f
+	tractor.dev/toolkit-go v0.0.0-20240304053737-324323efde45
 )
 
 require (
