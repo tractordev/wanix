@@ -9,6 +9,15 @@ globalThis.api = {
     },
   },
   fs: {
+    // helpers
+    readFile(path) {
+      return globalThis.fs.readFile(path);
+    },
+    writeFile(path, buf, perm) {
+      return globalThis.fs.writeFile(path, buf, perm);
+    },
+
+    // fs api
     write(fd, buf, offset, length, position) {
       return new Promise((ok, err) => globalThis.fs.write(fd, buf, offset, length, position, cb(ok, err)));
     },

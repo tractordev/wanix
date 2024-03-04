@@ -49,6 +49,7 @@
 			constants: { O_WRONLY: 1, O_RDWR: 2, O_CREAT: 64, O_TRUNC: 512, O_APPEND: 1024, O_EXCL: 128 },
 			// writeFile helper for working with fs in js
 			writeFile(path, buf, perm) {
+				buf = new Uint8Array(buf); // ensure Uint8Array when rpc was used
 				return new Promise((resolve, reject) => {
 					fs.open(path, fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_TRUNC, perm, (err, fd) => {
 						if (err) return reject(err);
