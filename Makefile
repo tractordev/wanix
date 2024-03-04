@@ -1,4 +1,4 @@
-.PHONY: boot dev kernel shell dev bundle micro hugo
+.PHONY: boot dev kernel shell dev bundle micro hugo local/bin/kernel
 
 VERSION=0.2dev
 DEBUG?=false
@@ -14,7 +14,7 @@ bundle: local/bin/kernel
 	go run -tags bundle ./dev
 
 kernel: local/bin/kernel
-local/bin/kernel: kernel/**/*.go kernel/bin/shell kernel/bin/micro kernel/bin/build
+local/bin/kernel: kernel/bin/shell kernel/bin/micro kernel/bin/build
 	cd kernel && GOOS=js GOARCH=wasm go build -ldflags="-X 'main.Version=${VERSION}' -X 'tractor.dev/wanix/kernel/fs.DebugLog=${DEBUG}'" -o ../local/bin/kernel .
 
 shell: kernel/bin/shell
