@@ -101,6 +101,10 @@ func (g *FS) apiRequest(method, url, acceptHeader string, body io.Reader) (*http
 	}
 
 	jsutil.Log(method, url, resp.Status)
+	if resp.StatusCode == 401 {
+		return resp, fs.ErrPermission
+	}
+
 	return resp, nil
 }
 
@@ -261,7 +265,6 @@ func (g *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 					modTime: time.Now().UnixMilli(),
 					branch:  branch,
 					subpath: subpath,
-					// sha:     respJson.sha,
 				}
 
 				justCreated = true
@@ -491,6 +494,10 @@ func (f *file) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f *file) Sync() error {
+	if !f.dirty {
+		return nil
+	}
+
 	var encodedContent string
 	if len(f.buffer) > 0 {
 		encodedContent = base64.StdEncoding.EncodeToString(f.buffer)
@@ -536,14 +543,12 @@ func (f *file) Sync() error {
 	f.size = int64(len(f.buffer))
 	f.fileInfo.modTime = time.Now().Local().UnixMilli()
 	f.fileInfo.sha = respJson.sha
+	f.dirty = false
 	return nil
 }
 
 func (f *file) Close() error {
-	if f.dirty {
-		return f.Sync()
-	}
-	return nil
+	return f.Sync()
 }
 
 func (f *file) ReadDir(n int) ([]fs.DirEntry, error) {

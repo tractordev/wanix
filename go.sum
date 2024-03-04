@@ -449,3 +449,5 @@ rsc.io/quote/v3 v3.1.0/go.mod h1:yEA65RcK8LyAZtP9Kv3t0HmxON59tX3rD+tICJqUlj0=
 rsc.io/sampler v1.3.0/go.mod h1:T1hPZKmBbMNahiBKFy5HrXp6adAjACjK9JXDnKaTXpA=
 tractor.dev/toolkit-go v0.0.0-20231221004400-0208bc4b870f h1:knfelP7vT8rbuLgvKd94vSdC70PbjxsumcQZKDOQOIg=
 tractor.dev/toolkit-go v0.0.0-20231221004400-0208bc4b870f/go.mod h1:gteH4mWzJV+Y5zk6/Q6rPuWeOCFHnr55XPTgYEHuzUo=
+tractor.dev/toolkit-go v0.0.0-20240304053737-324323efde45 h1:oqj8N5C0kA8xESdsOfpWBeg1UJM6Fvp/SOtCpGuXnJE=
+tractor.dev/toolkit-go v0.0.0-20240304053737-324323efde45/go.mod h1:gteH4mWzJV+Y5zk6/Q6rPuWeOCFHnr55XPTgYEHuzUo=
