@@ -20,7 +20,7 @@ globalThis.sys.pipe.handle("host.logout", duplex.handlerFrom(() => {
 globalThis.sys.pipe.handle("host.loadStylesheet", duplex.handlerFrom((path) => {
   const style = document.createElement("link");
   style.rel = "stylesheet";
-  style.href = baseURL+path;
+  style.href = `${baseURL}/${path}`.replace("//", "/");
   document.body.appendChild(style);
 }));
 globalThis.sys.pipe.handle("host.loadApp", duplex.handlerFrom((target, path, focus) => {
@@ -52,7 +52,7 @@ globalThis.sys.pipe.handle("host.loadApp", duplex.handlerFrom((target, path, foc
       }
       frame.onload = null;
   }
-  frame.setAttribute("src", baseURL+path);
+  frame.setAttribute("src", `${baseURL}/${path}`.replace("//", "/"));
 }));
 
 globalThis.sys.pipe.handle("host.download", duplex.handlerFrom((filename, data) => {
