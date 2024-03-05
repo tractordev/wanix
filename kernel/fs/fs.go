@@ -39,10 +39,6 @@ func must(err error) {
 }
 
 type Service struct {
-	// don't love passing this here but kernel
-	// package is a main package so cant reference it
-	KernelSource embed.FS
-
 	fsys fs.MutableFS
 	// Wraps fsys, so it's actually the same filesystem.
 	watcher *watchfs.FS
@@ -62,7 +58,7 @@ func (s *Service) FS() fs.FS {
 	return s.fsys
 }
 
-func (s *Service) Initialize() {
+func (s *Service) Initialize(kernelSource embed.FS) {
 	s.fds = make(map[int]*fd)
 	s.nextFd = 1000
 
@@ -96,7 +92,7 @@ func (s *Service) Initialize() {
 	}
 
 	// copy of kernel source into filesystem.
-	must(s.copyAllFS(s.fsys, "sys/cmd/kernel", s.KernelSource, "."))
+	must(s.copyAllFS(s.fsys, "sys/cmd/kernel", kernelSource, "."))
 
 	// move builtin kernel exe's into filesystem
 	must(s.fsys.Rename("sys/cmd/kernel/bin/build", "sys/cmd/build.wasm"))
@@ -133,7 +129,6 @@ func (s *Service) Initialize() {
 		),
 		"/repo",
 	))
-
 }
 
 func getPrefixedInitFiles(prefix string) []string {
