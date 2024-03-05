@@ -25,15 +25,18 @@ async function save(path, goto) {
 }
 
 export async function load(path) {
-  const dir = (await window.parent.sys.call("fs.readdir", [path])).value;
-  for (const idx in dir) {
-    const stat = (await window.parent.sys.call("fs.stat", [`${path}/${dir[idx]}`])).value;
-    if (stat.isDirectory) {
-      dir[idx] += "/"; 
-    }
-  }
+  let dir = [];
   let contents = null
-  if (!path.endsWith("/")) {
+  const stat = (await window.parent.sys.call("fs.stat", [path.replace(/\/$/, "")])).value;
+  if (stat.isDirectory) {
+    dir = (await window.parent.sys.call("fs.readdir", [path])).value;
+    for (const idx in dir) {
+      const substat = (await window.parent.sys.call("fs.stat", [`${path}/${dir[idx]}`])).value;
+      if (substat.isDirectory) {
+        dir[idx] += "/"; 
+      }
+    }
+  } else {
     const resp = await window.parent.sys.call("fs.readFile", [path]);
     const dec = new TextDecoder("utf-8");
     contents = dec.decode(resp.value);
