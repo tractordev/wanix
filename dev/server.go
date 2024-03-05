@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -36,6 +37,23 @@ func main() {
 	log.Printf("Serving WANIX dev server at http://localhost:7777%s ...\n", basePath)
 
 	mux := http.NewServeMux()
+	mux.Handle("/auth/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/auth/" {
+			d, err := os.ReadFile("./dev/auth/index.html")
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			d = bytes.ReplaceAll(d, []byte("AUTH0_DOMAIN"), []byte(os.Getenv("AUTH0_DOMAIN")))
+			d = bytes.ReplaceAll(d, []byte("AUTH0_CLIENTID"), []byte(os.Getenv("AUTH0_CLIENTID")))
+			if _, err := w.Write(d); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		http.StripPrefix("/auth/", http.FileServer(http.Dir(dir+"/dev/auth"))).ServeHTTP(w, r)
+	}))
+
 	mux.Handle(fmt.Sprintf("%s/sys/dev/", basePath), http.StripPrefix(fmt.Sprintf("%s/sys/dev/", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gwutil.FileTransformer(watchfs.New(os.DirFS(dir)), httpfs.FileServer).ServeHTTP(w, r)
 	})))

@@ -1,0 +1,89 @@
+<html>
+<head>
+  <script src="./auth0-spa-2.0.min.js"></script>
+  <script src="./auth0-9.23.3.min.js"></script>
+</head>
+<body>
+<script>
+const authSettings = {domain: "AUTH0_DOMAIN", clientId: "AUTH0_CLIENTID"};
+function finish() {
+  const redirect = localStorage.getItem("auth:redirect");
+  if (redirect) {
+    localStorage.removeItem("auth:redirect");
+    window.location.href = redirect;
+  } else {
+    window.location.href = "/";
+  }
+}
+window.onload = async () => {
+  const query = window.location.search;
+  if (query === "?logout") {
+    localStorage.removeItem("auth:login");
+    console.log("logging out...")
+    finish();
+    //await client.logout();
+    return;
+  }
+
+  const authorizationParams = {
+    redirect_uri: `http://${window.location.host}/auth/`,
+    audience: `https://${authSettings.domain}/api/v2/`,
+    scope: "read:current_user read:user_idp_tokens update:current_user_metadata",
+    prompt: "login",
+  };
+  const client = await auth0spa.createAuth0Client({authorizationParams, ...authSettings});  
+  if (query.includes("code=") && query.includes("state=")) {
+    await client.handleRedirectCallback();
+    window.history.replaceState({}, document.title, "/auth/");
+    
+  } else if (query.includes("error=") && query.includes("error_description=")) {
+    const params = new URLSearchParams(new URL(window.location.href).search);
+    console.error(params.get("error"), params.get("error_description"));
+    document.body.innerHTML = params.get("error_description");
+    return;
+
+  } else {
+    const params = new URLSearchParams(new URL(window.location.href).search);
+    if (params.get("redirect")) {
+      localStorage.setItem("auth:redirect", params.get("redirect"));
+    }
+    await client.loginWithRedirect({authorizationParams});
+  }
+
+  if (!(await client.isAuthenticated())) {
+    console.log("not authenticated");
+    return;
+  }
+
+  let resp = await client.getTokenSilently({
+    authorizationParams,
+    detailedResponse: true,
+  });
+
+  if (!resp) {
+    console.error("No access token");
+    document.body.innerHTML = "No access token";
+    return;
+  }
+
+  const user = await client.getUser();
+  const management = new auth0.Management({
+    token: resp.access_token,
+    domain: authSettings.domain,
+  });
+  management.getUser(user.sub, (err, profile) => {
+    if (err) {
+      console.error(err);
+      document.body.innerHTML = err.message;
+      return;
+    }
+    
+    resp["user"] = profile;
+    localStorage.setItem("auth:login", JSON.stringify(resp));
+    finish();
+  });
+
+};
+</script>
+</body>
+</html>
