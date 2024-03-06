@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +88,14 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	if resp.StatusCode == 200 {
 		devMode = true
 		must(s.fsys.(*mountablefs.FS).Mount(httpfs.New(devURL), "/sys/dev"))
+	}
+
+	// some deployment specific hardcodings
+	u, err := url.Parse(devURL)
+	must(err)
+	if u.Hostname() == "io24.wanix.sh" {
+		script := "open jazz-todo\n"
+		must(fs.WriteFile(s.fsys, "cmd/autorun.sh", []byte(script), 0644))
 	}
 
 	// copy some apps including terminal
