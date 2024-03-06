@@ -21,6 +21,9 @@ var files = []File{
 	{Name: "host.js", Path: "./kernel/web/lib/host.js"},
 	{Name: "indexedfs.js", Path: "./internal/indexedfs/indexedfs.js"},
 
+	{Name: "export/exportapp.sh", Path: "./internal/export/exportapp.sh"},
+	{Name: "export/main.go", Path: "./internal/export/main.go"},
+
 	// Shell source files
 	{Name: "shell/main.go", Path: "shell/main.go"},
 	{Name: "shell/copy.go", Path: "shell/copy.go"},

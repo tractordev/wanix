@@ -121,6 +121,11 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	must(s.fsys.Rename("sys/cmd/kernel/bin/shell", "sys/bin/shell.wasm"))
 	must(s.fsys.Rename("sys/cmd/kernel/bin/micro", "sys/cmd/micro.wasm"))
 
+	// setup exportapp
+	fs.MkdirAll(s.fsys, "sys/export", 0755)
+	must(s.copyFromInitFS("sys/export/main.go", "export/main.go"))
+	must(s.copyFromInitFS("sys/cmd/exportapp.sh", "export/exportapp.sh"))
+
 	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
 
 	s.maybeMountGithubFS()
