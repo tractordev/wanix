@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@auth0/auth0-spa-js": "^2.1.2",
+    "jazz-browser": "^0.6.3",
+    "jazz-browser-auth-local": "^0.5.1",
+    "jazz-browser-auth0": "^0.6.3"
+  }
+}

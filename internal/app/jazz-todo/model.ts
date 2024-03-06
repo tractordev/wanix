@@ -1,3 +1,4 @@
+import * as jazz from "./jazz.js";
 
 export interface Todo {
   id: string;
@@ -9,29 +10,26 @@ export interface Todo {
 export class Store {
   todos: Todo[];
 
-  constructor() {
-    if (!window.collab.todos) {
-      this.todos = window.collab.group.createList();
-      window.collab.mutate(c => {
-        c.set("todos", this.todos.id);
-      });
-    } else {
-      this.todos = window.collab.todos;
-    }
-    window.localNode.query(this.todos.id, (todos) => {
+  constructor(node, todos, username) {
+    this.creator = username;
+    this.todos = todos;
+    jazz.autoSub(todos.id, node, (todos) => {
       this.todos = todos;
-      console.log(todos);
+      console.log(todos, todos.length);
+      this.map(e=>console.log(e));
       m.redraw();
     });
   }
 
   map(cb) {
-    return Array.from(this.todos).map(cb);
+    return Array.from(this.todos).filter((obj, index, self) =>
+      obj && index === self.findIndex((t) => t.id === obj.id)
+    ).map(cb);
   }
 
   addTodo(title: string) {
     this.todos.mutate(t =>{
-      t.append({title, completed: false, creator: window.account.profile.name, id: Date.now().toString()});
+      t.append({title, completed: false, creator: this.creator, id: Date.now().toString()});
     });
   }
 
@@ -40,9 +38,8 @@ export class Store {
     todo.completed = b;
     this.todos.mutate(t => {
       t.prepend(todo, idx);
-      //t.delete(idx+1);
+      t.delete(idx+1);
     });
-    console.log("mutated");
   }
 
   removeTodo(idx: number) {
