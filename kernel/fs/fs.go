@@ -110,30 +110,40 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 
 	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
 
-	// Mount githubfs if user has gh_token
-	u, err := jsutil.WanixSyscall("host.currentUser")
-	if err == nil && !u.IsNull() {
-		m := u.Get("user_metadata")
-		if !m.IsUndefined() {
-			token := m.Get("gh_token")
-			if !token.IsUndefined() {
-				fs.MkdirAll(s.fsys, "repo", 0755)
-				must(s.fsys.(*mountablefs.FS).Mount(
-					githubfs.New(
-						"wanixdev",
-						"wanix.sh",
-						token.String(),
-					),
-					"/repo",
-				))
-			}
-		}
-	}
+	s.maybeMountGithubFS()
 
 	fs.MkdirAll(s.fsys, "sys/proc", 0755)
 	must(s.fsys.(*mountablefs.FS).Mount(
 		procfs.New(p),
 		"/sys/proc",
+	))
+}
+
+// Mount githubfs if user has gh_token
+func (s *Service) maybeMountGithubFS() {
+	u, err := jsutil.WanixSyscall("host.currentUser")
+	if err != nil || u.IsNull() {
+		return
+	}
+
+	m := u.Get("user_metadata")
+	if m.IsUndefined() {
+		return
+	}
+
+	token := m.Get("gh_token")
+	if token.IsUndefined() {
+		return
+	}
+
+	fs.MkdirAll(s.fsys, "repo", 0755)
+	must(s.fsys.(*mountablefs.FS).Mount(
+		githubfs.New(
+			"wanixdev",
+			"wanix.sh",
+			token.String(),
+		),
+		"/repo",
 	))
 }
 
