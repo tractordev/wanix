@@ -33,6 +33,17 @@ func (s *Service) Get(pid int) (*Process, error) {
 	return p, nil
 }
 
+// Returns a copy of all running processes at the time of invocation.
+func (s *Service) GetAll() map[int]*Process {
+	s.mu.Lock()
+	res := make(map[int]*Process, len(s.running))
+	for k, v := range s.running {
+		res[k] = v
+	}
+	s.mu.Unlock()
+	return res
+}
+
 func (s *Service) Spawn(path string, args []string, env map[string]string, dir string) (*Process, error) {
 	// TODO: check path exists, execute bit
 

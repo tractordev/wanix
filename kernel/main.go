@@ -40,7 +40,7 @@ func main() {
 	// Initialize Go subsystems first, then their JS components
 	kernel.proc.Initialize()
 	kernel.tty.Initialize(&kernel.proc)
-	kernel.fs.Initialize(Source)
+	kernel.fs.Initialize(Source, &kernel.proc)
 
 	kernel.proc.InitializeJS()
 	kernel.tty.InitializeJS()

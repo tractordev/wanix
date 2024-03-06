@@ -21,6 +21,8 @@ import (
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
 	"tractor.dev/wanix/internal/mountablefs"
+	"tractor.dev/wanix/internal/procfs"
+	"tractor.dev/wanix/kernel/proc"
 )
 
 var DebugLog string
@@ -58,7 +60,7 @@ func (s *Service) FS() fs.FS {
 	return s.fsys
 }
 
-func (s *Service) Initialize(kernelSource embed.FS) {
+func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	s.fds = make(map[int]*fd)
 	s.nextFd = 1000
 
@@ -108,26 +110,30 @@ func (s *Service) Initialize(kernelSource embed.FS) {
 
 	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
 
+	// Mount githubfs if user has gh_token
 	u, err := jsutil.WanixSyscall("host.currentUser")
-	if err != nil || u.IsNull() {
-		return
+	if err == nil && !u.IsNull() {
+		m := u.Get("user_metadata")
+		if !m.IsUndefined() {
+			token := m.Get("gh_token")
+			if !token.IsUndefined() {
+				fs.MkdirAll(s.fsys, "repo", 0755)
+				must(s.fsys.(*mountablefs.FS).Mount(
+					githubfs.New(
+						"wanixdev",
+						"wanix.sh",
+						token.String(),
+					),
+					"/repo",
+				))
+			}
+		}
 	}
-	m := u.Get("user_metadata")
-	if m.IsUndefined() {
-		return
-	}
-	token := m.Get("gh_token")
-	if token.IsUndefined() {
-		return
-	}
-	fs.MkdirAll(s.fsys, "repo", 0755)
+
+	fs.MkdirAll(s.fsys, "sys/proc", 0755)
 	must(s.fsys.(*mountablefs.FS).Mount(
-		githubfs.New(
-			"wanixdev",
-			"wanix.sh",
-			token.String(),
-		),
-		"/repo",
+		procfs.New(p),
+		"/sys/proc",
 	))
 }
 
