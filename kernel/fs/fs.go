@@ -80,6 +80,7 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	fs.MkdirAll(s.fsys, "sys/cmd", 0755)
 	fs.MkdirAll(s.fsys, "sys/dev", 0755)
 	fs.MkdirAll(s.fsys, "sys/tmp", 0755)
+	fs.MkdirAll(s.fsys, "sys/build", 0755)
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	devMode := false

@@ -150,7 +150,7 @@ func generateLinkConfig(zw *zip.Writer, target string, packages []string) {
 	}
 
 	for _, pkg := range packages {
-		io.WriteString(wr, "packagefile "+pkg+"=/sys/tmp/build/pkg/targets/"+target+"/"+pkg+".a\n")
+		io.WriteString(wr, "packagefile "+pkg+"=/sys/build/pkg/targets/"+target+"/"+pkg+".a\n")
 	}
 }
 
