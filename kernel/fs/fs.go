@@ -80,11 +80,22 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	fs.MkdirAll(s.fsys, "sys/dev", 0755)
 	fs.MkdirAll(s.fsys, "sys/tmp", 0755)
 
+	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
+	devMode := false
+	resp, err := http.DefaultClient.Get(devURL)
+	must(err)
+	if resp.StatusCode == 200 {
+		devMode = true
+		must(s.fsys.(*mountablefs.FS).Mount(httpfs.New(devURL), "/sys/dev"))
+	}
+
 	// copy some apps including terminal
-	must(s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
-	must(s.copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo"))
-	must(s.copyAllFS(s.fsys, "sys/app/jazz-todo", internal.Dir, "app/jazz-todo"))
-	must(s.copyAllFS(s.fsys, "sys/app/explorer", internal.Dir, "app/explorer"))
+	if !devMode {
+		must(s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
+		must(s.copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo"))
+		must(s.copyAllFS(s.fsys, "sys/app/jazz-todo", internal.Dir, "app/jazz-todo"))
+		must(s.copyAllFS(s.fsys, "sys/app/explorer", internal.Dir, "app/explorer"))
+	}
 
 	// copy shell source into filesystem
 	fs.MkdirAll(s.fsys, "sys/cmd/shell", 0755)
@@ -100,13 +111,6 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	must(s.fsys.Rename("sys/cmd/kernel/bin/build", "sys/cmd/build.wasm"))
 	must(s.fsys.Rename("sys/cmd/kernel/bin/shell", "sys/bin/shell.wasm"))
 	must(s.fsys.Rename("sys/cmd/kernel/bin/micro", "sys/cmd/micro.wasm"))
-
-	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
-	resp, err := http.DefaultClient.Get(devURL)
-	must(err)
-	if resp.StatusCode == 200 {
-		must(s.fsys.(*mountablefs.FS).Mount(httpfs.New(devURL), "/sys/dev"))
-	}
 
 	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
 
