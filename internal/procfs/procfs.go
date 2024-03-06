@@ -26,6 +26,20 @@ func New(p *proc.Service) *FS {
 	return &FS{ps: p}
 }
 
+func (f *FS) getProc(pidStr string) (*proc.Process, error) {
+	pid, err := strconv.ParseInt(pidStr, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := f.ps.Get(int(pid))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", fs.ErrNotExist, err)
+	}
+
+	return p, nil
+}
+
 func (f *FS) Create(name string) (fs.File, error) {
 	return nil, &fs.PathError{Op: "create", Path: name, Err: ErrUnimplemented}
 }
@@ -45,12 +59,7 @@ func (f *FS) Open(name string) (fs.File, error) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 
-	pid, err := strconv.ParseInt(pidStr, 0, 0)
-	if err != nil {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
-	}
-
-	p, err := f.ps.Get(int(pid))
+	p, err := f.getProc(pidStr)
 	if err != nil {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 	}
@@ -63,10 +72,38 @@ func (f *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) 
 }
 
 func (f *FS) Remove(name string) error {
-	return &fs.PathError{Op: "remove", Path: name, Err: ErrUnimplemented}
+	if !fs.ValidPath(name) || name == "." {
+		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
+	}
+
+	// TODO: hierarchical data?
+	pidStr, _, hasSubpath := strings.Cut(name, "/")
+	if hasSubpath {
+		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
+	}
+
+	p, err := f.getProc(pidStr)
+	if err != nil {
+		return &fs.PathError{Op: "remove", Path: name, Err: err}
+	}
+
+	if err = p.Terminate(); err != nil {
+		return &fs.PathError{Op: "remove", Path: name, Err: err}
+	}
+
+	return nil
 }
 func (f *FS) RemoveAll(path string) error {
-	return &fs.PathError{Op: "removeall", Path: path, Err: ErrUnimplemented}
+	err := f.Remove(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+
+		return &fs.PathError{Op: "removeall", Path: path, Err: err.(*fs.PathError).Err}
+	}
+
+	return nil
 }
 
 func (f *FS) Stat(name string) (fs.FileInfo, error) {
@@ -84,12 +121,7 @@ func (f *FS) Stat(name string) (fs.FileInfo, error) {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrInvalid}
 	}
 
-	pid, err := strconv.ParseInt(pidStr, 0, 0)
-	if err != nil {
-		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
-	}
-
-	p, err := f.ps.Get(int(pid))
+	p, err := f.getProc(pidStr)
 	if err != nil {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 	}
@@ -184,7 +216,7 @@ type fileInfo struct {
 
 func (i *fileInfo) Name() string       { return i.name }
 func (i *fileInfo) Size() int64        { return 0 }
-func (i *fileInfo) Mode() fs.FileMode  { return 0444 }
+func (i *fileInfo) Mode() fs.FileMode  { return 0644 }
 func (i *fileInfo) ModTime() time.Time { return time.Unix(0, 0) }
 func (i *fileInfo) IsDir() bool        { return i.isDir }
 func (i *fileInfo) Sys() any           { return nil }

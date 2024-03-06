@@ -23,12 +23,20 @@ func (s *Service) Initialize() {
 	s.running = make(map[int]*Process)
 }
 
+type ErrBadPID struct {
+	PID int
+}
+
+func (e *ErrBadPID) Error() string {
+	return fmt.Sprint("no running process with PID ", e.PID)
+}
+
 func (s *Service) Get(pid int) (*Process, error) {
 	s.mu.Lock()
 	p, ok := s.running[pid]
 	s.mu.Unlock()
 	if !ok {
-		return nil, fmt.Errorf("no running process with PID %d", pid)
+		return nil, &ErrBadPID{PID: pid}
 	}
 	return p, nil
 }
