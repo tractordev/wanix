@@ -96,7 +96,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
   }
 
   // bootloader starts here
-  (async function() {
+  globalThis.bootWanix = (async function() {
     console.log("Wanix booting...")
     
     globalThis.initfs = {};
@@ -132,7 +132,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     // load host API
     await import(URL.createObjectURL(initfs["host.js"].blob));
 
-  })();
+  });
 }
 
 // this file is also used as the Service Worker source. 
