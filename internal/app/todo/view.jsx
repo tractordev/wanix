@@ -7,7 +7,7 @@ export default {
 
         <ul>
           {store.todos.map((t,idx) =>
-            <li class="flex flex-row">
+            <li key={idx} class="flex flex-row">
               <button onclick={() => store.completeTodo(idx, !t.completed)}>
                 {m.trust(t.completed ? "[&check;]" : "[ ]")}
               </button>
