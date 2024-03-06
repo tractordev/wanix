@@ -107,7 +107,7 @@ func main() {
 		http.Error(w, "Not found", http.StatusNotFound)
 	}))
 	mux.Handle(fmt.Sprintf("%s/", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./dev/index.html")
+		http.StripPrefix(fmt.Sprintf("%s/", basePath), http.FileServer(http.Dir(dir+"/dev"))).ServeHTTP(w, r)
 	}))
 	if err := http.ListenAndServe(":7777", loggerMiddleware(mux)); err != nil {
 		log.Fatal(err)
