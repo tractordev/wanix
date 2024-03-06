@@ -39,13 +39,18 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/auth/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/auth/" {
+			domain := os.Getenv("AUTH0_DOMAIN")
+			clientID := os.Getenv("AUTH0_CLIENTID")
+			if domain == "" || clientID == "" {
+				log.Fatal("Auth was used with Auth0 env vars set")
+			}
 			d, err := os.ReadFile("./dev/auth/index.html")
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			d = bytes.ReplaceAll(d, []byte("AUTH0_DOMAIN"), []byte(os.Getenv("AUTH0_DOMAIN")))
-			d = bytes.ReplaceAll(d, []byte("AUTH0_CLIENTID"), []byte(os.Getenv("AUTH0_CLIENTID")))
+			d = bytes.ReplaceAll(d, []byte("AUTH0_DOMAIN"), []byte(domain))
+			d = bytes.ReplaceAll(d, []byte("AUTH0_CLIENTID"), []byte(clientID))
 			if _, err := w.Write(d); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
