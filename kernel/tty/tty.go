@@ -15,7 +15,8 @@ type Service struct {
 	defaultRows int
 }
 
-func (s *Service) Initialize() {
+func (s *Service) Initialize(p *proc.Service) {
+	s.Proc = p
 	s.defaultCols = 80
 	s.defaultRows = 24
 }

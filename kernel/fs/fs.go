@@ -21,6 +21,8 @@ import (
 	"tractor.dev/wanix/internal/indexedfs"
 	"tractor.dev/wanix/internal/jsutil"
 	"tractor.dev/wanix/internal/mountablefs"
+	"tractor.dev/wanix/internal/procfs"
+	"tractor.dev/wanix/kernel/proc"
 )
 
 var DebugLog string
@@ -39,10 +41,6 @@ func must(err error) {
 }
 
 type Service struct {
-	// don't love passing this here but kernel
-	// package is a main package so cant reference it
-	KernelSource embed.FS
-
 	fsys fs.MutableFS
 	// Wraps fsys, so it's actually the same filesystem.
 	watcher *watchfs.FS
@@ -62,7 +60,7 @@ func (s *Service) FS() fs.FS {
 	return s.fsys
 }
 
-func (s *Service) Initialize() {
+func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	s.fds = make(map[int]*fd)
 	s.nextFd = 1000
 
@@ -96,7 +94,7 @@ func (s *Service) Initialize() {
 	}
 
 	// copy of kernel source into filesystem.
-	must(s.copyAllFS(s.fsys, "sys/cmd/kernel", s.KernelSource, "."))
+	must(s.copyAllFS(s.fsys, "sys/cmd/kernel", kernelSource, "."))
 
 	// move builtin kernel exe's into filesystem
 	must(s.fsys.Rename("sys/cmd/kernel/bin/build", "sys/cmd/build.wasm"))
@@ -112,18 +110,32 @@ func (s *Service) Initialize() {
 
 	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
 
+	s.maybeMountGithubFS()
+
+	fs.MkdirAll(s.fsys, "sys/proc", 0755)
+	must(s.fsys.(*mountablefs.FS).Mount(
+		procfs.New(p),
+		"/sys/proc",
+	))
+}
+
+// Mount githubfs if user has gh_token
+func (s *Service) maybeMountGithubFS() {
 	u, err := jsutil.WanixSyscall("host.currentUser")
 	if err != nil || u.IsNull() {
 		return
 	}
+
 	m := u.Get("user_metadata")
 	if m.IsUndefined() {
 		return
 	}
+
 	token := m.Get("gh_token")
 	if token.IsUndefined() {
 		return
 	}
+
 	fs.MkdirAll(s.fsys, "repo", 0755)
 	must(s.fsys.(*mountablefs.FS).Mount(
 		githubfs.New(
@@ -133,7 +145,6 @@ func (s *Service) Initialize() {
 		),
 		"/repo",
 	))
-
 }
 
 func getPrefixedInitFiles(prefix string) []string {

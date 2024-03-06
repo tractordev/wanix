@@ -1,11 +1,9 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"syscall/js"
 
-	"tractor.dev/toolkit-go/engine"
 	"tractor.dev/wanix/internal/jsutil"
 	"tractor.dev/wanix/kernel/fs"
 	"tractor.dev/wanix/kernel/proc"
@@ -18,25 +16,17 @@ var Source embed.FS
 
 var Version string
 
-func main() {
-	engine.Run(Kernel{},
-		proc.Service{},
-		tty.Service{},
-		web.Gateway{},
-		fs.Service{KernelSource: Source},
-		web.UI{},
-	)
-}
-
-type Component interface {
-	InitializeJS()
-}
-
 type Kernel struct {
-	Components []Component
+	proc    proc.Service
+	tty     tty.Service
+	fs      fs.Service
+	gateway web.Gateway
+	ui      web.UI
 }
 
-func (k *Kernel) Run(ctx context.Context) error {
+func main() {
+	kernel := Kernel{}
+
 	// import syscall.js
 	blob := js.Global().Get("initfs").Get("syscall.js").Get("blob")
 	url := js.Global().Get("URL").Call("createObjectURL", blob)
@@ -44,17 +34,23 @@ func (k *Kernel) Run(ctx context.Context) error {
 
 	// expose syscalls
 	js.Global().Get("api").Set("kernel", map[string]any{
-		"version": js.FuncOf(k.version),
+		"version": js.FuncOf(version),
 	})
 
-	// initialize components
-	for _, c := range k.Components {
-		c.InitializeJS()
-	}
+	// Initialize Go subsystems first, then their JS components
+	kernel.proc.Initialize()
+	kernel.tty.Initialize(&kernel.proc)
+	kernel.fs.Initialize(Source, &kernel.proc)
+
+	kernel.proc.InitializeJS()
+	kernel.tty.InitializeJS()
+	kernel.fs.InitializeJS()
+	kernel.gateway.InitializeJS()
+	kernel.ui.InitializeJS()
 
 	select {}
 }
 
-func (k *Kernel) version(this js.Value, args []js.Value) any {
+func version(this js.Value, args []js.Value) any {
 	return Version
 }

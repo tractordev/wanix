@@ -11,11 +11,9 @@ import (
 
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/internal/jsutil"
-	kfs "tractor.dev/wanix/kernel/fs"
 )
 
 type Service struct {
-	FS      *kfs.Service
 	nextPID int
 	running map[int]*Process
 	mu      sync.Mutex
@@ -25,14 +23,33 @@ func (s *Service) Initialize() {
 	s.running = make(map[int]*Process)
 }
 
+type ErrBadPID struct {
+	PID int
+}
+
+func (e *ErrBadPID) Error() string {
+	return fmt.Sprint("no running process with PID ", e.PID)
+}
+
 func (s *Service) Get(pid int) (*Process, error) {
 	s.mu.Lock()
 	p, ok := s.running[pid]
 	s.mu.Unlock()
 	if !ok {
-		return nil, fmt.Errorf("no running process with PID %d", pid)
+		return nil, &ErrBadPID{PID: pid}
 	}
 	return p, nil
+}
+
+// Returns a copy of all running processes at the time of invocation.
+func (s *Service) GetAll() map[int]*Process {
+	s.mu.Lock()
+	res := make(map[int]*Process, len(s.running))
+	for k, v := range s.running {
+		res[k] = v
+	}
+	s.mu.Unlock()
+	return res
 }
 
 func (s *Service) Spawn(path string, args []string, env map[string]string, dir string) (*Process, error) {
