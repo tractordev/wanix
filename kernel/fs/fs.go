@@ -80,6 +80,7 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	fs.MkdirAll(s.fsys, "sys/cmd", 0755)
 	fs.MkdirAll(s.fsys, "sys/dev", 0755)
 	fs.MkdirAll(s.fsys, "sys/tmp", 0755)
+	fs.MkdirAll(s.fsys, "sys/build", 0755)
 
 	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
 	devMode := false
@@ -99,8 +100,8 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	}
 
 	// copy some apps including terminal
+	must(s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
 	if !devMode {
-		must(s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
 		must(s.copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo"))
 		must(s.copyAllFS(s.fsys, "sys/app/jazz-todo", internal.Dir, "app/jazz-todo"))
 		must(s.copyAllFS(s.fsys, "sys/app/explorer", internal.Dir, "app/explorer"))
@@ -113,13 +114,24 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 		must(s.copyFromInitFS(filepath.Join("sys/cmd", path), path))
 	}
 
-	// copy of kernel source into filesystem.
-	must(s.copyAllFS(s.fsys, "sys/cmd/kernel", kernelSource, "."))
+	// copy all of kernel source except `/bin` into filesystem.
+	must(s.copyKernelSource("sys/cmd/kernel", kernelSource))
 
-	// move builtin kernel exe's into filesystem
-	must(s.fsys.Rename("sys/cmd/kernel/bin/build", "sys/cmd/build.wasm"))
-	must(s.fsys.Rename("sys/cmd/kernel/bin/shell", "sys/bin/shell.wasm"))
-	must(s.fsys.Rename("sys/cmd/kernel/bin/micro", "sys/cmd/micro.wasm"))
+	// copy embedded kernel exe's into filesystem if they don't already exist
+	if exists, _ := fs.Exists(s.fsys, "sys/cmd/build.wasm"); !exists {
+		must(copyFileAcrossFS(s.fsys, "sys/cmd/build.wasm", kernelSource, "bin/build"))
+	}
+	if exists, _ := fs.Exists(s.fsys, "sys/cmd/micro.wasm"); !exists {
+		must(copyFileAcrossFS(s.fsys, "sys/cmd/micro.wasm", kernelSource, "bin/micro"))
+	}
+	if exists, _ := fs.Exists(s.fsys, "sys/bin/shell.wasm"); !exists {
+		must(copyFileAcrossFS(s.fsys, "sys/bin/shell.wasm", kernelSource, "bin/shell"))
+	}
+
+	// setup exportapp
+	fs.MkdirAll(s.fsys, "sys/export", 0755)
+	must(s.copyFromInitFS("sys/export/main.go", "export/main.go"))
+	must(s.copyFromInitFS("sys/cmd/exportapp.sh", "export/exportapp.sh"))
 
 	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
 
@@ -175,6 +187,18 @@ func getPrefixedInitFiles(prefix string) []string {
 	return result
 }
 
+func copyFileAcrossFS(dstFS fs.MutableFS, dstPath string, srcFS fs.FS, srcPath string) error {
+	srcData, err := fs.ReadFile(srcFS, srcPath)
+	if err != nil {
+		return err
+	}
+	err = fs.MkdirAll(dstFS, filepath.Dir(dstPath), 0755)
+	if err != nil {
+		return err
+	}
+	return fs.WriteFile(dstFS, dstPath, srcData, 0644)
+}
+
 func (s *Service) copyAllFS(dstFS fs.MutableFS, dstDir string, srcFS fs.FS, srcDir string) error {
 	if err := fs.MkdirAll(dstFS, dstDir, 0755); err != nil {
 		return err
@@ -184,13 +208,28 @@ func (s *Service) copyAllFS(dstFS fs.MutableFS, dstDir string, srcFS fs.FS, srcD
 			return err
 		}
 		if !d.IsDir() {
-			srcData, err := fs.ReadFile(srcFS, path)
-			if err != nil {
-				return err
-			}
 			dstPath := filepath.Join(dstDir, strings.TrimPrefix(path, srcDir))
-			fs.MkdirAll(dstFS, filepath.Dir(dstPath), 0755)
-			return fs.WriteFile(dstFS, dstPath, srcData, 0644)
+			return copyFileAcrossFS(dstFS, dstPath, srcFS, path)
+		}
+		return nil
+	}))
+}
+
+// Avoids copying the bin directory
+func (s *Service) copyKernelSource(dstDir string, srcFS fs.FS) error {
+	if err := fs.MkdirAll(s.fsys, dstDir, 0755); err != nil {
+		return err
+	}
+	return fs.WalkDir(srcFS, ".", fs.WalkDirFunc(func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && path == "bin" {
+			return fs.SkipDir
+		}
+		if !d.IsDir() {
+			dstPath := filepath.Join(dstDir, strings.TrimPrefix(path, "."))
+			return copyFileAcrossFS(s.fsys, dstPath, srcFS, path)
 		}
 		return nil
 	}))

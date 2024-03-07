@@ -178,7 +178,7 @@ func main2(flags BuildFlags, args []string) int {
 
 	bw := bufio.NewWriter(importcfg)
 	for i := range imports {
-		fmt.Fprintf(bw, "packagefile %s=/sys/tmp/build/pkg/targets/%s_%s/%[1]s.a\n", strings.Trim(i, "\""), target.os, target.arch)
+		fmt.Fprintf(bw, "packagefile %s=/sys/build/pkg/targets/%s_%s/%[1]s.a\n", strings.Trim(i, "\""), target.os, target.arch)
 	}
 	if err := bw.Flush(); err != nil {
 		fmt.Println("unable to write to importcfg:", err)
@@ -189,8 +189,7 @@ func main2(flags BuildFlags, args []string) int {
 		return 1
 	}
 
-	fmt.Println("Unpacking pkg.zip...")
-	if err := openZipPkg("/sys/tmp/build", target); err != nil {
+	if err := openZipPkg("/sys/build", target); err != nil {
 		fmt.Println("unable to open pkg.zip:", err)
 		return 1
 	}
@@ -212,7 +211,7 @@ func main2(flags BuildFlags, args []string) int {
 
 	// run compile.wasm
 	fmt.Printf("Compiling %s to %s\n", args[0], objPath)
-	exitcode, err := run("/sys/tmp/build/pkg/compile.wasm", compileArgs...)
+	exitcode, err := run("/sys/build/pkg/compile.wasm", compileArgs...)
 	if exitcode != 0 || err != nil {
 		if err != nil {
 			fmt.Println(err)
@@ -223,7 +222,7 @@ func main2(flags BuildFlags, args []string) int {
 		return exitcode
 	}
 
-	linkcfg := fmt.Sprintf("/sys/tmp/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
+	linkcfg := fmt.Sprintf("/sys/build/pkg/importcfg_%s_%s.link", target.os, target.arch)
 
 	output, err := getOutputPath(target.arch, *flags.Output, pkg.Name, absPkgPath)
 	if err != nil {
@@ -234,7 +233,7 @@ func main2(flags BuildFlags, args []string) int {
 	// run link.wasm using importcfg_$GOOS_$GOARCH.link
 	fmt.Println("Linking", objPath)
 	exitcode, err = run(
-		"/sys/tmp/build/pkg/link.wasm",
+		"/sys/build/pkg/link.wasm",
 		"-importcfg", linkcfg,
 		"-buildmode=exe",
 		"-o", output,
@@ -319,10 +318,14 @@ func run(name string, args ...string) (int, error) {
 }
 
 func openZipPkg(dest string, tgt Target) error {
+	fmt.Printf("Unpacking pkg.zip/%s to %s...\n", tgt.print(), dest)
+
 	pkg, err := zip.NewReader(bytes.NewReader(zipEmbed), int64(len(zipEmbed)))
 	if err != nil {
 		return err
 	}
+
+	os.MkdirAll(filepath.Join(dest, "pkg"), 0755)
 
 	dfs := os.DirFS(dest)
 

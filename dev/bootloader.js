@@ -125,13 +125,11 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     await kernelReady;
     globalThis.sys = new task.Task(initfs);
     
-    // start kernel
     console.log("Starting kernel...")
     await sys.exec("kernel");
 
     // load host API
     await import(URL.createObjectURL(initfs["host.js"].blob));
-
   });
 }
 
