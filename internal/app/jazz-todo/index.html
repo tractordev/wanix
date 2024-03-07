@@ -17,10 +17,11 @@
         parent.location.href = "/auth/"; // login
       }
 
+      const authSettings = JSON.parse(localStorage.getItem("auth:settings"));
       globalThis.node = await jazz.initNode(
         "jazz-todo", 
-        "progrium-dev.us.auth0.com",
-        "5p3sykNcZdiSTDaAFcuXcmCczdnWA4Qu",
+        authSettings["domain"],
+        authSettings["clientId"],
         auth.accessToken(),
         (account) => {
             if (!account.get("root")) {

@@ -15,8 +15,6 @@ export class Store {
     this.todos = todos;
     jazz.autoSub(todos.id, node, (todos) => {
       this.todos = todos;
-      console.log(todos, todos.length);
-      this.map(e=>console.log(e));
       m.redraw();
     });
   }
