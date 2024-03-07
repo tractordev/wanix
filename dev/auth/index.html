@@ -6,6 +6,7 @@
 <body>
 <script>
 const authSettings = {domain: "AUTH0_DOMAIN", clientId: "AUTH0_CLIENTID"};
+localStorage.setItem("auth:settings", JSON.stringify(authSettings));
 function finish() {
   const redirect = localStorage.getItem("auth:redirect");
   if (redirect) {
