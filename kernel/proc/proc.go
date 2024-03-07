@@ -53,7 +53,7 @@ func (s *Service) GetAll() map[int]*Process {
 }
 
 func (s *Service) Spawn(path string, args []string, env map[string]string, dir string) (*Process, error) {
-	// TODO: check path exists, execute bit
+	// TODO: execute bit
 
 	// can't use jsutil.WanixSyscall inside the kernel
 	stat, err := jsutil.AwaitErr(js.Global().Get("api").Get("fs").Call("stat", path))
