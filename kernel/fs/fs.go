@@ -100,8 +100,8 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	}
 
 	// copy some apps including terminal
+	must(s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
 	if !devMode {
-		must(s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
 		must(s.copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo"))
 		must(s.copyAllFS(s.fsys, "sys/app/jazz-todo", internal.Dir, "app/jazz-todo"))
 		must(s.copyAllFS(s.fsys, "sys/app/explorer", internal.Dir, "app/explorer"))
