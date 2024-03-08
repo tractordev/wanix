@@ -1,4 +1,4 @@
-import * as jazz from "./jazz.js";
+import * as jazz from "/sys/cmd/kernel/jazz/jazz.min.js";
 
 export interface Todo {
   id: string;

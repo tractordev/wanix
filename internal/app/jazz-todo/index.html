@@ -10,7 +10,7 @@
   <body class="h-full font-mono font-semibold bg-gray-300">
     <script type="module">
       import * as auth from "/auth/api.js";
-      import * as jazz from "./jazz.js";
+      import * as jazz from "/sys/cmd/kernel/jazz/jazz.min.js";
 
       if (!auth.isAuthenticated()) {
         localStorage.setItem("auth:redirect", "/");
@@ -23,21 +23,21 @@
         authSettings["domain"],
         authSettings["clientId"],
         auth.accessToken(),
-        (account) => {
-            if (!account.get("root")) {
-                account.set(
-                    "root",
-                    account.createMap({
-                        todos: account.createList([]).id,
-                    }).id
-                );
-            }
-        },
+        // (account) => {
+        //     if (!account.get("root")) {
+        //         account.set(
+        //             "root",
+        //             account.createMap({
+        //                 todos: account.createList([]).id,
+        //             }).id
+        //         );
+        //     }
+        // },
       );
       console.log(node);
 
-      const space = await jazz.setupSpace(node, (space) => {
-        const todos = space.group.createList([]);
+      const space = await jazz.setupSpace(node, async (space, group) => {
+        const todos = group.createList([]);
         space.mutate(s => {
           s.set("todos", todos.id);
         });
@@ -53,7 +53,7 @@
       
       const store = new Store(node, todos, username);
       window.store = store;
-      const inviteURL = jazz.createInviteLink(space, "admin");
+      const inviteURL = parent.location.href.replace(/#.*$/, "")+jazz.createInviteLinkHash(space, "admin")
       
       m.mount(document.body, {
         view: () => {
