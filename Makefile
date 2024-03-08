@@ -3,7 +3,7 @@
 VERSION=0.2dev
 DEBUG?=false
 
-all: kernel shell build micro hugo
+all: kernel shell build micro
 
 dev: all
 	go run ./dev

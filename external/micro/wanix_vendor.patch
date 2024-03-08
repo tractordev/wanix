@@ -160,3 +160,19 @@ index 3e6756bc..9f71377b 100644
  		}
  		return
  	}
+diff --git a/internal/buffer/buffer.go b/internal/buffer/buffer.go
+index dc4d037f..8e09ed32 100644
+--- a/internal/buffer/buffer.go
++++ b/internal/buffer/buffer.go
+@@ -234,6 +234,11 @@ func NewBufferFromFileAtLoc(path string, btype BufType, cursorLoc Loc) (*Buffer,
+ 		return nil, err
+ 	}
+ 
++	filename, err = filepath.Abs(filename)
++	if err != nil {
++		return nil, err
++	}
++
+ 	f, err := os.OpenFile(filename, os.O_WRONLY, 0)
+ 	readonly := os.IsPermission(err)
+ 	f.Close()
