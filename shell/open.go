@@ -22,7 +22,7 @@ func openCmd() *cli.Command {
 		Args:  cli.ExactArgs(1),
 		Run: func(ctx *cli.Context, args []string) {
 			var path string
-			var searchPaths = []string{"sys/app", "app", "sys/dev/internal/app"}
+			var searchPaths = []string{"sys/app", "app", "sys/dev/internal/app", "grp/app"}
 			for _, searchPath := range searchPaths {
 				appPath := filepath.Join(searchPath, args[0])
 				if exists, _ := fs.Exists(os.DirFS("/"), appPath); exists {

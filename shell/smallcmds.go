@@ -61,6 +61,21 @@ func mtimeCmd() *cli.Command {
 	return cmd
 }
 
+func inviteCmd() *cli.Command {
+	cmd := &cli.Command{
+		Usage: "invite",
+		Run: func(ctx *cli.Context, args []string) {
+			ret, err := jsutil.WanixSyscall("jazz.invite")
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			fmt.Println(ret.String())
+		},
+	}
+	return cmd
+}
+
 func loginCmd() *cli.Command {
 	cmd := &cli.Command{
 		Usage: "login",

@@ -62,6 +62,7 @@ func (m *Shell) buildCmds() {
 	m.cmd.AddCommand(unwatchCmd())
 	m.cmd.AddCommand(loginCmd())
 	m.cmd.AddCommand(logoutCmd())
+	m.cmd.AddCommand(inviteCmd())
 	m.cmd.AddCommand(helpCmd(m.cmd))
 	m.cmd.Run = m.ExecuteExternalCommand
 }
