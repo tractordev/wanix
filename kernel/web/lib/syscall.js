@@ -8,6 +8,14 @@ globalThis.api = {
       resp.return(r.value);
     },
   },
+  jazz: {
+    invite() {
+      if (!globalThis.jazz) {
+        return ""
+      }
+      return globalThis.jazz.inviteURL;
+    }
+  },
   fs: {
     // helpers
     readFile(path) {

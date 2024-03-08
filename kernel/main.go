@@ -2,10 +2,14 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"syscall/js"
 
+	fsutil "tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/internal/jsutil"
+	"tractor.dev/wanix/internal/mountablefs"
 	"tractor.dev/wanix/kernel/fs"
+	"tractor.dev/wanix/kernel/jazz"
 	"tractor.dev/wanix/kernel/proc"
 	"tractor.dev/wanix/kernel/tty"
 	"tractor.dev/wanix/kernel/web"
@@ -46,6 +50,31 @@ func main() {
 	kernel.tty.InitializeJS()
 	kernel.fs.InitializeJS()
 	kernel.gateway.InitializeJS()
+
+	// setup jazz if enabled
+	v, err := jsutil.WanixSyscall("host.getItem", "jazz:enabled")
+	if err != nil {
+		panic(err)
+	}
+	if !v.IsNull() {
+		fmt.Println("Setting up Jazz...")
+		origin := js.Global().Get("location").Get("origin").String()
+		jazzMod := jsutil.Await(js.Global().Call("import", origin+"/sys/cmd/kernel/jazz/jazz.min.js"))
+		ret := jsutil.Await(jazzMod.Get("initJazz").Invoke(js.Global()))
+		if !ret.IsNull() {
+			fmt.Println("Mounting JazzFS...")
+			fsutil.MkdirAll(kernel.fs.FS(), "grp", 0755)
+			err := kernel.fs.FS().(*mountablefs.FS).Mount(
+				jazz.NewJazzFs(),
+				"/grp",
+			)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}
+
+	}
+
 	kernel.ui.InitializeJS()
 
 	select {}

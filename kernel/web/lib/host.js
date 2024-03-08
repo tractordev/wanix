@@ -15,6 +15,18 @@ globalThis.sys.pipe.handle("host.logout", duplex.handlerFrom(() => {
     localStorage.setItem("auth:redirect", window.location.href);
     window.location.href = "/auth/?logout";
 }));
+globalThis.sys.pipe.handle("host.setHash", duplex.handlerFrom((hash) => {
+    window.location.hash = hash;
+}));
+globalThis.sys.pipe.handle("host.hash", duplex.handlerFrom((hash) => {
+    return window.location.hash.slice(1);
+}));
+globalThis.sys.pipe.handle("host.getItem", duplex.handlerFrom((key) => {
+    return localStorage.getItem(key);
+}));
+globalThis.sys.pipe.handle("host.setItem", duplex.handlerFrom((key,value) => {
+    localStorage.setItem(key, value);
+}));
 
 
 globalThis.sys.pipe.handle("host.loadStylesheet", duplex.handlerFrom((path) => {
