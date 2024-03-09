@@ -63,26 +63,33 @@ func main() {
 		gwutil.FileTransformer(watchfs.New(os.DirFS(dir)), httpfs.FileServer).ServeHTTP(w, r)
 	})))
 	mux.Handle(fmt.Sprintf("%s/wanix-kernel.gz", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("content-type", "application/gzip")
-
 		file, err := os.Open(filepath.Join(dir, "local/bin/kernel"))
 		if err != nil {
+			fmt.Println(err)
 			http.Error(w, "File not found.", http.StatusNotFound)
 			return
 		}
 		defer file.Close()
 
-		gzipWriter := gzip.NewWriter(w)
+		var b bytes.Buffer
+		gzipWriter := gzip.NewWriter(&b)
 		defer gzipWriter.Close()
 
 		if _, err := io.Copy(gzipWriter, file); err != nil {
+			log.Println("copy:", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if err := gzipWriter.Flush(); err != nil {
+		if err := gzipWriter.Close(); err != nil {
+			fmt.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		reader := bytes.NewReader(b.Bytes())
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Header().Set("Content-Disposition", `attachment; filename="wanix-kernel.gz"`)
+		http.ServeContent(w, r, "wanix-kernel.gz", time.Now(), reader)
 	}))
 	mux.Handle(fmt.Sprintf("%s/wanix-bootloader.js", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/javascript")
