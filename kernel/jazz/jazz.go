@@ -9,6 +9,9 @@ import (
 	"sync"
 	"syscall/js"
 	"time"
+
+	"tractor.dev/toolkit-go/engine/fs/watchfs"
+	"tractor.dev/wanix/internal/cache"
 )
 
 func fsUtil(name string, args ...any) js.Value {
@@ -25,24 +28,24 @@ func fsUtil(name string, args ...any) js.Value {
 	}
 }
 
-type jazzfs struct{}
-
-func NewJazzFs() fs.FS {
-	return &jazzfs{}
+type jazzfs struct {
+	cache *cache.C // speed up slow, frequent stat
 }
 
-// Create creates a file in the filesystem, returning the file and an
-// error, if any happens.
+func NewJazzFs() fs.FS {
+	return &jazzfs{
+		cache: cache.New(1 * time.Second),
+	}
+}
+
 func (fs *jazzfs) Create(name string) (fs.File, error) {
 	return fs.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 }
 
-// Open opens a file, returning it or an error, if any happens.
 func (fs *jazzfs) Open(name string) (fs.File, error) {
 	return fs.OpenFile(name, os.O_RDONLY, 0)
 }
 
-// OpenFile opens a file using the given flags and the given mode.
 func (fs *jazzfs) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) {
 	fmt.Println("open:", name)
 	v := fsUtil("walk", name)
@@ -60,7 +63,7 @@ func (fs *jazzfs) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, er
 			return nil, os.ErrNotExist
 		}
 	}
-	f := &jazzfile{node: v, path: name}
+	f := &jazzfile{node: v, path: name, fs: fs}
 	if flag&os.O_APPEND > 0 {
 		f.Seek(0, 2)
 	}
@@ -70,8 +73,6 @@ func (fs *jazzfs) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, er
 	return f, nil
 }
 
-// Mkdir creates a directory in the filesystem, return an error if any
-// happens.
 func (fs *jazzfs) Mkdir(name string, perm fs.FileMode) error {
 	ret := fsUtil("mkdir", name)
 	if ret.IsNull() {
@@ -80,8 +81,6 @@ func (fs *jazzfs) Mkdir(name string, perm fs.FileMode) error {
 	return nil
 }
 
-// MkdirAll creates a directory path and all parents that does not exist
-// yet.
 func (fs *jazzfs) MkdirAll(path string, perm fs.FileMode) error {
 	fsUtil("mkdirAll", path)
 	return nil
@@ -112,13 +111,19 @@ func (fs *jazzfs) Rename(oldname string, newname string) error {
 }
 
 func (fs *jazzfs) Stat(name string) (fs.FileInfo, error) {
+	v, found := fs.cache.Get(name)
+	if found {
+		fmt.Println("stat cached:", name)
+		return v.(*jazzinfo), nil
+	}
 	fmt.Println("stat:", name)
 	ret := fsUtil("stat", name)
 	if ret.IsNull() {
 		return nil, os.ErrNotExist
 	}
-	fmt.Println(js.Global().Get("JSON").Call("stringify", ret))
-	return &jazzinfo{ret}, nil
+	vv := &jazzinfo{ret}
+	fs.cache.Set(name, vv, cache.DefaultExpiration)
+	return vv, nil
 }
 
 func (fs *jazzfs) ReadDir(name string) (entries []fs.DirEntry, err error) {
@@ -151,6 +156,43 @@ func (fs *jazzfs) Chown(name string, uid int, gid int) error {
 func (fs *jazzfs) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	fmt.Println("chtimes: not implemented") // TODO: Implement
 	return nil
+}
+
+func (fs *jazzfs) Watch(name string, cfg *watchfs.Config) (*watchfs.Watch, error) {
+	fmt.Println("watch:", name)
+	if cfg == nil {
+		cfg = &watchfs.Config{}
+	}
+	watch, inbox, closer := watchfs.NewWatch(name, *cfg)
+	if cfg.Handler != nil {
+		go func() {
+			for e := range watch.Iter() {
+				cfg.Handler(e)
+			}
+		}()
+	}
+	inflateEvent := func(v js.Value) watchfs.Event {
+		return watchfs.Event{
+			Path:     v.Get("path").String(),
+			OldPath:  v.Get("path").String(),
+			Type:     watchfs.EventWrite,
+			Err:      nil,
+			FileInfo: &jazzinfo{v},
+		}
+	}
+	go func() {
+		defer close(inbox)
+		token := fsUtil("watch", name, js.FuncOf(func(this js.Value, args []js.Value) any {
+			select {
+			case inbox <- inflateEvent(args[0].Get("detail")):
+			default:
+			}
+			return nil
+		}))
+		<-closer
+		fsUtil("unwatch", token)
+	}()
+	return watch, nil
 }
 
 type jazzfile struct {
