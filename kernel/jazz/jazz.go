@@ -34,7 +34,7 @@ type jazzfs struct {
 
 func NewJazzFs() fs.FS {
 	return &jazzfs{
-		cache: cache.New(1 * time.Second),
+		cache: cache.New(2 * time.Second),
 	}
 }
 
@@ -200,10 +200,9 @@ type jazzfile struct {
 	node    js.Value
 	path    string
 	offset  int64
-	rcache  []byte
+	cache   []byte
 	lastFid string
 	dirty   bool
-	wcache  []byte
 	wmu     sync.Mutex
 }
 
@@ -220,16 +219,17 @@ func (f *jazzfile) ReadDir(n int) ([]fs.DirEntry, error) {
 }
 
 func (f *jazzfile) data() ([]byte, error) {
-	stat := fsUtil("stat", f.path)
-	if stat.IsNull() {
-		return []byte{}, os.ErrNotExist
+	fi, err := f.fs.Stat(f.path)
+	if err != nil {
+		return nil, err
 	}
-	fid := stat.Get("fileID")
+	stat := fi.(*jazzinfo)
+	fid := stat.val.Get("fileID")
 	if fid.IsUndefined() {
 		return []byte{}, os.ErrNotExist
 	}
 	if fid.String() == f.lastFid {
-		return f.rcache, nil
+		return f.cache, nil
 	}
 	jsbuf := fsUtil("fetchFile", fid)
 	buf := make([]byte, jsbuf.Length())
@@ -240,7 +240,7 @@ func (f *jazzfile) data() ([]byte, error) {
 	// 	log("slow file load, returning cached", f.path)
 	// 	return f.rcache, nil
 	// case b := <-ch:
-	f.rcache = buf
+	f.cache = buf
 	f.lastFid = fid.String()
 	return buf, nil
 	// }
@@ -300,11 +300,11 @@ func (f *jazzfile) Write(p []byte) (n int, err error) {
 	}
 	new := make([]byte, f.offset+int64(len(p)))
 	copy(new, cur[:f.offset])
-	copy(new[f.offset:], p)
-	f.wcache = new
-	f.offset += int64(len(p))
+	n = copy(new[f.offset:], p)
+	f.cache = new
+	f.offset += int64(n)
 	f.dirty = true
-	return len(p), nil
+	return n, nil
 }
 
 func (f *jazzfile) Close() error {
@@ -322,7 +322,7 @@ func (f *jazzfile) Sync() error {
 	f.dirty = false
 	ch := make(chan bool, 1)
 	go func() {
-		f.setData(f.wcache)
+		f.setData(f.cache)
 		ch <- true
 	}()
 	select {
