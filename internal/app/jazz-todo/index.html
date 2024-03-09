@@ -10,54 +10,40 @@
   <body class="h-full font-mono font-semibold bg-gray-300">
     <script type="module">
       import * as auth from "/auth/api.js";
-      import * as jazz from "/sys/cmd/kernel/jazz/jazz.min.js";
+      import * as jazzlib from "/sys/cmd/kernel/jazz/jazz.min.js";
+
+      localStorage.setItem("jazz:enabled", "true");
 
       if (!auth.isAuthenticated()) {
         localStorage.setItem("auth:redirect", "/");
         parent.location.href = "/auth/"; // login
       }
 
-      const authSettings = JSON.parse(localStorage.getItem("auth:settings"));
-      globalThis.node = await jazz.initNode(
-        "jazz-todo", 
-        authSettings["domain"],
-        authSettings["clientId"],
-        auth.accessToken(),
-        // (account) => {
-        //     if (!account.get("root")) {
-        //         account.set(
-        //             "root",
-        //             account.createMap({
-        //                 todos: account.createList([]).id,
-        //             }).id
-        //         );
-        //     }
-        // },
-      );
-      console.log(node);
+      await jazzlib.initJazz(window);
 
-      const space = await jazz.setupSpace(node, async (space, group) => {
-        const todos = group.createList([]);
+      if (!jazz.space.meta.coValue.get("todos")) {
+        const todos = jazz.space.meta.group.createList([]);
         space.mutate(s => {
           s.set("todos", todos.id);
         });
-      });
-      globalThis.space = space;
-
-      let todos = await jazz.autoSubResolution(space.id, (s) => s?.todos, node);
-      let username = await jazz.autoSubResolution("me", (me) => me.profile?.name, node);
+      }
       
+      let todos = await jazzlib.autoSubResolution(space.id, (s) => s?.todos, jazz.node);
+
+      jazzlib.autoSub(todos.id, jazz.node, (v) => {
+        console.log("CHANGE");
+      });
 
       import {Store} from "./model.ts";
       import Todos from "./view.jsx";
       
-      const store = new Store(node, todos, username);
-      window.store = store;
-      const inviteURL = parent.location.href.replace(/#.*$/, "")+jazz.createInviteLinkHash(space, "admin")
+      const store = new Store(node, todos, jazz.username);
+      window.store = store; // for debug
+      
       
       m.mount(document.body, {
         view: () => {
-          return m(Todos, {store, inviteURL})
+          return m(Todos, {store, inviteURL: jazz.inviteURL})
         }
       });
 
