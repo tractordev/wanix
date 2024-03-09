@@ -107,12 +107,16 @@ export async function initNode(name, domain, clientID, accessToken, migration) {
 }
 
 export async function initJazz(globalObj) {
-  let setupFn = setupFrameSpace;
-  let getItem = async (key) => localStorage.getItem(key);
+  let setupFn = undefined;
+  let getItem = undefined;
   if (globalObj.hostURL) {
     // in worker
     setupFn = setupWorkerSpace;
     getItem = async (key) => {return (await globalObj.sys.call("host.getItem", [key])).value};
+  } else {
+    // in frame
+    setupFn = setupFrameSpace
+    getItem = async (key) => globalObj.localStorage.getItem(key);
   }
 
   const jazzEnabled = await getItem("jazz:enabled");

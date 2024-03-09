@@ -2,6 +2,7 @@ import {
   createBinaryStreamFromBlob,
   readBlobFromBinaryStream,
   autoSubResolution,
+  autoSub
 } from "jazz-browser";
 import { CoMap, BinaryCoStream } from "cojson";
 
@@ -200,6 +201,8 @@ export async function nodeRemove(n, name) {
   await nodeTouch(n);
 }
 
+
+
 export async function walk(path: string): any {
   path = cleanPath(path);
   let cur = await window.jazz.root();
@@ -211,9 +214,6 @@ export async function walk(path: string): any {
     if (!name) {
       continue;
     }
-    if (!cur.isDir) {
-      break;
-    }
     let names = await nodeDir(cur);
     if (!names.includes(name)) {
       return null;
@@ -222,6 +222,20 @@ export async function walk(path: string): any {
     if (cur === undefined) {
       return undefined;
     }
+  }
+  if (!cur.isDir && !mtimes[cur.id]) {
+    // setup change tracking
+    autoSub(cur.id, globalThis.node, (file) => {
+      if (!mtimes[file.id]) {
+        mtimes[file.id] = file?.meta.coValue.get("mtime");
+        return;
+      }
+      if (mtimes[file.id] < file?.meta.coValue.get("mtime")) {
+        const event = new CustomEvent("change", {detail: {path, ...file?.meta.coValue.toJSON()}});
+        watches.dispatchEvent(event);
+        mtimes[file.id] = file?.meta.coValue.get("mtime");
+      }
+    });
   }
   return cur;
 }
@@ -325,3 +339,21 @@ export async function writeFile(path, content) {
   return true;
 }
 
+// file watching
+
+const mtimes = {};
+const watches = new EventTarget();
+
+export function watch(path, cb) {
+  const listener = (e) => {
+    if (e.detail.path.startsWith(path)) {
+      cb(e);
+    }
+  }
+  watches.addEventListener("change", listener);
+  return listener;
+}
+
+export function unwatch(listener) {
+  watches.removeEventListener("change", listener);
+}
