@@ -1,6 +1,7 @@
 package fsutil
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,12 +16,16 @@ import (
 //
 // If the copy fails half way through, the destination might be left
 // partially written.
-func CopyAll(fsys fs.MutableFS, src, dst string) error {
-	srcInfo, srcErr := fs.Stat(fsys, src)
+func CopyAll(fsys fs.FS, src, dst string) error {
+	mfs, ok := fsys.(fs.MutableFS)
+	if !ok {
+		return errors.New("not a mutable filesystem")
+	}
+	srcInfo, srcErr := fs.Stat(mfs, src)
 	if srcErr != nil {
 		return srcErr
 	}
-	dstInfo, dstErr := fs.Stat(fsys, dst)
+	dstInfo, dstErr := fs.Stat(mfs, dst)
 	if dstErr == nil {
 		fmt.Println(dst, dstInfo.Name())
 		return fmt.Errorf("will not overwrite %q", dst)
@@ -32,9 +37,9 @@ func CopyAll(fsys fs.MutableFS, src, dst string) error {
 	// case os.ModeSymlink:
 	// 	return copySymLink(src, dst)
 	case os.ModeDir:
-		return copyDir(fsys, src, dst, mode)
+		return copyDir(mfs, src, dst, mode)
 	case 0:
-		return copyFile(fsys, src, dst, mode)
+		return copyFile(mfs, src, dst, mode)
 	default:
 		return fmt.Errorf("cannot copy file with mode %v", mode)
 	}
