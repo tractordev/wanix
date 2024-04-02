@@ -1,4 +1,3 @@
-import * as jazz from "/sys/cmd/kernel/jazz/jazz.min.js";
 
 export interface Todo {
   id: string;
@@ -10,7 +9,7 @@ export interface Todo {
 export class Store {
   todos: Todo[];
 
-  constructor(node, todos, username) {
+  constructor(node, todos, username, jazz) {
     this.creator = username;
     this.todos = todos;
     jazz.autoSub(todos.id, node, (todos) => {

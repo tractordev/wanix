@@ -9,6 +9,8 @@
   </head>
   <body class="h-full font-mono font-semibold bg-gray-300">
     <script type="module">
+      import {Store} from "./model.ts";
+
       import * as auth from "/auth/api.js";
       import * as jazzlib from "/sys/cmd/kernel/jazz/jazz.min.js";
 
@@ -30,16 +32,49 @@
       
       let todos = await jazzlib.autoSubResolution(space.id, (s) => s?.todos, jazz.node);
 
-      jazzlib.autoSub(todos.id, jazz.node, (v) => {
-        console.log("CHANGE");
-      });
+      const store = new Store(node, todos, jazz.username, jazzlib);
+      
+      const Todos = {
+        view: ({attrs: {store, inviteURL}}) => {
+          return (
+            m("main", {"class":"h-full mx-auto mt-64 border-4 border-black bg-white p-4 flex flex-col gap-3","style":{"width":"512px"}}, [
+              m("h1", [
+                m("span", {"class":"text-3xl italic uppercase"}, "Wasm I/O Demo"),
+                m("button", {"class":"float-right px-2 bg-gray-300 rounded my-2","onclick":()=> navigator.clipboard.writeText(inviteURL)}, "Invite")
+              ]),
 
-      import {Store} from "./model.ts";
-      import Todos from "./view.jsx";
-      
-      const store = new Store(node, todos, jazz.username);
-      window.store = store; // for debug
-      
+              m("ul",
+                store.map((t,idx) =>
+                  m("li", {key: t.id, class:"flex flex-row"},
+                    m("button", {onclick:() => store.completeTodo(idx, !t.completed)},
+                      m.trust(t.completed ? "[&check;]" : "[ ]")
+                    ),
+                    m("div", {class:"flex-grow ml-2 " + (t.completed ? "line-through" : "")}, t.title),
+                    m("div", {class:"text-xs mr-2 py-1 font-normal"}, t.creator),
+                    m("button", {"class":"hover:text-red-500","onclick":() => store.removeTodo(idx)}, "{x}")
+                  ))
+              ),
+
+              m("form", {"class":"flex flex-row","spellcheck":"","autocapitalize":"off","onsubmit":() => false}, [
+                "[",
+                m("input", {"class":"min-w-0 outline-none border-gray-200 border-dotted border-b-2 flex-grow","type":"text","autofocus":"autofocus","name":"Title"}),
+                "]",
+                m("button", {
+                  "class":"hover:text-green-500",
+                  "role":"button",
+                  "tabindex":"-1",
+                  "onclick": () => {
+                    let el = document.querySelector("[name=Title]");
+                    store.addTodo(el.value);
+                    el.value = "";
+                  }}, 
+                  " {+} "
+                )
+              ])
+            ])
+          )
+        }
+      }; 
       
       m.mount(document.body, {
         view: () => {
