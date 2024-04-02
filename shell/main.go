@@ -116,11 +116,6 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 
 		ctx := cli.ContextWithIO(context.Background(), m.defaultStdin, os.Stdout, os.Stderr)
 
-		// quick and dirty implementation of autorun
-		if _, err := os.Stat("/cmd/autorun.sh"); !os.IsNotExist(err) {
-			m.ExecuteExternalCommand(ctx, []string{"/cmd/autorun.sh"})
-		}
-
 		terminal := term.NewTerminal(struct {
 			io.Reader
 			io.Writer
