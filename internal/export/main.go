@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"path/filepath"
 
@@ -25,7 +26,11 @@ func main() {
 		if _, ok := ext[filepath.Ext(r.URL.Path)]; ok {
 			w.Header().Set("content-type", "text/javascript")
 		}
-		xfs := xformfs.New(assets)
+		dir, err := fs.Sub(assets, "assets")
+		if err != nil {
+			panic(err)
+		}
+		xfs := xformfs.New(dir)
 		xfs.Transform(".jsx", transformJSX)
 		xfs.Transform(".tsx", transformTSX)
 		xfs.Transform(".ts", transformTSX)
