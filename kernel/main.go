@@ -6,6 +6,7 @@ import (
 	"syscall/js"
 
 	fsutil "tractor.dev/toolkit-go/engine/fs"
+	fsutil2 "tractor.dev/wanix/internal/fsutil"
 	"tractor.dev/wanix/internal/jsutil"
 	"tractor.dev/wanix/internal/mountablefs"
 	"tractor.dev/wanix/kernel/fs"
@@ -70,6 +71,16 @@ func main() {
 			)
 			if err != nil {
 				fmt.Println(err)
+			}
+			ok, err := fsutil.Exists(kernel.fs.FS(), "grp/app/grp-todo")
+			if err != nil {
+				fmt.Println(err)
+			}
+			if !ok {
+				fsutil.MkdirAll(kernel.fs.FS(), "grp/app", 0755)
+				if err := fsutil2.CopyAll(kernel.fs.FS(), "sys/app/jazz-todo", "grp/app/grp-todo"); err != nil {
+					fmt.Println(err)
+				}
 			}
 		}
 
