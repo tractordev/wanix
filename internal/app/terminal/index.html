@@ -64,7 +64,12 @@
     const resp = await sys.call("tty.open", ["sys/cmd/shell", [], { TERM: "xterm-256color" }]);
     const pid = resp.value;
     const ch = resp.channel;
-    //parent.wanix.termCh = ch;
+
+    // const autorun = localStorage.getItem("wanix:autorun");
+    // if (autorun) {
+    //   localStorage.removeItem("wanix:autorun");
+    //   ch.write(enc.encode(autorun));
+    // }
     
     terminal.onData(async (data) => {
       ch.write(enc.encode(data));
