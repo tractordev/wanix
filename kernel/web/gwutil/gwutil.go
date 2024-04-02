@@ -6,10 +6,13 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"sync"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"tractor.dev/toolkit-go/engine/fs/xformfs"
 )
+
+var mu sync.Mutex
 
 func FileTransformer(fsys fs.FS, fserver func(fs.FS) http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,11 +39,13 @@ func TransformTSX(dst io.Writer, src io.Reader) error {
 	if err != nil {
 		return err
 	}
+	mu.Lock()
 	result := esbuild.Transform(string(b), esbuild.TransformOptions{
 		Loader:      esbuild.LoaderTSX,
 		JSXFactory:  "m",
 		JSXFragment: "",
 	})
+	mu.Unlock()
 	if len(result.Errors) > 0 {
 		fmt.Println(result.Errors)
 		return fmt.Errorf("TSX transform errors")
@@ -54,11 +59,13 @@ func TransformJSX(dst io.Writer, src io.Reader) error {
 	if err != nil {
 		return err
 	}
+	mu.Lock()
 	result := esbuild.Transform(string(b), esbuild.TransformOptions{
 		Loader:      esbuild.LoaderJSX,
 		JSXFactory:  "m",
 		JSXFragment: "",
 	})
+	mu.Unlock()
 	if len(result.Errors) > 0 {
 		fmt.Println(result.Errors)
 		return fmt.Errorf("JSX transform errors")
