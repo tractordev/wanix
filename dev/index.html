@@ -2,16 +2,14 @@
 <head>
 <style>
   body {
-    background-color: #101010; 
-    background-image: url(./loading.gif); 
-    background-size: 50%;
-    background-repeat: no-repeat;
-    background-position: center;
+    background: #101010 url(./loading.gif) 50% no-repeat center;
   }
 </style>
 </head>
 <body>
 <script src="./wanix-bootloader.js"></script>
-<script>localStorage.setItem("jazz:enabled", "true"); bootWanix()</script>
+<script>
+  bootWanix()
+</script>
 </body>
 </html>
