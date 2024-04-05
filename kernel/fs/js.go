@@ -163,7 +163,7 @@ func (s *Service) read(this js.Value, args []js.Value) any {
 		}
 
 		if rs, ok := f.File.(io.ReadSeeker); ok && !pos.IsNull() {
-			_, err := rs.Seek(int64(pos.Int()), 0)
+			_, err := rs.Seek(int64(pos.Int()), io.SeekStart)
 			if err != nil {
 				cb.Invoke(jsutil.ToJSError(err), 0)
 				return
