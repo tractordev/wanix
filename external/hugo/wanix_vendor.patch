@@ -1,12 +1,16 @@
 diff --git a/commands/commandeer.go b/commands/commandeer.go
-index 1e5928ff9..c1e1421d0 100644
+index 1e5928ff9..897a76d57 100644
 --- a/commands/commandeer.go
 +++ b/commands/commandeer.go
-@@ -542,7 +542,7 @@ func applyLocalFlagsBuild(cmd *cobra.Command, r *rootCommand) {
+@@ -540,9 +540,9 @@ func applyLocalFlagsBuild(cmd *cobra.Command, r *rootCommand) {
+ 	cmd.Flags().Bool("templateMetrics", false, "display metrics about template executions")
+ 	cmd.Flags().Bool("templateMetricsHints", false, "calculate some improvement hints when combined with --templateMetrics")
  	cmd.Flags().BoolVar(&r.forceSyncStatic, "forceSyncStatic", false, "copy all files when static is changed.")
- 	cmd.Flags().BoolP("noTimes", "", false, "don't sync modification time of files")
- 	cmd.Flags().BoolP("noChmod", "", false, "don't sync permission mode of files")
+-	cmd.Flags().BoolP("noTimes", "", false, "don't sync modification time of files")
+-	cmd.Flags().BoolP("noChmod", "", false, "don't sync permission mode of files")
 -	cmd.Flags().BoolP("noBuildLock", "", false, "don't create .hugo_build.lock file")
++	cmd.Flags().BoolP("noTimes", "", true, "don't sync modification time of files")
++	cmd.Flags().BoolP("noChmod", "", true, "don't sync permission mode of files")
 +	cmd.Flags().BoolP("noBuildLock", "", true, "don't create .hugo_build.lock file")
  	cmd.Flags().BoolP("printI18nWarnings", "", false, "print missing translations")
  	cmd.Flags().BoolP("printPathWarnings", "", false, "print warnings on duplicate target paths etc.")
