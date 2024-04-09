@@ -1,5 +1,5 @@
 build: update
-	cd ./repo && GOOS=js GOARCH=wasm go build -tags nodeploy -o ./../../../local/bin/hugo
+	cd ./repo && GOOS=js GOARCH=wasm go build -tags nodeploy -o ./../../../boot/initfs/bin/hugo
 
 repo:
 	git clone -q https://github.com/gohugoio/hugo.git ./repo

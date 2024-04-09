@@ -1,6 +1,7 @@
 package indexedfs
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,9 @@ import (
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/wanix/internal/jsutil"
 )
+
+//go:embed indexedfs.js
+var jsSource []byte
 
 // TODO: better fs errors
 
@@ -54,7 +58,11 @@ type FS struct {
 
 func New() (*FS, error) {
 	if helper.IsUndefined() {
-		blob := js.Global().Get("initfs").Get("indexedfs.js").Get("blob")
+		buf := js.Global().Get("Uint8Array").New(len(jsSource))
+		js.CopyBytesToJS(buf, jsSource)
+		arr := js.Global().Get("Array").New()
+		arr.Call("push", buf)
+		blob := js.Global().Get("Blob").New(arr, map[string]any{"type": "text/javascript"})
 		url := js.Global().Get("URL").Call("createObjectURL", blob)
 		helper = jsutil.Await(js.Global().Call("import", url))
 	}

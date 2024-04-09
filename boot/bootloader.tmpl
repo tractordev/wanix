@@ -1,5 +1,6 @@
-globalThis.initdata = {
-{{range .}}
+{{.Loader}}
+globalThis.bootdata = {
+{{range .Files }}
   "{{.Name}}": {type: "{{.Type}}", mtimeMs: {{.Mtime}}, data: "{{.Data}}"},
 {{end}}
 }

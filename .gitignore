@@ -4,3 +4,9 @@
 external/jazz/node_modules
 /local
 /build/pkg.zip
+/boot/kernel.gz
+/boot/initfs.gz
+/boot/initfs
+/wanix-bootloader.js
+/wanix-initfs.gz
+/wanix-kernel.gz
