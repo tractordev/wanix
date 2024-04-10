@@ -1,7 +1,7 @@
 
 export class Task {
-  constructor(initfs, pid=0) {
-    this.initfs = initfs;
+  constructor(bootfs, pid=0) {
+    this.bootfs = bootfs;
     this.pid = pid;
     this.finished = undefined;
     this.worker = undefined;
@@ -11,8 +11,8 @@ export class Task {
     const name = `${path.split('/').pop()}.${this.pid}`;
 
     const blob = new Blob([
-      this.initfs["worker.js"].blob, 
-      this.initfs["wasm.js"].blob,
+      this.bootfs["worker.js"].blob, 
+      this.bootfs["wasm.js"].blob,
       `\n//# sourceURL=${name}\n` // names the worker in logs
     ], { type: 'application/javascript' });
     
@@ -21,7 +21,7 @@ export class Task {
     this.worker.postMessage({init: {
       pid: this.pid,
       ppid: (globalThis.process) ? globalThis.process.pid : -1,
-      fs: this.initfs,
+      fs: this.bootfs,
       dir: opts.dir || "/",
       hostURL: location.href.split("#")[0], // ignore hash data
     }});
@@ -34,7 +34,7 @@ export class Task {
       })
     });
 
-    const duplex = await import(URL.createObjectURL(this.initfs["duplex.js"].blob));
+    const duplex = await import(URL.createObjectURL(this.bootfs["duplex.js"].blob));
     this.pipe = duplex.open(new duplex.WorkerConn(this.worker), new duplex.CBORCodec());
     this.pipe.respond();
 

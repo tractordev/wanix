@@ -7,13 +7,13 @@ addEventListener("message", async (e) => {
   if (e.data.init) {
     
     globalThis.hostURL = e.data.init.hostURL;
-    globalThis.initfs = e.data.init.fs;
+    globalThis.bootfs = e.data.init.fs;
     globalThis.process.pid = e.data.init.pid;
     globalThis.process.ppid = e.data.init.ppid;
     globalThis.process.dir = e.data.init.dir;
 
-    globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"].blob));
-    globalThis.task = await import(URL.createObjectURL(initfs["task.js"].blob)); // only for kernel
+    globalThis.duplex = await import(URL.createObjectURL(bootfs["duplex.js"].blob));
+    globalThis.task = await import(URL.createObjectURL(bootfs["task.js"].blob)); // only for kernel
     
     globalThis.sys = duplex.open(new duplex.WorkerConn(globalThis), new duplex.CBORCodec());
     
@@ -25,8 +25,8 @@ addEventListener("message", async (e) => {
         go.env = params[2].env;
       }
       let mod;
-      if (initfs[params[0]]) {
-        mod = await blobToArrayBuffer(initfs[params[0]].blob);
+      if (bootfs[params[0]]) {
+        mod = await blobToArrayBuffer(bootfs[params[0]].blob);
       } else {
         mod = await globalThis.fs.readFile(params[0]);
       }

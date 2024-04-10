@@ -33,7 +33,7 @@ func main() {
 	kernel := Kernel{}
 
 	// import syscall.js
-	blob := js.Global().Get("initfs").Get("syscall.js").Get("blob")
+	blob := js.Global().Get("bootfs").Get("syscall.js").Get("blob")
 	url := js.Global().Get("URL").Call("createObjectURL", blob)
 	jsutil.Await(js.Global().Call("import", url))
 

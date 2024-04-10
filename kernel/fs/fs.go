@@ -91,32 +91,30 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	}
 
 	// copy some apps including terminal
-	must(s.copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
+	must(copyAllFS(s.fsys, "sys/app/terminal", internal.Dir, "app/terminal"))
 	if !devMode {
-		must(s.copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo"))
-		must(s.copyAllFS(s.fsys, "sys/app/jazz-todo", internal.Dir, "app/jazz-todo"))
-		must(s.copyAllFS(s.fsys, "sys/app/explorer", internal.Dir, "app/explorer"))
+		must(copyAllFS(s.fsys, "sys/app/todo", internal.Dir, "app/todo"))
+		must(copyAllFS(s.fsys, "sys/app/jazz-todo", internal.Dir, "app/jazz-todo"))
+		must(copyAllFS(s.fsys, "sys/app/explorer", internal.Dir, "app/explorer"))
 	}
 
-	// copy shell source into filesystem
+	must(copyAllFS(s.fsys, "sys/cmd/kernel", kernelSource, "."))
+
+	// Copy initfs files
 	fs.MkdirAll(s.fsys, "sys/cmd/shell", 0755)
 	shellFiles := getPrefixedInitFiles("shell/")
 	for _, path := range shellFiles {
 		must(s.copyFromInitFS(filepath.Join("sys/cmd", path), path))
 	}
 
-	// copy all of kernel source except `/bin` into filesystem.
-	must(s.copyKernelSource("sys/cmd/kernel", kernelSource))
-
-	// copy embedded kernel exe's into filesystem if they don't already exist
 	if exists, _ := fs.Exists(s.fsys, "sys/cmd/build.wasm"); !exists {
-		must(copyFileAcrossFS(s.fsys, "sys/cmd/build.wasm", kernelSource, "bin/build"))
+		must(s.copyFromInitFS("sys/cmd/build.wasm", "bin/build"))
 	}
 	if exists, _ := fs.Exists(s.fsys, "sys/cmd/micro.wasm"); !exists {
-		must(copyFileAcrossFS(s.fsys, "sys/cmd/micro.wasm", kernelSource, "bin/micro"))
+		must(s.copyFromInitFS("sys/cmd/micro.wasm", "bin/micro"))
 	}
 	if exists, _ := fs.Exists(s.fsys, "sys/bin/shell.wasm"); !exists {
-		must(copyFileAcrossFS(s.fsys, "sys/bin/shell.wasm", kernelSource, "bin/shell"))
+		must(s.copyFromInitFS("sys/bin/shell.wasm", "bin/shell"))
 	}
 
 	// setup exportapp
@@ -124,6 +122,7 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	must(s.copyFromInitFS("sys/export/main.go", "export/main.go"))
 	must(s.copyFromInitFS("sys/cmd/exportapp.sh", "export/exportapp.sh"))
 
+	// Mount custom filesystems
 	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
 
 	s.maybeMountGithubFS()
@@ -190,7 +189,7 @@ func copyFileAcrossFS(dstFS fs.MutableFS, dstPath string, srcFS fs.FS, srcPath s
 	return fs.WriteFile(dstFS, dstPath, srcData, 0644)
 }
 
-func (s *Service) copyAllFS(dstFS fs.MutableFS, dstDir string, srcFS fs.FS, srcDir string) error {
+func copyAllFS(dstFS fs.MutableFS, dstDir string, srcFS fs.FS, srcDir string) error {
 	if err := fs.MkdirAll(dstFS, dstDir, 0755); err != nil {
 		return err
 	}

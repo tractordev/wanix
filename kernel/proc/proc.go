@@ -94,7 +94,7 @@ func (s *Service) Spawn(path string, args []string, env map[string]string, dir s
 	s.running[s.nextPID] = p
 	s.mu.Unlock()
 
-	p.Task = js.Global().Get("task").Get("Task").New(js.Global().Get("initfs"), p.ID)
+	p.Task = js.Global().Get("task").Get("Task").New(js.Global().Get("bootfs"), p.ID)
 	_, err = jsutil.AwaitErr(p.Task.Call("exec", p.Path, jsutil.ToJSArray(p.Args), map[string]any{
 		"env": jsutil.ToJSMap(p.Env),
 		"dir": p.Dir,

@@ -2,7 +2,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
   const basePath = window.location.pathname.replace("index.html", "");
 
   // registers Service Worker using this file (see bottom) if none is registered,
-  // and sets up a mechanism to fullfill requests from initfs or kernel
+  // and sets up a mechanism to fullfill requests from bootfs or kernel
   async function setupServiceWorker() {
     const timeout = (ms) => new Promise((resolve, reject) => setTimeout(() => reject(new Error("Timeout")), ms));
 
@@ -69,7 +69,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     const ds = new DecompressionStream('gzip');
     const out = gzipBlob.stream().pipeThrough(ds);
     const response = new Response(out);
-    globalThis.initfs["kernel"] = { mtimeMs: Date.now(), blob: await response.blob() };
+    globalThis.bootfs["kernel"] = { mtimeMs: Date.now(), blob: await response.blob() };
   }
 
   const unzipb64 = async (b64data) => {
@@ -90,7 +90,7 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
   globalThis.bootWanix = (async function() {
     console.log("Wanix booting...")
     
-    globalThis.initfs = {};
+    globalThis.bootfs = {};
     const kernelReady = fetchKernel();
     await setupServiceWorker();
 
@@ -101,22 +101,22 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
         console.log(`Loading ${filename}...`)
         const file = globalThis.bootdata[filename];
         const data = await unzipb64(file.data);
-        globalThis.initfs[filename] = { mtimeMs: file.mtimeMs, blob: new Blob([data], { type: file.type }) };
+        globalThis.bootfs[filename] = { mtimeMs: file.mtimeMs, blob: new Blob([data], { type: file.type }) };
       })());
     }
     await Promise.all(loads);
 
-    globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"].blob));
-    globalThis.task = await import(URL.createObjectURL(initfs["task.js"].blob));
+    globalThis.duplex = await import(URL.createObjectURL(bootfs["duplex.js"].blob));
+    globalThis.task = await import(URL.createObjectURL(bootfs["task.js"].blob));
 
     await kernelReady;
-    globalThis.sys = new task.Task(initfs);
+    globalThis.sys = new task.Task(bootfs);
     
     console.log("Starting kernel...")
     await sys.exec("kernel");
 
     // load host API
-    await import(URL.createObjectURL(initfs["host.js"].blob));
+    await import(URL.createObjectURL(bootfs["host.js"].blob));
   });
 }
 
