@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"text/template"
 
 	"tractor.dev/toolkit-go/engine/cli"
@@ -33,7 +33,7 @@ func buildBootloader() ([]byte, error) {
 			continue
 		}
 
-		data, err := fs.ReadFile(boot.Dir, filepath.Join("data", fi.Name()))
+		data, err := fs.ReadFile(boot.Dir, path.Join("data", fi.Name()))
 		if err != nil {
 			return nil, err
 		}

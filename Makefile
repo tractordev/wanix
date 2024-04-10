@@ -8,9 +8,12 @@ all: wanix kernel shell build micro
 dev: all
 	./local/bin/wanix dev
 
+loader: all
+	cd ./local && ./bin/wanix loader
+
 wanix: local/bin/wanix
 local/bin/wanix: kernel initfs
-	go build -o ./local/bin/wanix ./cmd/wanix
+	go build -o ./local/bin/ ./cmd/wanix
 
 kernel: boot/kernel.gz
 boot/kernel.gz: 
