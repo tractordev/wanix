@@ -1,4 +1,4 @@
-.PHONY: boot dev kernel shell dev bundle micro hugo wanix boot/kernel.gz
+.PHONY: boot dev kernel shell dev bundle micro hugo wanix boot/kernel.gz initfsDirs
 
 VERSION=0.2dev
 DEBUG?=false
@@ -22,29 +22,35 @@ boot/kernel.gz:
 
 initfs: boot/initfs.gz
 boot/initfs.gz: boot/initfs
-	tar -czf ./boot/initfs.tar ./boot/initfs
+	tar -cf ./boot/initfs.tar  -C ./boot/initfs .
 	gzip -f -9 ./boot/initfs.tar
 	mv ./boot/initfs.tar.gz ./boot/initfs.gz
 
-boot/initfs: shell micro build
-	mkdir -p boot/initfs
-	cp -r shell boot/initfs
-	cp -r internal/export boot/initfs
+boot/initfs: initfsDirs shell micro build
+	cp -r ./shell ./boot/initfs/cmd/
+	cp internal/export/exportapp.sh ./boot/initfs/cmd/
+	cp internal/export/main.go ./boot/initfs/export/
 
-shell: boot/initfs/bin/shell
-boot/initfs/bin/shell: shell/main.go
-	cd shell && GOOS=js GOARCH=wasm go build -o ../boot/initfs/bin/shell .
+initfsDirs:
+	mkdir -p ./boot/initfs
+	mkdir -p ./boot/initfs/bin
+	mkdir -p ./boot/initfs/cmd
+	mkdir -p ./boot/initfs/export
 
-micro: boot/initfs/bin/micro
-boot/initfs/bin/micro: external/micro/
+shell: boot/initfs/bin/shell.wasm
+boot/initfs/bin/shell.wasm: shell/main.go
+	cd shell && GOOS=js GOARCH=wasm go build -o ../boot/initfs/bin/shell.wasm .
+
+micro: boot/initfs/cmd/micro.wasm
+boot/initfs/cmd/micro.wasm: external/micro/
 	make -C external/micro build
 
 build/pkg.zip: build/build-pkgs/imports/imports.go build/build-pkgs/main.go
 	cd build && go run ./build-pkgs/main.go ./build-pkgs/imports ./pkg.zip
 
-build: boot/initfs/bin/build
-boot/initfs/bin/build: build/main.go build/pkg.zip
-	cd build && GOOS=js GOARCH=wasm go build -o ../boot/initfs/bin/build .
+build: boot/initfs/cmd/build.wasm
+boot/initfs/cmd/build.wasm: build/main.go build/pkg.zip
+	cd build && GOOS=js GOARCH=wasm go build -o ../boot/initfs/cmd/build.wasm .
 
 hugo: external/hugo/
 	make -C external/hugo build

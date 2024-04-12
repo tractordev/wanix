@@ -91,6 +91,17 @@ func runServer() {
 		w.Header().Set("Content-Disposition", `attachment; filename="wanix-kernel.gz"`)
 		http.ServeContent(w, r, "wanix-kernel.gz", time.Now(), reader)
 	}))
+	mux.Handle(fmt.Sprintf("%s/wanix-initfs.gz", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, err := fs.ReadFile(boot.Dir, "initfs.gz")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		reader := bytes.NewReader(data)
+		w.Header().Set("Content-Type", "application/gzip")
+		w.Header().Set("Content-Disposition", `attachment; filename="wanix-initfs.gz"`)
+		http.ServeContent(w, r, "wanix-initfs.gz", time.Now(), reader)
+	}))
 	mux.Handle(fmt.Sprintf("%s/wanix-bootloader.js", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/javascript")
 		bl, err := buildBootloader()

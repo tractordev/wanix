@@ -151,6 +151,7 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
       url.pathname.startsWith(`${basePath}index.html`) ||
       url.pathname.startsWith(`${basePath}loading.gif`) ||
       url.pathname.startsWith(`${basePath}wanix-kernel.gz`) ||
+      url.pathname.startsWith(`${basePath}wanix-initfs.gz`) ||
       url.pathname.startsWith("/auth") ||
       url.hostname !== location.hostname ||
       !host) return;

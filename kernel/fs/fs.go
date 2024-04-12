@@ -1,15 +1,17 @@
 package fs
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"embed"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"syscall/js"
-	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/toolkit-go/engine/fs/memfs"
@@ -30,7 +32,7 @@ var doLogging bool = DebugLog == "true"
 
 func log(args ...any) {
 	if doLogging {
-		js.Global().Get("console").Call("log", args...)
+		jsutil.Log(args...)
 	}
 }
 
@@ -81,7 +83,9 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	fs.MkdirAll(s.fsys, "sys/tmp", 0755)
 	fs.MkdirAll(s.fsys, "sys/build", 0755)
 
-	devURL := fmt.Sprintf("%ssys/dev", js.Global().Get("hostURL").String())
+	hostURL := js.Global().Get("hostURL").String()
+
+	devURL := fmt.Sprintf("%ssys/dev", hostURL)
 	devMode := false
 	resp, err := http.DefaultClient.Get(devURL)
 	must(err)
@@ -100,27 +104,72 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 
 	must(copyAllFS(s.fsys, "sys/cmd/kernel", kernelSource, "."))
 
-	// Copy initfs files
-	fs.MkdirAll(s.fsys, "sys/cmd/shell", 0755)
-	shellFiles := getPrefixedInitFiles("shell/")
-	for _, path := range shellFiles {
-		must(s.copyFromInitFS(filepath.Join("sys/cmd", path), path))
-	}
+	if exists, _ := fs.Exists(s.fsys, "sys/initfs"); !exists {
+		jsutil.Log("Loading initfs...")
 
-	if exists, _ := fs.Exists(s.fsys, "sys/cmd/build.wasm"); !exists {
-		must(s.copyFromInitFS("sys/cmd/build.wasm", "bin/build"))
-	}
-	if exists, _ := fs.Exists(s.fsys, "sys/cmd/micro.wasm"); !exists {
-		must(s.copyFromInitFS("sys/cmd/micro.wasm", "bin/micro"))
-	}
-	if exists, _ := fs.Exists(s.fsys, "sys/bin/shell.wasm"); !exists {
-		must(s.copyFromInitFS("sys/bin/shell.wasm", "bin/shell"))
-	}
+		// Fetch wanix-initfs.gz
+		initfsUrl := fmt.Sprintf("%swanix-initfs.gz", hostURL)
+		resp, err := http.DefaultClient.Get(initfsUrl)
+		if err != nil {
+			panic(fmt.Sprintf("%s: Couldn't fetch initfs from %s", err.Error(), initfsUrl))
+		}
+		defer resp.Body.Close()
 
-	// setup exportapp
-	fs.MkdirAll(s.fsys, "sys/export", 0755)
-	must(s.copyFromInitFS("sys/export/main.go", "export/main.go"))
-	must(s.copyFromInitFS("sys/cmd/exportapp.sh", "export/exportapp.sh"))
+		jsutil.Log("GET", initfsUrl, resp.Status)
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			panic("ErrBadStatus: " + resp.Status)
+		}
+
+		// Decompress gzip and unpack tar to /sys/*
+		zr, err := gzip.NewReader(resp.Body)
+		must(err)
+		defer zr.Close()
+
+		tr := tar.NewReader(zr)
+		var hdr *tar.Header
+		var tarErr error
+		for hdr, tarErr = tr.Next(); tarErr == nil; hdr, tarErr = tr.Next() {
+			dstPath := filepath.Join("sys", hdr.Name)
+
+			var exists bool
+			fi, err := fs.Stat(s.fsys, dstPath)
+			if err == nil {
+				exists = true
+			} else if os.IsNotExist(err) {
+				exists = false
+			} else {
+				panic(err)
+			}
+
+			if !exists || hdr.ModTime.After(fi.ModTime()) {
+				switch hdr.Typeflag {
+				case tar.TypeDir:
+					must(fs.MkdirAll(s.fsys, dstPath, 0755))
+				case tar.TypeReg:
+					jsutil.Log(fmt.Sprintf("Copying initfs/%s to %s (%d bytes)", filepath.Clean(hdr.Name), dstPath, hdr.Size))
+
+					f, err := s.fsys.Create(dstPath)
+					must(err)
+
+					_, err = io.Copy(f.(io.WriteCloser), tr)
+					must(err)
+					must(f.Close())
+				default:
+					panic(fmt.Sprint("Unhandled tar Typeflag:", hdr.Typeflag))
+				}
+			}
+		}
+		if tarErr != io.EOF {
+			panic(tarErr)
+		}
+
+		// Leave signal that we've already unpacked initfs before,
+		// speeding up subsequent boots whilst allowing the user to
+		// trigger a fetch again by deleting the file.
+		f, err := s.fsys.Create("sys/initfs")
+		must(err)
+		must(f.Close())
+	}
 
 	// Mount custom filesystems
 	must(s.fsys.(*mountablefs.FS).Mount(memfs.New(), "/sys/tmp"))
@@ -177,18 +226,6 @@ func getPrefixedInitFiles(prefix string) []string {
 	return result
 }
 
-func copyFileAcrossFS(dstFS fs.MutableFS, dstPath string, srcFS fs.FS, srcPath string) error {
-	srcData, err := fs.ReadFile(srcFS, srcPath)
-	if err != nil {
-		return err
-	}
-	err = fs.MkdirAll(dstFS, filepath.Dir(dstPath), 0755)
-	if err != nil {
-		return err
-	}
-	return fs.WriteFile(dstFS, dstPath, srcData, 0644)
-}
-
 func copyAllFS(dstFS fs.MutableFS, dstDir string, srcFS fs.FS, srcDir string) error {
 	if err := fs.MkdirAll(dstFS, dstDir, 0755); err != nil {
 		return err
@@ -198,64 +235,17 @@ func copyAllFS(dstFS fs.MutableFS, dstDir string, srcFS fs.FS, srcDir string) er
 			return err
 		}
 		if !d.IsDir() {
+			srcData, err := fs.ReadFile(srcFS, path)
+			if err != nil {
+				return err
+			}
 			dstPath := filepath.Join(dstDir, strings.TrimPrefix(path, srcDir))
-			return copyFileAcrossFS(dstFS, dstPath, srcFS, path)
+			err = fs.MkdirAll(dstFS, filepath.Dir(dstPath), 0755)
+			if err != nil {
+				return err
+			}
+			return fs.WriteFile(dstFS, dstPath, srcData, 0644)
 		}
 		return nil
 	}))
-}
-
-// Avoids copying the bin directory
-func (s *Service) copyKernelSource(dstDir string, srcFS fs.FS) error {
-	if err := fs.MkdirAll(s.fsys, dstDir, 0755); err != nil {
-		return err
-	}
-	return fs.WalkDir(srcFS, ".", fs.WalkDirFunc(func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() && path == "bin" {
-			return fs.SkipDir
-		}
-		if !d.IsDir() {
-			dstPath := filepath.Join(dstDir, strings.TrimPrefix(path, "."))
-			return copyFileAcrossFS(s.fsys, dstPath, srcFS, path)
-		}
-		return nil
-	}))
-}
-
-func (s *Service) copyFromInitFS(dst, src string) error {
-	initFile := js.Global().Get("initfs").Get(src)
-	if initFile.IsUndefined() {
-		return nil
-	}
-
-	var exists bool
-	fi, err := fs.Stat(s.fsys, dst)
-	if err == nil {
-		exists = true
-	} else if os.IsNotExist(err) {
-		exists = false
-	} else {
-		return err
-	}
-
-	if !exists || time.UnixMilli(int64(initFile.Get("mtimeMs").Float())).After(fi.ModTime()) {
-		blob := initFile.Get("blob")
-		buffer, err := jsutil.AwaitErr(blob.Call("arrayBuffer"))
-		if err != nil {
-			return err
-		}
-
-		// TODO: creating the file and applying the blob directly in indexedfs would be faster.
-		data := make([]byte, blob.Get("size").Int())
-		js.CopyBytesToGo(data, js.Global().Get("Uint8Array").New(buffer))
-		err = fs.WriteFile(s.fsys, dst, data, 0644)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

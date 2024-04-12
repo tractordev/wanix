@@ -1,6 +1,8 @@
+.PHONY: build update clean
+
 build: update
 	make -C repo wasm
-	mv ./repo/micro.wasm ./../../boot/initfs/bin/micro
+	mv ./repo/micro.wasm ./../../boot/initfs/cmd/micro.wasm
 
 repo: 
 	git clone -q https://github.com/zyedidia/micro ./repo
