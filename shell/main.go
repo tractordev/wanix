@@ -114,7 +114,7 @@ __\      /___|  (__)  |_|  |___\   |_(      )_/  /__\  \_
 			fmt.Printf("Logged in as %s.\n\n", user)
 		}
 
-		ctx := cli.ContextWithIO(context.Background(), m.defaultStdin, os.Stdout, os.Stderr)
+		ctx = cli.ContextWithIO(context.Background(), m.defaultStdin, os.Stdout, os.Stderr)
 
 		terminal := term.NewTerminal(struct {
 			io.Reader

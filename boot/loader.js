@@ -2,22 +2,9 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
   const basePath = window.location.pathname.replace("index.html", "");
 
   // registers Service Worker using this file (see bottom) if none is registered,
-  // and sets up a mechanism to fullfill requests from initfs or kernel
+  // and sets up a mechanism to fullfill requests from bootfs or kernel
   async function setupServiceWorker() {
     const timeout = (ms) => new Promise((resolve, reject) => setTimeout(() => reject(new Error("Timeout")), ms));
-    const unzip = async (b64data) => {
-      const gzipData = atob(b64data);
-      const gzipBuf = new Uint8Array(gzipData.length);
-      for (let i = 0; i < gzipData.length; i++) {
-        gzipBuf[i] = gzipData.charCodeAt(i);
-      }
-      const gzipBlob = new Blob([gzipBuf], { type: 'application/gzip' });
-      const ds = new DecompressionStream('gzip');
-      const out = gzipBlob.stream().pipeThrough(ds);
-      const response = new Response(out);
-      const buf = await response.arrayBuffer();
-      return new Uint8Array(buf);
-    }
 
     let registration = await navigator.serviceWorker.getRegistration();
     if (!registration) {
@@ -54,16 +41,6 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
         return;
       }
 
-      // handle requests for compressed embedded initfs files if present
-      if (globalThis.initdata && req.path.startsWith(`${basePath}~init/`)) {
-        const f = globalThis.initdata[req.path.replace(`${basePath}~init/`, "")];
-        if (f) {
-          const data = await unzip(f.data);
-          registration.active.postMessage({response: { reqId: req.id, body: data, headers: {"content-type": f.type}}});
-          return;
-        }
-      }
-
       if (!globalThis.sys) {
         registration.active.postMessage({response: { reqId: req.id,  error: `kernel not loaded yet for ${req.path}` }});
         return;
@@ -92,44 +69,54 @@ if (!globalThis["ServiceWorkerGlobalScope"]) {
     const ds = new DecompressionStream('gzip');
     const out = gzipBlob.stream().pipeThrough(ds);
     const response = new Response(out);
-    globalThis.initfs["kernel"] = { mtimeMs: Date.now(), blob: await response.blob() };
+    globalThis.bootfs["kernel"] = { mtimeMs: Date.now(), blob: await response.blob() };
+  }
+
+  const unzipb64 = async (b64data) => {
+    const gzipData = atob(b64data);
+    const gzipBuf = new Uint8Array(gzipData.length);
+    for (let i = 0; i < gzipData.length; i++) {
+      gzipBuf[i] = gzipData.charCodeAt(i);
+    }
+    const gzipBlob = new Blob([gzipBuf], { type: 'application/gzip' });
+    const ds = new DecompressionStream('gzip');
+    const out = gzipBlob.stream().pipeThrough(ds);
+    const response = new Response(out);
+    const buf = await response.arrayBuffer();
+    return new Uint8Array(buf);
   }
 
   // bootloader starts here
   globalThis.bootWanix = (async function() {
     console.log("Wanix booting...")
     
-    globalThis.initfs = {};
+    globalThis.bootfs = {};
     const kernelReady = fetchKernel();
     await setupServiceWorker();
 
-    const load = async (name, file) => {
-      // Determine if file contains a path to fetch or embedded file contents to load.
-      if(file.type === "text/plain") {
-        globalThis.initfs[name] = { mtimeMs: file.mtimeMs, blob: await (await fetch(`./sys/dev/${file.data}`)).blob() };
-      } else {
-        globalThis.initfs[name] = { mtimeMs: file.mtimeMs, blob: await (await fetch(`./~init/${name}`)).blob() };
-      }
-    };
-
     // allow loading concurrently
     let loads = [];
-    for(const property in globalThis.initdata) {
-      loads.push(load(property, globalThis.initdata[property]));
+    for(const filename in globalThis.bootdata) {
+      loads.push((async () => {
+        console.log(`Loading ${filename}...`)
+        const file = globalThis.bootdata[filename];
+        const data = await unzipb64(file.data);
+        globalThis.bootfs[filename] = { mtimeMs: file.mtimeMs, blob: new Blob([data], { type: file.type }) };
+      })());
     }
     await Promise.all(loads);
 
-    globalThis.duplex = await import(URL.createObjectURL(initfs["duplex.js"].blob));
-    globalThis.task = await import(URL.createObjectURL(initfs["task.js"].blob));
+    globalThis.duplex = await import(URL.createObjectURL(bootfs["duplex.js"].blob));
+    globalThis.task = await import(URL.createObjectURL(bootfs["task.js"].blob));
 
     await kernelReady;
-    globalThis.sys = new task.Task(initfs);
+    globalThis.sys = new task.Task(bootfs);
     
     console.log("Starting kernel...")
     await sys.exec("kernel");
 
     // load host API
-    await import(URL.createObjectURL(initfs["host.js"].blob));
+    await import(URL.createObjectURL(bootfs["host.js"].blob));
   });
 }
 
@@ -164,6 +151,7 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
       url.pathname.startsWith(`${basePath}index.html`) ||
       url.pathname.startsWith(`${basePath}loading.gif`) ||
       url.pathname.startsWith(`${basePath}wanix-kernel.gz`) ||
+      url.pathname.startsWith(`${basePath}wanix-initfs.gz`) ||
       url.pathname.startsWith("/auth") ||
       url.hostname !== location.hostname ||
       !host) return;

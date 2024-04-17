@@ -1,36 +1,56 @@
-.PHONY: boot dev kernel shell dev bundle micro hugo local/bin/kernel
+.PHONY: boot dev kernel shell dev bundle micro hugo wanix boot/kernel.gz initfsDirs
 
 VERSION=0.2dev
 DEBUG?=false
 
-all: kernel shell build micro
+all: wanix kernel shell build micro
 
 dev: all
-	go run ./dev
+	./local/bin/wanix dev
 
-bundle: local/bin/kernel
-	cp local/bin/kernel local/wanix-kernel
-	gzip -f -9 local/wanix-kernel
-	go run -tags bundle ./dev
+loader: all
+	cd ./local && ./bin/wanix loader
 
-kernel: local/bin/kernel
-local/bin/kernel: kernel/bin/shell kernel/bin/micro kernel/bin/build
-	cd kernel && GOOS=js GOARCH=wasm go build -ldflags="-X 'main.Version=${VERSION}' -X 'tractor.dev/wanix/kernel/fs.DebugLog=${DEBUG}'" -o ../local/bin/kernel .
+wanix: local/bin/wanix
+local/bin/wanix: kernel initfs
+	go build -o ./local/bin/ ./cmd/wanix
 
-shell: kernel/bin/shell
-kernel/bin/shell: shell/main.go
-	cd shell && GOOS=js GOARCH=wasm go build -o ../kernel/bin/shell .
+kernel: boot/kernel.gz
+boot/kernel.gz: 
+	cd kernel && GOOS=js GOARCH=wasm go build -ldflags="-X 'main.Version=${VERSION}' -X 'tractor.dev/wanix/kernel/fs.DebugLog=${DEBUG}'" -o ../boot/kernel .
+	gzip -f -9 ./boot/kernel
 
-micro: kernel/bin/micro
-kernel/bin/micro: external/micro/
+initfs: boot/initfs.gz
+boot/initfs.gz: boot/initfs
+	tar -cf ./boot/initfs.tar  -C ./boot/initfs .
+	gzip -f -9 ./boot/initfs.tar
+	mv ./boot/initfs.tar.gz ./boot/initfs.gz
+
+boot/initfs: initfsDirs shell micro build
+	cp -r ./shell ./boot/initfs/cmd/
+	cp internal/export/exportapp.sh ./boot/initfs/cmd/
+	cp internal/export/main.go ./boot/initfs/export/
+
+initfsDirs:
+	mkdir -p ./boot/initfs
+	mkdir -p ./boot/initfs/bin
+	mkdir -p ./boot/initfs/cmd
+	mkdir -p ./boot/initfs/export
+
+shell: boot/initfs/bin/shell.wasm
+boot/initfs/bin/shell.wasm: shell/main.go
+	cd shell && GOOS=js GOARCH=wasm go build -o ../boot/initfs/bin/shell.wasm .
+
+micro: boot/initfs/cmd/micro.wasm
+boot/initfs/cmd/micro.wasm: external/micro/
 	make -C external/micro build
-
-hugo: external/hugo/
-	make -C external/hugo build
 
 build/pkg.zip: build/build-pkgs/imports/imports.go build/build-pkgs/main.go
 	cd build && go run ./build-pkgs/main.go ./build-pkgs/imports ./pkg.zip
 
-build: kernel/bin/build
-kernel/bin/build: build/main.go build/pkg.zip
-	cd build && GOOS=js GOARCH=wasm go build -o ../kernel/bin/build .
+build: boot/initfs/cmd/build.wasm
+boot/initfs/cmd/build.wasm: build/main.go build/pkg.zip
+	cd build && GOOS=js GOARCH=wasm go build -o ../boot/initfs/cmd/build.wasm .
+
+hugo: external/hugo/
+	make -C external/hugo build
