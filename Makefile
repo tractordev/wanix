@@ -9,7 +9,7 @@ dev: all
 	./local/bin/wanix dev
 
 release:
-	goreleaser release --snapshot --clean
+	VERSION=$(VERSION) goreleaser release --snapshot --clean
 
 clean:
 	rm -rf ./boot/initfs

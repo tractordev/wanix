@@ -5,11 +5,10 @@ before:
 checksum:
   disable: true 
 snapshot:
-  name_template: "{{.ShortCommit}}"
+  name_template: '{{envOrDefault "VERSION" .ShortCommit}}'
 builds:
-  - id: wanix
+  - id: default
     goos:
-      - darwin
       - linux
       - windows
     goarch:
@@ -17,10 +16,23 @@ builds:
       - arm64
     ldflags: "-X main.Version={{.Version}}"
     main: ./cmd/wanix
+  - id: mac
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags: "-X main.Version={{.Version}}"
+    main: ./cmd/wanix
+    hooks:
+      post: "codesign --deep --force --verify --verbose --timestamp --options runtime --sign 'Developer ID Application: Jeff Lindsay (4HSU97X8UX)' {{ .Path }}"
 archives:
 - id: default
   builds:
-  - wanix
+  - default
+  - mac
   name_template: '{{ .ProjectName }}_{{ .Version }}_{{.Os}}_{{.Arch}}'
   format: zip
   wrap_in_directory: false
+  files:
+    - none*
