@@ -18,7 +18,7 @@ loader: all
 
 wanix: local/bin/wanix
 local/bin/wanix: kernel initfs
-	go build -o ./local/bin/ ./cmd/wanix
+	go build -ldflags="-X 'main.Version=${VERSION}' -o ./local/bin/ ./cmd/wanix
 
 kernel: boot/kernel.gz
 boot/kernel.gz: 
