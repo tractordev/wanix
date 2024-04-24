@@ -1,0 +1,26 @@
+before:
+  hooks:
+    - go mod tidy
+    - make clean kernel initfs
+checksum:
+  disable: true 
+snapshot:
+  name_template: "{{.ShortCommit}}"
+builds:
+  - id: wanix
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags: "-X main.Version={{.Version}}"
+    main: ./cmd/wanix
+archives:
+- id: default
+  builds:
+  - wanix
+  name_template: '{{ .ProjectName }}_{{ .Version }}_{{.Os}}_{{.Arch}}'
+  format: zip
+  wrap_in_directory: false

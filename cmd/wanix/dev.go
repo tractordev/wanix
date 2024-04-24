@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
+	"text/template"
 	"time"
 
 	"tractor.dev/toolkit-go/engine/cli"
@@ -27,7 +29,10 @@ func devCmd() *cli.Command {
 				fatal(err)
 			}
 			if !found {
-				fatal(fmt.Errorf("not in a wanix working directory"))
+				fmt.Println("wanix dev needs to be run in a working copy of wanix source.\n")
+				fmt.Println("use git clone to get wanix source:")
+				fmt.Println("  git clone https://github.com/tractordev/wanix.git\n")
+				os.Exit(1)
 			}
 
 			runServer()
@@ -67,9 +72,8 @@ func runServer() {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			d = bytes.ReplaceAll(d, []byte("AUTH0_DOMAIN"), []byte(domain))
-			d = bytes.ReplaceAll(d, []byte("AUTH0_CLIENTID"), []byte(clientID))
-			if _, err := w.Write(d); err != nil {
+			rendered := fmt.Sprintf(string(d), domain, clientID)
+			if _, err := w.Write([]byte(rendered)); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 			return
@@ -108,9 +112,25 @@ func runServer() {
 		fatal(err)
 		w.Write(bl)
 	}))
-	mux.Handle(fmt.Sprintf("%s/", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.StripPrefix(fmt.Sprintf("%s/", basePath), http.FileServer(http.Dir(dir+"/boot/site"))).ServeHTTP(w, r)
+	mux.Handle(fmt.Sprintf("%s/loading.gif", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, path.Join(dir, "boot/site/loading.gif"))
 	}))
+	mux.Handle(fmt.Sprintf("%s/", basePath), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, err := os.ReadFile(path.Join(dir, "boot/site/index.html"))
+		if err != nil {
+			panic(err)
+		}
+		t := template.Must(template.New("index.html").Parse(string(data)))
+		var buf bytes.Buffer
+		if err := t.Execute(&buf, map[string]any{
+			"RequireAuth": false,
+			"MountRepo":   "",
+		}); err != nil {
+			panic(err)
+		}
+		w.Write(buf.Bytes())
+	}))
+
 	if err := http.ListenAndServe(":7777", loggerMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}

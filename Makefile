@@ -8,6 +8,9 @@ all: wanix kernel shell build micro
 dev: all
 	./local/bin/wanix dev
 
+release:
+	goreleaser release --snapshot --clean
+
 clean:
 	rm -rf ./boot/initfs
 	rm -rf ./boot/initfs.gz
@@ -18,7 +21,7 @@ loader: all
 
 wanix: local/bin/wanix
 local/bin/wanix: kernel initfs
-	go build -ldflags="-X 'main.Version=${VERSION}' -o ./local/bin/ ./cmd/wanix
+	go build -ldflags="-X 'main.Version=${VERSION}'" -o ./local/bin/ ./cmd/wanix
 
 kernel: boot/kernel.gz
 boot/kernel.gz: 

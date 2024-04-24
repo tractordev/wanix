@@ -9,7 +9,9 @@
 <body>
 <script src="./wanix-bootloader.js"></script>
 <script type="module">
-  localStorage.setItem("mount:repo", "{{.Username}}/{{.RepoName}}");
+  {{- if .MountRepo -}}
+  localStorage.setItem("mount:repo", "{{.MountRepo}}");
+  {{- end -}}
   {{- if .RequireAuth -}}
   import * as auth from "/auth/api.js";
   if (!auth.isAuthenticated()) {

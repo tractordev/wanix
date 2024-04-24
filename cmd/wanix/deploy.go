@@ -718,8 +718,7 @@ func deploy(domain, subpath string, enableAuth, requireAuth bool) {
 					var buf bytes.Buffer
 					if err := t.Execute(&buf, map[string]any{
 						"RequireAuth": requireAuth,
-						"Username":    username,
-						"RepoName":    repoName,
+						"MountRepo":   fmt.Sprintf("%s/%s", username, repoName),
 					}); err != nil {
 						panic(err)
 					}
