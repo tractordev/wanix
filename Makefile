@@ -1,6 +1,6 @@
 .PHONY: boot dev kernel shell dev bundle micro hugo wanix boot/kernel.gz initfsDirs clean
 
-VERSION=0.2dev
+VERSION=0.3dev
 DEBUG?=false
 
 all: wanix kernel shell build micro
@@ -10,6 +10,7 @@ dev: all
 
 release:
 	VERSION=$(VERSION) goreleaser release --snapshot --clean
+	./local/macsign/notarize
 
 clean:
 	rm -rf ./boot/initfs
