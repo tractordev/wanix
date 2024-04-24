@@ -1,4 +1,4 @@
-.PHONY: boot dev kernel shell dev bundle micro hugo wanix boot/kernel.gz initfsDirs
+.PHONY: boot dev kernel shell dev bundle micro hugo wanix boot/kernel.gz initfsDirs clean
 
 VERSION=0.2dev
 DEBUG?=false
@@ -7,6 +7,11 @@ all: wanix kernel shell build micro
 
 dev: all
 	./local/bin/wanix dev
+
+clean:
+	rm -rf ./boot/initfs
+	rm -rf ./boot/initfs.gz
+	rm -rf ./boot/kernel.gz
 
 loader: all
 	cd ./local && ./bin/wanix loader

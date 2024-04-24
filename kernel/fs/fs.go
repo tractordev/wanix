@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"syscall/js"
+	"time"
 
 	"tractor.dev/toolkit-go/engine/fs"
 	"tractor.dev/toolkit-go/engine/fs/memfs"
@@ -162,6 +163,10 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 		if tarErr != io.EOF {
 			panic(tarErr)
 		}
+
+		// Set mtime on shell.wasm to make sure we don't build the shell
+		// on first boot even though we embedded a pre-compiled shell
+		s.fsys.Chtimes("sys/bin/shell.wasm", time.Time{}, time.Now())
 
 		// Leave signal that we've already unpacked initfs before,
 		// speeding up subsequent boots whilst allowing the user to
