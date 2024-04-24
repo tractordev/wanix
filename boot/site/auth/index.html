@@ -5,7 +5,7 @@
 </head>
 <body>
 <script>
-const authSettings = {domain: "AUTH0_DOMAIN", clientId: "AUTH0_CLIENTID"};
+const authSettings = {domain: "%s", clientId: "%s"};
 localStorage.setItem("auth:settings", JSON.stringify(authSettings));
 function finish() {
   const redirect = localStorage.getItem("auth:redirect");
@@ -27,7 +27,7 @@ window.onload = async () => {
   }
 
   const authorizationParams = {
-    redirect_uri: `http://${window.location.host}/auth/`,
+    redirect_uri: `https://${window.location.host}/auth/`,
     audience: `https://${authSettings.domain}/api/v2/`,
     scope: "read:current_user read:user_idp_tokens update:current_user_metadata",
     prompt: "login",

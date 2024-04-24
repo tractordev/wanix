@@ -16,7 +16,8 @@ type Main struct{}
 func (m *Main) InitializeCLI(root *cli.Command) {
 	root.Usage = "wanix"
 	root.AddCommand(devCmd())
-	root.AddCommand(loaderCmd())
+	root.AddCommand(bootfilesCmd())
+	root.AddCommand(deployCmd())
 }
 
 func fatal(err error) {

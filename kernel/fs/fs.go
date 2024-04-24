@@ -188,8 +188,20 @@ func (s *Service) Initialize(kernelSource embed.FS, p *proc.Service) {
 	))
 }
 
-// Mount githubfs if user has gh_token
+// Mount githubfs if user has gh_token and mount:repo is set
 func (s *Service) maybeMountGithubFS() {
+	v, err := jsutil.WanixSyscall("host.getItem", "mount:repo")
+	if err != nil {
+		panic(err)
+	}
+	if v.IsNull() {
+		return
+	}
+	parts := strings.Split(v.String(), "/")
+	if len(parts) < 2 {
+		return
+	}
+
 	u, err := jsutil.WanixSyscall("host.currentUser")
 	if err != nil || u.IsNull() {
 		return
@@ -208,8 +220,8 @@ func (s *Service) maybeMountGithubFS() {
 	fs.MkdirAll(s.fsys, "repo", 0755)
 	must(s.fsys.(*mountablefs.FS).Mount(
 		githubfs.New(
-			"wanixdev",
-			"wanix.sh",
+			parts[0],
+			parts[1],
 			token.String(),
 		),
 		"/repo",

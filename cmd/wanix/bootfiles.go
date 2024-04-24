@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -72,21 +73,25 @@ func buildBootloader() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func loaderCmd() *cli.Command {
+func bootfilesCmd() *cli.Command {
 	cmd := &cli.Command{
-		Usage: "loader",
+		Usage: "bootfiles",
+		Short: "write out wanix boot files",
 		Run: func(ctx *cli.Context, args []string) {
 			bl, err := buildBootloader()
 			fatal(err)
 			fatal(os.WriteFile("wanix-bootloader.js", bl, 0644))
+			fmt.Println("Wrote file wanix-bootloader.js")
 
 			kernel, err := fs.ReadFile(boot.Dir, "kernel.gz")
 			fatal(err)
 			fatal(os.WriteFile("wanix-kernel.gz", kernel, 0644))
+			fmt.Println("Wrote file wanix-kernel.gz")
 
 			initfs, err := fs.ReadFile(boot.Dir, "initfs.gz")
 			fatal(err)
 			fatal(os.WriteFile("wanix-initfs.gz", initfs, 0644))
+			fmt.Println("Wrote file wanix-initfs.gz")
 		},
 	}
 	return cmd

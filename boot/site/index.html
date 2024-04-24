@@ -8,8 +8,18 @@
 </head>
 <body>
 <script src="./wanix-bootloader.js"></script>
-<script>
+<script type="module">
+  localStorage.setItem("mount:repo", "{{.Username}}/{{.RepoName}}");
+  {{- if .RequireAuth -}}
+  import * as auth from "/auth/api.js";
+  if (!auth.isAuthenticated()) {
+    auth.login();
+  } else {
+    bootWanix()  
+  }
+  {{- else -}}
   bootWanix()
+  {{- end -}}
 </script>
 </body>
 </html>
