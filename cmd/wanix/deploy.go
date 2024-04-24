@@ -50,7 +50,7 @@ func deployCmd() *cli.Command {
 		},
 	}
 	cmd.Flags().StringVar(&subpath, "subpath", "", "Deploy WANIX to specified subpath")
-	cmd.Flags().BoolVar(&enableAuth, "auth", false, "Enable authentication module")
+	cmd.Flags().BoolVar(&enableAuth, "enable-auth", false, "Enable authentication module")
 	cmd.Flags().BoolVar(&requireAuth, "require-auth", false, "Require authentication")
 	return cmd
 }
@@ -861,7 +861,7 @@ func deploy(domain, subpath string, enableAuth, requireAuth bool) {
 		})
 	}
 	fmt.Println()
-	fmt.Println("🎉 Congrats! Your WANIX site is set up and live!")
+	fmt.Println("🎉 Congrats! Your WANIX site is live!")
 
 	// b, err := json.MarshalIndent(map[string]any{
 	// 	"domain": domain,
