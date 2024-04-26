@@ -15,7 +15,7 @@ Experimental, web-native, Unix-like operating and development environment
 * Unix-like shell that can be live-edited/recompiled or replaced entirely
 * Built-in [micro](https://github.com/zyedidia/micro) editor, similar to nano
 * Supports TypeScript and JSX in web applications without extra tooling
-* Authentication using [Auth0] for deploying as a "backend" to static site
+* Authentication using [Auth0](https://auth0.com/) for deploying as a "backend" to static site
 * GitHub filesystem for directly manipulating repository branches
 
 ## Install
