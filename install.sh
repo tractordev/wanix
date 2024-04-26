@@ -48,6 +48,8 @@ main() {
     arch="amd64"
   elif [[ "$(uname -m)" == "arm64" ]]; then
     arch="arm64"
+  elif [[ "$(uname -m)" == "aarch64" ]]; then
+    arch="arm64"
   else
     echo "Error: Unsupported architecture: $(uname -m)"
     exit 1
