@@ -1,10 +1,13 @@
 # WANIX
+[![Discord](https://img.shields.io/discord/415940907729420288?label=Discord)](https://discord.gg/nQbgRjEBU4) ![GitHub Sponsors](https://img.shields.io/github/sponsors/progrium?label=Sponsors)
 
-Experimental, local-first, web-native, Unix-like operating and development environment
+Experimental, web-native, Unix-like operating and development environment
 
-[🎬 Demo from Mozilla Rise 25](https://www.youtube.com/watch?v=KJcd9IckJj8)
+* [🎬 Wasm I/O 2024 Demo](https://www.youtube.com/watch?v=cj8FvNM14T4)
+* [🎬 Mozilla Rise 25 Demo](https://www.youtube.com/watch?v=KJcd9IckJj8)
 
 ## Features
+*Bootstrapping a new computing environment because we can!*
 
 * Run and create command line, TUI, and web apps in the environment itself
 * Go compiler that runs in-browser, capable of cross-compiling to native platforms
@@ -12,18 +15,60 @@ Experimental, local-first, web-native, Unix-like operating and development envir
 * Unix-like shell that can be live-edited/recompiled or replaced entirely
 * Built-in [micro](https://github.com/zyedidia/micro) editor, similar to nano
 * Supports TypeScript and JSX in web applications without extra tooling
-* Bootstraps entire system with a single JS file and include
-* ...lots more
+* Authentication using [Auth0] for deploying as a "backend" to static site
+* GitHub filesystem for directly manipulating repository branches
 
-## Getting started
+## Install
 
-Until a bundled release or live demo is online, you'll need to run Wanix locally as a developer, which means you'll need [Go installed](https://go.dev/doc/install) on your system. Then you can run:
+The Wanix CLI is available for download from the [latest release](https://github.com/tractordev/wanix/releases/latest) or you can run this installer:
 
+```sh
+bash -c "$(curl -sSL https://raw.githubusercontent.com/tractordev/wanix/main/install.sh)"
 ```
-make dev
+
+Alternatively you can install using [Homebrew](https://brew.sh/):
+
+```sh
+brew tap progrium/homebrew-taps
+brew install wanix
 ```
 
-This will build everything and run a dev server to access a Wanix environment on localhost in your browser. Here are a few things you can do in the environment in this early state:
+## Usage
+```
+wanix [command]
+
+Available Commands:
+dev              start wanix dev server
+bootfiles        write out wanix boot files
+deploy           deploy Wanix static site to GitHub Pages
+
+Flags:
+  -v    show version
+
+Use "wanix [command] -help" for more information about a command.
+```
+
+### wanix dev
+
+This runs a local dev server you can access in the browser. At the moment, it needs to
+be run in a checkout of this repository and will make it available from within the environment at `/sys/dev`.
+
+### wanix bootfiles
+
+This will write out the 3 files necessary to manually set up a page to load Wanix. To boot Wanix on a page just include these lines:
+
+```html
+<script src="./wanix-bootloader.js"></script>
+<script>bootWanix()</script>
+```
+
+### wanix deploy
+
+This will set up a static site on a domain you provide using GitHub Pages. It will create a repository and set everything up for you. You can optionally have it set up authentication with the `--enable-auth` flag. This will configure [Auth0](https://auth0.com/) for you to be able to login with GitHub. When logged in, Wanix will mount the GitHub repository for the site itself at `/repo`, which you can use to modify the site from itself using Wanix. 
+
+## Using the Wanix environment
+
+Here are a few things you can do in the environment in this early state:
 
 ### See available built-in commands
 
@@ -43,6 +88,16 @@ The Wanix filesystem layout is different than Unix/Linux, so here are some relev
    * `/sys/bin` - Cache for wasm binaries.
    * `/sys/tmp` - For temporary files, held in-memory.
    * `/sys/dev` - Read-only mount of project repo from host dev server.
+
+### Install Hugo
+
+We have a build of Hugo available that works in Wanix you can install with:
+
+```sh
+cd /cmd
+get https://dl.wanix.sh/misc/hugo.wasm
+hugo -h
+```
 
 ### Create a shell script command
 
@@ -103,7 +158,7 @@ Since source commands are compiled when launched, they are also re-compiled afte
 
 ### Build a 3rd party Go program for Wanix
 
-Wanix will eventually [support any WASI program](https://github.com/tractordev/wanix/issues/67), but for now it runs Go programs compiled with `GOOS=js` and `GOARCH=wasm`. If it compiles without a problem, it should be able to run in Wanix. However, larger programs may have dependencies that won't build for this target without some modification. You can see the changes we made to `micro` under [external/micro](external/micro), but it will really be different for every project. For now, here is an example program compiled outside Wanix brought in via the `/sys/dev` mount.
+Wanix will eventually [support any WASI program](https://github.com/tractordev/wanix/issues/67), but for now it runs Go programs compiled with `GOOS=js` and `GOARCH=wasm`. If it compiles without a problem, it should be able to run in Wanix. However, larger programs may have dependencies that won't build for this target without some modification. You can see the changes we made to `micro` under [external/micro](external/micro), but it will really be different for every project. For now, here is an example program compiled outside Wanix brought in via the `/sys/dev` mount (running locally).
 
 We use the `local` directory in checkouts of this repo for local changes not intended to be contributed. This is a good place to build a program that will be easy to copy into Wanix. For example, you can create `./local/example` with a `main.go`:
 
