@@ -39,7 +39,7 @@ main() {
     # WSL uses msys or cygwin as OSTYPE
     os="windows"
   else
-    echo "Error: Unsupported operating system"
+    echo "Error: Unsupported operating system: $OSTYPE"
     exit 1
   fi
 
@@ -49,7 +49,7 @@ main() {
   elif [[ "$(uname -m)" == "arm64" ]]; then
     arch="arm64"
   else
-    echo "Error: Unsupported architecture"
+    echo "Error: Unsupported architecture: $(uname -m)"
     exit 1
   fi
 
