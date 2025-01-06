@@ -6,6 +6,8 @@ Experimental, web-native, Unix-like operating and development environment
 * [🎬 Wasm I/O 2024 Demo](https://www.youtube.com/watch?v=cj8FvNM14T4)
 * [🎬 Mozilla Rise 25 Demo](https://www.youtube.com/watch?v=KJcd9IckJj8)
 
+*Active development currently happening in the [0.3](https://github.com/tractordev/wanix/tree/0.3) branch.*
+
 ## Features
 *Bootstrapping a new computing environment because we can!*
 
