@@ -5,8 +5,6 @@ import (
 	iofs "io/fs"
 )
 
-// TODO: check against io/fs package for missing symbols
-
 var (
 	ErrInvalid      = iofs.ErrInvalid
 	ErrPermission   = iofs.ErrPermission

@@ -73,6 +73,7 @@ func MkdirAll(fsys FS, path string, perm FileMode) error {
 	if m, ok := fsys.(MkdirAllFS); ok {
 		return m.MkdirAll(path, perm)
 	}
+	// TODO: implement derived MkdirAll using Mkdir
 	return ErrNotSupported
 }
 
@@ -121,6 +122,7 @@ func RemoveAll(fsys FS, path string) error {
 	if r, ok := fsys.(RemoveAllFS); ok {
 		return r.RemoveAll(path)
 	}
+	// TODO: implement derived RemoveAll using Remove
 	return ErrNotSupported
 }
 
