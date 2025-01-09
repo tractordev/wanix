@@ -151,7 +151,7 @@ func (fsys FS) Mkdir(name string, perm fs.FileMode) error {
 
 func (fsys FS) Chmod(name string, mode fs.FileMode) error {
 	if !fs.ValidPath(name) {
-		return &fs.PathError{Op: "mkdir", Path: name, Err: fs.ErrNotExist}
+		return &fs.PathError{Op: "chmod", Path: name, Err: fs.ErrNotExist}
 	}
 
 	ok, err := fs.Exists(fsys, name)
@@ -159,7 +159,7 @@ func (fsys FS) Chmod(name string, mode fs.FileMode) error {
 		return err
 	}
 	if !ok {
-		return &fs.PathError{Op: "chtimes", Path: name, Err: fs.ErrNotExist}
+		return &fs.PathError{Op: "chmod", Path: name, Err: fs.ErrNotExist}
 	}
 
 	fsys[name].Mode = mode
@@ -168,7 +168,7 @@ func (fsys FS) Chmod(name string, mode fs.FileMode) error {
 
 func (fsys FS) Chtimes(name string, atime, mtime time.Time) error {
 	if !fs.ValidPath(name) {
-		return &fs.PathError{Op: "mkdir", Path: name, Err: fs.ErrNotExist}
+		return &fs.PathError{Op: "chtimes", Path: name, Err: fs.ErrNotExist}
 	}
 
 	ok, err := fs.Exists(fsys, name)
