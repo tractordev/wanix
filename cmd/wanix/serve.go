@@ -2,8 +2,9 @@ package main
 
 import (
 	"log"
+	"os"
+	"os/signal"
 
-	"github.com/hanwen/go-fuse/v2/fs"
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs/memfs"
 	"tractor.dev/wanix/fusekit"
@@ -19,11 +20,23 @@ func serveCmd() *cli.Command {
 				"fortune/k/ken.txt": {Data: []byte("If a program is too slow, it must have a loop.\n")},
 			}
 
-			server, err := fs.Mount("/tmp/wanix3", &fusekit.Node{FS: fsys}, &fs.Options{})
+			mount, err := fusekit.Mount(fsys, "/tmp/wanix")
 			if err != nil {
 				log.Fatalf("Mount fail: %v\n", err)
 			}
-			server.Wait()
+			defer func() {
+				if err := mount.Close(); err != nil {
+					log.Fatalf("Failed to unmount: %v\n", err)
+				}
+			}()
+
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan)
+			for sig := range sigChan {
+				if sig == os.Interrupt {
+					return
+				}
+			}
 		},
 	}
 	return cmd
