@@ -30,6 +30,8 @@ func serveCmd() *cli.Command {
 				}
 			}()
 
+			log.Println("Mounted at /tmp/wanix ...")
+
 			sigChan := make(chan os.Signal, 1)
 			signal.Notify(sigChan)
 			for sig := range sigChan {
