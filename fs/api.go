@@ -57,6 +57,7 @@ func OpenFile(fsys FS, name string, flag int, perm FileMode) (File, error) {
 	if o, ok := fsys.(OpenFileFS); ok {
 		return o.OpenFile(name, flag, perm)
 	}
+	// TODO: implement derived OpenFile using Open
 	return nil, ErrNotSupported
 }
 
@@ -106,6 +107,7 @@ func Create(fsys FS, name string) (File, error) {
 	if c, ok := fsys.(CreateFS); ok {
 		return c.Create(name)
 	}
+	// TODO: implement derived Create using OpenFile
 	return nil, ErrNotSupported
 }
 

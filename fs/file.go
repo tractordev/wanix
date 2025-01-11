@@ -5,17 +5,27 @@ import "io"
 func Write(f File, data []byte) (int, error) {
 	w, ok := f.(io.Writer)
 	if !ok {
-		return 0, ErrNotSupported
+		return 0, ErrPermission
 	}
 	return w.Write(data)
 }
 
 func WriteAt(f File, data []byte, off int64) (int, error) {
-	wa, ok := f.(io.WriterAt)
+	_, ok := f.(io.Writer)
 	if !ok {
-		return 0, ErrNotSupported
+		return 0, ErrPermission
 	}
-	return wa.WriteAt(data, off)
+	wa, ok := f.(io.WriterAt)
+	if ok {
+		return wa.WriteAt(data, off)
+	}
+	if off > 0 {
+		_, err := Seek(f, off, 0)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return Write(f, data)
 }
 
 func Seek(f File, offset int64, whence int) (int64, error) {

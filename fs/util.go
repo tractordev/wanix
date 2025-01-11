@@ -6,17 +6,6 @@ import (
 	"os"
 )
 
-func DirExists(fsys FS, path string) (bool, error) {
-	fi, err := Stat(fsys, path)
-	if err == nil && fi.IsDir() {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return false, err
-}
-
 func IsDir(fsys FS, path string) (bool, error) {
 	fi, err := Stat(fsys, path)
 	if err != nil {
@@ -39,7 +28,7 @@ func IsEmpty(fsys FS, path string) (bool, error) {
 			return false, err
 		}
 		defer f.Close()
-		list, err := ReadDir(fsys, path)
+		list, _ := ReadDir(fsys, path)
 		return len(list) == 0, nil
 	}
 	return fi.Size() == 0, nil
@@ -56,7 +45,19 @@ func Exists(fsys FS, path string) (bool, error) {
 	return false, err
 }
 
+func DirExists(fsys FS, path string) (bool, error) {
+	fi, err := Stat(fsys, path)
+	if err == nil && fi.IsDir() {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 func WriteFile(fsys FS, filename string, data []byte, perm FileMode) error {
+	// TODO: use Create, which should fallback to OpenFile
 	of, ok := fsys.(OpenFileFS)
 	if !ok {
 		return ErrPermission

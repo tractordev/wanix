@@ -1,6 +1,7 @@
 package memfs
 
 import (
+	"bytes"
 	"io"
 	"path"
 	"slices"
@@ -9,6 +10,8 @@ import (
 
 	"tractor.dev/wanix/fs"
 )
+
+// TODO: thread safety
 
 // A FS is a simple in-memory file system for use in tests,
 // represented as a map from path names (arguments to Open)
@@ -95,14 +98,14 @@ func (fsys FS) Open(name string) (fs.File, error) {
 		delete(need, fi.name)
 	}
 	for name := range need {
-		list = append(list, mapFileInfo{name, &MapFile{Mode: fs.ModeDir | 0555}})
+		list = append(list, mapFileInfo{name, &MapFile{Mode: fs.ModeDir | 0755}})
 	}
 	slices.SortFunc(list, func(a, b mapFileInfo) int {
 		return strings.Compare(a.name, b.name)
 	})
 
 	if file == nil {
-		file = &MapFile{Mode: fs.ModeDir | 0555}
+		file = &MapFile{Mode: fs.ModeDir | 0755}
 	}
 	return &mapDir{name, mapFileInfo{elem, file}, list, 0}, nil
 }
@@ -271,33 +274,33 @@ func (f *openMapFile) Read(b []byte) (int, error) {
 	return n, nil
 }
 
-func (f *openMapFile) Write(b []byte) (int, error) {
-	return 0, nil
+func (f *openMapFile) Write(b []byte) (n int, err error) {
 	// if f.closed == true {
 	// 	return 0, fs.ErrClosed
 	// }
 	// if f.readOnly {
 	// 	return 0, &os.PathError{Op: "write", Path: f.fileData.name, Err: errors.New("file handle is read only")}
 	// }
-	// n = len(b)
-	// cur := atomic.LoadInt64(&f.at)
+	n = len(b)
+	cur := f.offset //atomic.LoadInt64(&f.at)
 	// f.fileData.Lock()
 	// defer f.fileData.Unlock()
-	// diff := cur - int64(len(f.fileData.data))
-	// var tail []byte
-	// if n+int(cur) < len(f.fileData.data) {
-	// 	tail = f.fileData.data[n+int(cur):]
-	// }
-	// if diff > 0 {
-	// 	f.fileData.data = append(f.fileData.data, append(bytes.Repeat([]byte{00}, int(diff)), b...)...)
-	// 	f.fileData.data = append(f.fileData.data, tail...)
-	// } else {
-	// 	f.fileData.data = append(f.fileData.data[:cur], b...)
-	// 	f.fileData.data = append(f.fileData.data, tail...)
-	// }
-	// setModTime(f.fileData, time.Now())
+	diff := cur - int64(len(f.f.Data))
+	var tail []byte
+	if n+int(cur) < len(f.f.Data) {
+		tail = f.f.Data[n+int(cur):]
+	}
+	if diff > 0 {
+		f.f.Data = append(f.f.Data, append(bytes.Repeat([]byte{00}, int(diff)), b...)...)
+		f.f.Data = append(f.f.Data, tail...)
+	} else {
+		f.f.Data = append(f.f.Data[:cur], b...)
+		f.f.Data = append(f.f.Data, tail...)
+	}
+	f.f.ModTime = time.Now()
 
-	// atomic.AddInt64(&f.at, int64(n))
+	f.offset += int64(n)
+	return n, nil
 }
 
 func (f *openMapFile) Seek(offset int64, whence int) (int64, error) {
