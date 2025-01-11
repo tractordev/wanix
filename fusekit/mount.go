@@ -11,12 +11,12 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
-type fuseMount struct {
+type mount struct {
 	path string
 	*fuse.Server
 }
 
-func (m *fuseMount) Close() error {
+func (m *mount) Close() error {
 	if m.Server == nil {
 		exec.Command("umount", m.path).Run()
 		return nil
@@ -37,10 +37,10 @@ func Mount(fsys iofs.FS, path string) (closer io.Closer, err error) {
 	}
 	opts.Debug = false
 
-	server, err := fs.Mount(path, &Node{FS: fsys}, opts)
+	server, err := fs.Mount(path, &node{fs: fsys}, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	return &fuseMount{Server: server, path: path}, nil
+	return &mount{Server: server, path: path}, nil
 }
