@@ -1,7 +1,10 @@
 package fs
 
-import "io"
+import (
+	"io"
+)
 
+// Write writes data to the file.
 func Write(f File, data []byte) (int, error) {
 	w, ok := f.(io.Writer)
 	if !ok {
@@ -10,6 +13,7 @@ func Write(f File, data []byte) (int, error) {
 	return w.Write(data)
 }
 
+// WriteAt writes data to the file at the given offset.
 func WriteAt(f File, data []byte, off int64) (int, error) {
 	_, ok := f.(io.Writer)
 	if !ok {
@@ -28,6 +32,7 @@ func WriteAt(f File, data []byte, off int64) (int, error) {
 	return Write(f, data)
 }
 
+// Seek seeks to the given offset and whence.
 func Seek(f File, offset int64, whence int) (int64, error) {
 	s, ok := f.(io.Seeker)
 	if !ok {
