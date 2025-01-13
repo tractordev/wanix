@@ -28,7 +28,7 @@ func UnionDir(name string, mode fs.FileMode, dirs ...fs.File) fs.File {
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name() < entries[j].Name()
 	})
-	return DirFile(name, mode, entries...)
+	return DirFile(Entry(name, mode), entries...)
 }
 
 // read-only union of filesystems

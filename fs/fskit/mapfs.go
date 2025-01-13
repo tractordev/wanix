@@ -100,11 +100,13 @@ func (fsys MapFS) Open(name string) (fs.File, error) {
 
 	if n == nil {
 		n = Node(name, fs.ModeDir|0555)
+	} else {
+		n.name = name
 	}
 
 	var entries []fs.DirEntry
-	for _, n := range list {
-		entries = append(entries, n)
+	for _, nn := range list {
+		entries = append(entries, nn)
 	}
-	return DirFile(name, n.Mode(), entries...), nil
+	return DirFile(n, entries...), nil
 }

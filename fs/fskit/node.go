@@ -158,11 +158,11 @@ type dirFile struct {
 	offset  int
 }
 
-func DirFile(name string, mode fs.FileMode, entries ...fs.DirEntry) fs.File {
-	if mode&fs.ModeDir == 0 {
-		mode |= fs.ModeDir
+func DirFile(info *N, entries ...fs.DirEntry) fs.File {
+	if !info.IsDir() {
+		info.mode |= fs.ModeDir
 	}
-	return &dirFile{FileInfo: Entry(name, mode), path: name, entries: entries}
+	return &dirFile{FileInfo: info, path: info.name, entries: entries}
 }
 
 func (d *dirFile) Stat() (fs.FileInfo, error) { return d, nil }

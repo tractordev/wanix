@@ -1,4 +1,4 @@
-package memfs
+package fskit
 
 import (
 	"fmt"
@@ -10,9 +10,9 @@ import (
 	"tractor.dev/wanix/fs"
 )
 
-func TestCreate(t *testing.T) {
-	m := FS{
-		"hello": {Data: []byte("hello, world\n")},
+func TestMemFSCreate(t *testing.T) {
+	m := MemFS{
+		"hello": Node([]byte("hello, world\n")),
 	}
 
 	// check for failure if file already exists
@@ -29,9 +29,9 @@ func TestCreate(t *testing.T) {
 	}
 }
 
-func TestMkdir(t *testing.T) {
-	m := FS{
-		"hello": {Data: []byte("hello, world\n")},
+func TestMemFSMkdir(t *testing.T) {
+	m := MemFS{
+		"hello": Node([]byte("hello, world\n")),
 	}
 
 	// check for failure if file already exists
@@ -53,9 +53,9 @@ func TestMkdir(t *testing.T) {
 	}
 }
 
-func TestChtimes(t *testing.T) {
-	m := FS{
-		"hello": {Data: []byte("hello, world\n")},
+func TestMemFSChtimes(t *testing.T) {
+	m := MemFS{
+		"hello": Node([]byte("hello, world\n")),
 	}
 
 	// check for failure if file does not exist
@@ -76,9 +76,9 @@ func TestChtimes(t *testing.T) {
 	}
 }
 
-func TestChmod(t *testing.T) {
-	m := FS{
-		"hello": {Data: []byte("hello, world\n"), Mode: 0666},
+func TestMemFSChmod(t *testing.T) {
+	m := MemFS{
+		"hello": Node([]byte("hello, world\n"), fs.FileMode(0666)),
 	}
 
 	// check for failure if file does not exist
@@ -98,10 +98,10 @@ func TestChmod(t *testing.T) {
 	}
 }
 
-func TestRemove(t *testing.T) {
-	m := FS{
-		"hello":   {Data: []byte("hello, world\n")},
-		"foo/bar": {Data: []byte("foobar\n")},
+func TestMemFSRemove(t *testing.T) {
+	m := MemFS{
+		"hello":   Node([]byte("hello, world\n")),
+		"foo/bar": Node([]byte("foobar\n")),
 	}
 
 	// check for failure if file does not exist
@@ -127,9 +127,9 @@ func TestRemove(t *testing.T) {
 	}
 }
 
-func TestRename(t *testing.T) {
-	m := FS{
-		"hello": {Data: []byte("hello, world\n")},
+func TestMemFSRename(t *testing.T) {
+	m := MemFS{
+		"hello": Node([]byte("hello, world\n")),
 	}
 
 	// check for failure if oldfile does not exist
@@ -151,20 +151,20 @@ func TestRename(t *testing.T) {
 	}
 }
 
-func TestMapFS(t *testing.T) {
-	m := FS{
-		"hello":             {Data: []byte("hello, world\n")},
-		"fortune/k/ken.txt": {Data: []byte("If a program is too slow, it must have a loop.\n")},
+func TestMemFS(t *testing.T) {
+	m := MemFS{
+		"hello":             Node([]byte("hello, world\n")),
+		"fortune/k/ken.txt": Node([]byte("If a program is too slow, it must have a loop.\n")),
 	}
 	if err := fstest.TestFS(m, "hello", "fortune", "fortune/k", "fortune/k/ken.txt"); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestMapFSChmodDot(t *testing.T) {
-	m := FS{
-		"a/b.txt": &MapFile{Mode: 0666},
-		".":       &MapFile{Mode: 0777 | fs.ModeDir},
+func TestMemFSChmodDot(t *testing.T) {
+	m := MemFS{
+		"a/b.txt": Node(fs.FileMode(0666)),
+		".":       Node(fs.FileMode(0777 | fs.ModeDir)),
 	}
 	buf := new(strings.Builder)
 	fs.WalkDir(m, ".", func(path string, d fs.DirEntry, err error) error {
@@ -177,7 +177,7 @@ func TestMapFSChmodDot(t *testing.T) {
 	})
 	want := `
 .: drwxrwxrwx
-a: dr-xr-xr-x
+a: drwxr-xr-x
 a/b.txt: -rw-rw-rw-
 `[1:]
 	got := buf.String()
@@ -186,9 +186,9 @@ a/b.txt: -rw-rw-rw-
 	}
 }
 
-func TestMapFSFileInfoName(t *testing.T) {
-	m := FS{
-		"path/to/b.txt": &MapFile{},
+func TestMemFSFileInfoName(t *testing.T) {
+	m := MemFS{
+		"path/to/b.txt": Node(),
 	}
 	info, _ := fs.Stat(m, "path/to/b.txt")
 	want := "b.txt"
