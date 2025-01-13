@@ -6,7 +6,7 @@ import (
 	"os/signal"
 
 	"tractor.dev/toolkit-go/engine/cli"
-	"tractor.dev/wanix/fs/memfs"
+	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fusekit"
 )
 
@@ -15,9 +15,9 @@ func serveCmd() *cli.Command {
 		Usage: "serve",
 		Short: "serve wanix",
 		Run: func(ctx *cli.Context, args []string) {
-			fsys := memfs.FS{
-				"hello":             {Data: []byte("hello, world\n")},
-				"fortune/k/ken.txt": {Data: []byte("If a program is too slow, it must have a loop.\n")},
+			fsys := fskit.MemFS{
+				"hello":             fskit.Node([]byte("hello, world\n")),
+				"fortune/k/ken.txt": fskit.Node([]byte("If a program is too slow, it must have a loop.\n")),
 			}
 
 			mount, err := fusekit.Mount(fsys, "/tmp/wanix")
