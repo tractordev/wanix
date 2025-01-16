@@ -1,16 +1,18 @@
 package fskit
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"path"
+	"sync"
 	"time"
 
 	"tractor.dev/wanix/fs"
 )
 
-// N is used to create an fs.FileInfo, fs.DirEntry, or fs.FS.
-type N struct {
+// Node is used to create an fs.FileInfo, fs.DirEntry, or fs.FS.
+type Node struct {
 	name    string
 	mode    fs.FileMode
 	modTime time.Time
@@ -20,8 +22,8 @@ type N struct {
 	// nodes   []*N
 }
 
-func Node(attrs ...any) *N {
-	n := &N{}
+func RawNode(attrs ...any) *Node {
+	n := &Node{}
 	for _, m := range attrs {
 		switch v := m.(type) {
 		case int:
@@ -47,71 +49,99 @@ func Node(attrs ...any) *N {
 	return n
 }
 
-func Entry(name string, mode fs.FileMode, more ...any) *N {
-	n := Node(more...)
+func Entry(name string, mode fs.FileMode, more ...any) *Node {
+	n := RawNode(more...)
 	n.name = name
 	n.mode = mode
 	return n
 }
 
 // fs.FileInfo and fs.DirEntry interfaces implemented
-var _ = (fs.FileInfo)((*N)(nil))
-var _ = (fs.DirEntry)((*N)(nil))
+var _ = (fs.FileInfo)((*Node)(nil))
+var _ = (fs.DirEntry)((*Node)(nil))
 
-func (n *N) Name() string               { return path.Base(n.name) }
-func (n *N) Info() (fs.FileInfo, error) { return n, nil }
-func (n *N) Mode() fs.FileMode          { return n.mode }
-func (n *N) Type() fs.FileMode          { return n.mode.Type() }
-func (n *N) ModTime() time.Time         { return n.modTime }
-func (n *N) IsDir() bool                { return n.mode&fs.ModeDir != 0 }
-func (n *N) Sys() any                   { return n.sys }
+func (n *Node) Name() string               { return path.Base(n.name) }
+func (n *Node) Info() (fs.FileInfo, error) { return n, nil }
+func (n *Node) Mode() fs.FileMode          { return n.mode }
+func (n *Node) Type() fs.FileMode          { return n.mode.Type() }
+func (n *Node) ModTime() time.Time         { return n.modTime }
+func (n *Node) IsDir() bool                { return n.mode&fs.ModeDir != 0 }
+func (n *Node) Sys() any                   { return n.sys }
 
-func (n *N) Size() int64 {
+func (n *Node) Size() int64 {
 	if n.size > 0 {
 		return n.size
 	}
 	return int64(len(n.data))
 }
 
-func (n *N) String() string {
+func (n *Node) String() string {
 	return fs.FormatFileInfo(n)
 }
 
-func SetName(fsys fs.FS, name string) {
-	n, ok := fsys.(*N)
-	if !ok {
-		panic("not a *N")
-	}
+func (n *Node) Data() []byte {
+	return n.data
+}
+
+func SetName(n *Node, name string) {
 	n.name = name
 }
 
-// fs.OpenContextFS
-var _ = (fs.OpenContextFS)((*N)(nil))
+func SetData(n *Node, data []byte) {
+	n.data = data
+}
 
-func (n *N) Open(name string) (fs.File, error) {
+// fs.OpenContextFS
+var _ = (fs.OpenContextFS)((*Node)(nil))
+
+func (n *Node) Open(name string) (fs.File, error) {
 	return n.OpenContext(context.Background(), name)
 }
 
 // TODO: open sub nodes
-func (n *N) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (n *Node) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if name == "." {
-		return &nodeFile{N: n}, nil
+		return n.file(), nil
 	}
 	return nil, fs.ErrNotExist
 }
 
-type nodeFile struct {
-	*N
-	offset int64
+func (n *Node) file() *nodeFile {
+	nn := *n
+	return &nodeFile{Node: &nn}
 }
 
-func (f *nodeFile) Close() error { return nil }
+type nodeFile struct {
+	*Node
+	offset int64
+	closed bool
+	mu     sync.Mutex
+}
+
+func (f *nodeFile) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.closed {
+		return fs.ErrClosed
+	}
+
+	f.closed = true
+	return nil
+}
 
 func (f *nodeFile) Stat() (fs.FileInfo, error) {
 	return f, nil
 }
 
 func (f *nodeFile) Read(b []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.closed {
+		return 0, fs.ErrClosed
+	}
+
 	if f.offset >= int64(len(f.data)) {
 		return 0, io.EOF
 	}
@@ -124,6 +154,13 @@ func (f *nodeFile) Read(b []byte) (int, error) {
 }
 
 func (f *nodeFile) Seek(offset int64, whence int) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.closed {
+		return 0, fs.ErrClosed
+	}
+
 	switch whence {
 	case 0:
 		// offset += 0
@@ -140,6 +177,13 @@ func (f *nodeFile) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f *nodeFile) ReadAt(b []byte, offset int64) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.closed {
+		return 0, fs.ErrClosed
+	}
+
 	if offset < 0 || offset > int64(len(f.data)) {
 		return 0, &fs.PathError{Op: "read", Path: f.name, Err: fs.ErrInvalid}
 	}
@@ -150,6 +194,50 @@ func (f *nodeFile) ReadAt(b []byte, offset int64) (int, error) {
 	return n, nil
 }
 
+func (f *nodeFile) Write(b []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.closed {
+		return 0, fs.ErrClosed
+	}
+
+	n := len(b)
+	cur := f.offset
+	diff := cur - int64(len(f.data))
+	var tail []byte
+	if n+int(cur) < len(f.data) {
+		tail = f.data[n+int(cur):]
+	}
+	if diff > 0 {
+		f.data = append(f.data, append(bytes.Repeat([]byte{00}, int(diff)), b...)...)
+		f.data = append(f.data, tail...)
+	} else {
+		f.data = append(f.data[:cur], b...)
+		f.data = append(f.data, tail...)
+	}
+	f.modTime = time.Now()
+
+	f.offset += int64(n)
+	return n, nil
+}
+
+func (f *nodeFile) WriteAt(b []byte, offset int64) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.closed {
+		return 0, fs.ErrClosed
+	}
+
+	if offset < 0 || offset > int64(len(f.data)) {
+		return 0, &fs.PathError{Op: "write", Path: f.name, Err: fs.ErrInvalid}
+	}
+
+	f.offset = offset
+	return f.Write(b)
+}
+
 // dirFile is a directory fs.File implementing fs.ReadDirFile
 type dirFile struct {
 	fs.FileInfo
@@ -158,7 +246,7 @@ type dirFile struct {
 	offset  int
 }
 
-func DirFile(info *N, entries ...fs.DirEntry) fs.File {
+func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
 	if !info.IsDir() {
 		info.mode |= fs.ModeDir
 	}

@@ -1,6 +1,7 @@
 package fskit
 
 import (
+	"context"
 	"path"
 	"slices"
 	"strings"
@@ -12,22 +13,26 @@ type MapFS map[string]fs.FS
 
 var _ fs.FS = MapFS(nil)
 
-// Open opens the named file.
 func (fsys MapFS) Open(name string) (fs.File, error) {
+	return fsys.OpenContext(context.Background(), name)
+}
+
+func (fsys MapFS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
 
 	subfs, found := fsys[name]
-	n, isNode := subfs.(*N)
+	n, isNode := subfs.(*Node)
 	if found && !isNode {
-		return NamedFS(subfs, path.Base(name)).Open(".")
+		namedFS := NamedFS(subfs, path.Base(name))
+		return fs.OpenContext(ctx, namedFS, ".")
 	}
 	if found && isNode {
 		subfs = NamedFS(subfs, path.Base(name))
 		if !n.IsDir() {
 			// Ordinary file
-			return subfs.Open(".")
+			return fs.OpenContext(ctx, subfs, ".")
 		}
 		// otherwise its a directory entry...
 	}
@@ -36,7 +41,8 @@ func (fsys MapFS) Open(name string) (fs.File, error) {
 		if strings.HasPrefix(name, p+"/") {
 			subPath := strings.TrimPrefix(name, p+"/")
 			mountPath := strings.TrimSuffix(name, "/"+subPath)
-			return NamedFS(subfs, path.Base(mountPath)).Open(subPath)
+			namedFS := NamedFS(subfs, path.Base(mountPath))
+			return fs.OpenContext(ctx, namedFS, subPath)
 		}
 	}
 
@@ -44,20 +50,20 @@ func (fsys MapFS) Open(name string) (fs.File, error) {
 	// Note that file can be nil here: the map need not contain explicit parent directories for all its files.
 	// But file can also be non-nil, in case the user wants to set metadata for the directory explicitly.
 	// Either way, we need to construct the list of children of this directory.
-	var list []*N
+	var list []*Node
 	// var elem string
 	var need = make(map[string]bool)
 	if name == "." {
 		// elem = "."
 		for fname, subfs := range fsys {
-			fi, err := fs.Stat(subfs, ".")
+			fi, err := fs.StatContext(ctx, subfs, ".")
 			if err != nil {
 				continue
 			}
 			i := strings.Index(fname, "/")
 			if i < 0 {
 				if fname != "." {
-					list = append(list, Node(fi, fname))
+					list = append(list, RawNode(fi, fname))
 				}
 			} else {
 				need[fname[:i]] = true
@@ -67,7 +73,7 @@ func (fsys MapFS) Open(name string) (fs.File, error) {
 		// elem = name[strings.LastIndex(name, "/")+1:]
 		prefix := name + "/"
 		for fname, subfs := range fsys {
-			fi, err := fs.Stat(subfs, ".")
+			fi, err := fs.StatContext(ctx, subfs, ".")
 			if err != nil {
 				continue
 			}
@@ -75,7 +81,7 @@ func (fsys MapFS) Open(name string) (fs.File, error) {
 				felem := fname[len(prefix):]
 				i := strings.Index(felem, "/")
 				if i < 0 {
-					list = append(list, Node(fi, felem))
+					list = append(list, RawNode(fi, felem))
 				} else {
 					need[fname[len(prefix):len(prefix)+i]] = true
 				}
@@ -92,14 +98,14 @@ func (fsys MapFS) Open(name string) (fs.File, error) {
 		delete(need, fi.name)
 	}
 	for name := range need {
-		list = append(list, Node(name, fs.FileMode(fs.ModeDir|0555)))
+		list = append(list, RawNode(name, fs.FileMode(fs.ModeDir|0555)))
 	}
-	slices.SortFunc(list, func(a, b *N) int {
+	slices.SortFunc(list, func(a, b *Node) int {
 		return strings.Compare(a.name, b.name)
 	})
 
 	if n == nil {
-		n = Node(name, fs.ModeDir|0555)
+		n = RawNode(name, fs.ModeDir|0555)
 	} else {
 		n.name = name
 	}

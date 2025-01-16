@@ -10,8 +10,8 @@ import (
 
 func TestMapFS(t *testing.T) {
 	m := MapFS{
-		"hello":             Node([]byte("hello, world\n")),
-		"fortune/k/ken.txt": Node([]byte("If a program is too slow, it must have a loop.\n")),
+		"hello":             RawNode([]byte("hello, world\n")),
+		"fortune/k/ken.txt": RawNode([]byte("If a program is too slow, it must have a loop.\n")),
 	}
 	if err := fstest.TestFS(m, "hello", "fortune", "fortune/k", "fortune/k/ken.txt"); err != nil {
 		t.Fatal(err)
@@ -20,8 +20,8 @@ func TestMapFS(t *testing.T) {
 
 func TestMapFSSubdirs(t *testing.T) {
 	subdir := MapFS{
-		"hello":             Node([]byte("hello, world\n")),
-		"fortune/k/ken.txt": Node([]byte("If a program is too slow, it must have a loop.\n")),
+		"hello":             RawNode([]byte("hello, world\n")),
+		"fortune/k/ken.txt": RawNode([]byte("If a program is too slow, it must have a loop.\n")),
 	}
 	m := MapFS{
 		"dir": subdir,
@@ -33,8 +33,8 @@ func TestMapFSSubdirs(t *testing.T) {
 
 func TestMapFSChmodDot(t *testing.T) {
 	m := MapFS{
-		"a/b.txt": Node(fs.FileMode(0666)),
-		".":       Node(fs.FileMode(0777 | fs.ModeDir)),
+		"a/b.txt": RawNode(fs.FileMode(0666)),
+		".":       RawNode(fs.FileMode(0777 | fs.ModeDir)),
 	}
 	buf := new(strings.Builder)
 	fs.WalkDir(m, ".", func(path string, d fs.DirEntry, _ error) error {
@@ -58,7 +58,7 @@ a/b.txt: -rw-rw-rw-
 
 func TestMapFSFileInfoName(t *testing.T) {
 	m := MapFS{
-		"path/to/b.txt": Node(),
+		"path/to/b.txt": RawNode(),
 	}
 	info, _ := fs.Stat(m, "path/to/b.txt")
 	want := "b.txt"

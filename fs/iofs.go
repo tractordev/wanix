@@ -26,8 +26,9 @@ var (
 	WalkDir            = iofs.WalkDir
 	FileInfoToDirEntry = iofs.FileInfoToDirEntry
 	ReadDir            = iofs.ReadDir
-	Sub                = iofs.Sub
 	Stat               = iofs.Stat
+	// Sub                = iofs.Sub
+
 )
 
 const (

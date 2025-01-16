@@ -1,6 +1,7 @@
 package fskit
 
 import (
+	"context"
 	"path"
 	"slices"
 	"strings"
@@ -9,10 +10,13 @@ import (
 	"tractor.dev/wanix/fs"
 )
 
-type MemFS map[string]*N
+type MemFS map[string]*Node
 
-// Open opens the named file.
 func (fsys MemFS) Open(name string) (fs.File, error) {
+	return fsys.OpenContext(context.Background(), name)
+}
+
+func (fsys MemFS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
@@ -21,7 +25,7 @@ func (fsys MemFS) Open(name string) (fs.File, error) {
 		n.name = name
 		if !n.IsDir() {
 			// Ordinary file
-			return n.Open(".")
+			return fs.OpenContext(ctx, n, ".")
 		}
 	}
 
@@ -29,14 +33,14 @@ func (fsys MemFS) Open(name string) (fs.File, error) {
 	// Note that file can be nil here: the map need not contain explicit parent directories for all its files.
 	// But file can also be non-nil, in case the user wants to set metadata for the directory explicitly.
 	// Either way, we need to construct the list of children of this directory.
-	var list []*N
+	var list []*Node
 	var need = make(map[string]bool)
 	if name == "." {
 		for fname, fi := range fsys {
 			i := strings.Index(fname, "/")
 			if i < 0 {
 				if fname != "." {
-					list = append(list, Node(fi, fname))
+					list = append(list, RawNode(fi, fname))
 				}
 			} else {
 				need[fname[:i]] = true
@@ -49,7 +53,7 @@ func (fsys MemFS) Open(name string) (fs.File, error) {
 				felem := fname[len(prefix):]
 				i := strings.Index(felem, "/")
 				if i < 0 {
-					list = append(list, Node(fi, felem))
+					list = append(list, RawNode(fi, felem))
 				} else {
 					need[fname[len(prefix):len(prefix)+i]] = true
 				}
@@ -66,14 +70,14 @@ func (fsys MemFS) Open(name string) (fs.File, error) {
 		delete(need, fi.name)
 	}
 	for name := range need {
-		list = append(list, Node(name, fs.FileMode(fs.ModeDir|0755)))
+		list = append(list, RawNode(name, fs.FileMode(fs.ModeDir|0755)))
 	}
-	slices.SortFunc(list, func(a, b *N) int {
+	slices.SortFunc(list, func(a, b *Node) int {
 		return strings.Compare(a.Name(), b.Name())
 	})
 
 	if n == nil {
-		n = Node(name, fs.ModeDir|0755)
+		n = RawNode(name, fs.ModeDir|0755)
 	}
 	var entries []fs.DirEntry
 	for _, n := range list {

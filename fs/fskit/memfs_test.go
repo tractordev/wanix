@@ -12,7 +12,7 @@ import (
 
 func TestMemFSCreate(t *testing.T) {
 	m := MemFS{
-		"hello": Node([]byte("hello, world\n")),
+		"hello": RawNode([]byte("hello, world\n")),
 	}
 
 	// check for failure if file already exists
@@ -31,7 +31,7 @@ func TestMemFSCreate(t *testing.T) {
 
 func TestMemFSMkdir(t *testing.T) {
 	m := MemFS{
-		"hello": Node([]byte("hello, world\n")),
+		"hello": RawNode([]byte("hello, world\n")),
 	}
 
 	// check for failure if file already exists
@@ -55,7 +55,7 @@ func TestMemFSMkdir(t *testing.T) {
 
 func TestMemFSChtimes(t *testing.T) {
 	m := MemFS{
-		"hello": Node([]byte("hello, world\n")),
+		"hello": RawNode([]byte("hello, world\n")),
 	}
 
 	// check for failure if file does not exist
@@ -78,7 +78,7 @@ func TestMemFSChtimes(t *testing.T) {
 
 func TestMemFSChmod(t *testing.T) {
 	m := MemFS{
-		"hello": Node([]byte("hello, world\n"), fs.FileMode(0666)),
+		"hello": RawNode([]byte("hello, world\n"), fs.FileMode(0666)),
 	}
 
 	// check for failure if file does not exist
@@ -100,8 +100,8 @@ func TestMemFSChmod(t *testing.T) {
 
 func TestMemFSRemove(t *testing.T) {
 	m := MemFS{
-		"hello":   Node([]byte("hello, world\n")),
-		"foo/bar": Node([]byte("foobar\n")),
+		"hello":   RawNode([]byte("hello, world\n")),
+		"foo/bar": RawNode([]byte("foobar\n")),
 	}
 
 	// check for failure if file does not exist
@@ -129,7 +129,7 @@ func TestMemFSRemove(t *testing.T) {
 
 func TestMemFSRename(t *testing.T) {
 	m := MemFS{
-		"hello": Node([]byte("hello, world\n")),
+		"hello": RawNode([]byte("hello, world\n")),
 	}
 
 	// check for failure if oldfile does not exist
@@ -153,8 +153,8 @@ func TestMemFSRename(t *testing.T) {
 
 func TestMemFS(t *testing.T) {
 	m := MemFS{
-		"hello":             Node([]byte("hello, world\n")),
-		"fortune/k/ken.txt": Node([]byte("If a program is too slow, it must have a loop.\n")),
+		"hello":             RawNode([]byte("hello, world\n")),
+		"fortune/k/ken.txt": RawNode([]byte("If a program is too slow, it must have a loop.\n")),
 	}
 	if err := fstest.TestFS(m, "hello", "fortune", "fortune/k", "fortune/k/ken.txt"); err != nil {
 		t.Fatal(err)
@@ -163,8 +163,8 @@ func TestMemFS(t *testing.T) {
 
 func TestMemFSChmodDot(t *testing.T) {
 	m := MemFS{
-		"a/b.txt": Node(fs.FileMode(0666)),
-		".":       Node(fs.FileMode(0777 | fs.ModeDir)),
+		"a/b.txt": RawNode(fs.FileMode(0666)),
+		".":       RawNode(fs.FileMode(0777 | fs.ModeDir)),
 	}
 	buf := new(strings.Builder)
 	fs.WalkDir(m, ".", func(path string, d fs.DirEntry, err error) error {
@@ -188,7 +188,7 @@ a/b.txt: -rw-rw-rw-
 
 func TestMemFSFileInfoName(t *testing.T) {
 	m := MemFS{
-		"path/to/b.txt": Node(),
+		"path/to/b.txt": RawNode(),
 	}
 	info, _ := fs.Stat(m, "path/to/b.txt")
 	want := "b.txt"

@@ -1,6 +1,11 @@
 package fs
 
-import "context"
+import (
+	"context"
+	"errors"
+	"slices"
+	"strings"
+)
 
 type OpenContextFS interface {
 	FS
@@ -9,9 +14,46 @@ type OpenContextFS interface {
 
 // OpenContext is a helper that opens a file with the given context and name
 // falling back to Open if context is not supported.
-func OpenContext(fsys FS, ctx context.Context, name string) (File, error) {
+func OpenContext(ctx context.Context, fsys FS, name string) (File, error) {
 	if o, ok := fsys.(OpenContextFS); ok {
 		return o.OpenContext(ctx, name)
 	}
 	return fsys.Open(name)
+}
+
+func ReadDirContext(ctx context.Context, fsys FS, name string) ([]DirEntry, error) {
+	// ReadDirFS doesn't implement context
+	// if fsys, ok := fsys.(ReadDirFS); ok {
+	// 	return fsys.ReadDir(name)
+	// }
+
+	file, err := OpenContext(ctx, fsys, name)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	dir, ok := file.(ReadDirFile)
+	if !ok {
+		return nil, &PathError{Op: "readdir", Path: name, Err: errors.New("not implemented")}
+	}
+
+	list, err := dir.ReadDir(-1)
+	slices.SortFunc(list, func(a, b DirEntry) int {
+		return strings.Compare(a.Name(), b.Name())
+	})
+	return list, err
+}
+
+func StatContext(ctx context.Context, fsys FS, name string) (FileInfo, error) {
+	// if fsys, ok := fsys.(StatFS); ok {
+	// 	return fsys.Stat(name)
+	// }
+
+	file, err := OpenContext(ctx, fsys, name)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return file.Stat()
 }

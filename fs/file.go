@@ -40,3 +40,27 @@ func Seek(f File, offset int64, whence int) (int64, error) {
 	}
 	return s.Seek(offset, whence)
 }
+
+// ReadAt reads len(p) bytes into p starting at offset off in the file f.
+// If f does not support ReadAt or Seek, it reads and discards bytes until the offset.
+func ReadAt(f File, p []byte, off int64) (int, error) {
+	if ra, ok := f.(io.ReaderAt); ok {
+		return ra.ReadAt(p, off)
+	}
+
+	// Check if the file supports seeking
+	if seeker, ok := f.(io.Seeker); ok {
+		if _, err := seeker.Seek(off, io.SeekStart); err != nil {
+			return 0, err
+		}
+		return f.Read(p)
+	}
+
+	// Emulate ReadAt by reading and discarding bytes up to off
+	_, err := io.CopyN(io.Discard, f, off)
+	if err != nil {
+		return 0, err
+	}
+
+	return f.Read(p)
+}

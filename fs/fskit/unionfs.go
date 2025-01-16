@@ -2,8 +2,9 @@ package fskit
 
 import (
 	"context"
-	"io/fs"
 	"sort"
+
+	"tractor.dev/wanix/fs"
 )
 
 func UnionDir(name string, mode fs.FileMode, dirs ...fs.File) fs.File {
@@ -49,7 +50,7 @@ func (f UnionFS) OpenContext(ctx context.Context, name string) (fs.File, error) 
 
 	// First check if it exists as a file/dir in any filesystem
 	for _, fsys := range f {
-		file, err := fsys.Open(name)
+		file, err := fs.OpenContext(ctx, fsys, name)
 		if err != nil {
 			continue
 		}
@@ -71,13 +72,13 @@ func (f UnionFS) OpenContext(ctx context.Context, name string) (fs.File, error) 
 	if !foundAny && name != "." {
 		// Check if any filesystem has files under this path
 		for _, fsys := range f {
-			entries, err := fs.ReadDir(fsys, name)
+			entries, err := fs.ReadDirContext(ctx, fsys, name)
 			if err == nil && len(entries) > 0 {
 				// It's an implicit directory
 				isDir = true
 				foundAny = true
 				// Create a directory entry for each filesystem that has content under this path
-				if file, err := fsys.Open(name); err == nil {
+				if file, err := fs.OpenContext(ctx, fsys, name); err == nil {
 					files = append(files, file)
 				}
 			}
