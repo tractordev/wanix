@@ -1,8 +1,10 @@
 package fusekit
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"syscall"
 
 	"tractor.dev/wanix/fs"
@@ -10,6 +12,7 @@ import (
 
 func sysErrno(err error) syscall.Errno {
 	log.Printf("ERR: %T %v", err, err)
+	// printLastFrames()
 	switch err {
 	case nil:
 		return syscall.Errno(0)
@@ -39,4 +42,26 @@ func sysErrno(err error) syscall.Errno {
 		return syscall.EOPNOTSUPP
 	}
 
+}
+
+func printLastFrames() {
+	const depth = 3
+	var pcs [depth]uintptr
+	n := runtime.Callers(2, pcs[:]) // Skip printLastFrames and runtime.Callers itself
+
+	if n == 0 {
+		fmt.Println("No callers")
+		return
+	}
+
+	frames := runtime.CallersFrames(pcs[:n])
+
+	fmt.Println("Recent call stack:")
+	for {
+		frame, more := frames.Next()
+		fmt.Printf("- %s\n    at %s:%d\n", frame.Function, frame.File, frame.Line)
+		if !more {
+			break
+		}
+	}
 }

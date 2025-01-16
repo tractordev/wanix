@@ -19,6 +19,7 @@ type node struct {
 	fs.Inode
 	fs   iofs.FS
 	path string
+	ctx  context.Context
 }
 
 var _ = (fs.NodeGetattrer)((*node)(nil))
@@ -26,7 +27,7 @@ var _ = (fs.NodeGetattrer)((*node)(nil))
 func (n *node) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
 	log.Println("getattr", n.path)
 
-	fi, err := iofs.Stat(n.fs, ".")
+	fi, err := iofs.StatContext(n.ctx, n.fs, ".")
 	if err != nil {
 		return sysErrno(err)
 	}
@@ -48,7 +49,7 @@ var _ = (fs.NodeReaddirer)((*node)(nil))
 func (n *node) Readdir(ctx context.Context) (fs.DirStream, syscall.Errno) {
 	log.Println("readdir", n.path)
 
-	entries, err := iofs.ReadDir(n.fs, ".")
+	entries, err := iofs.ReadDirContext(n.ctx, n.fs, ".")
 	if err != nil {
 		return nil, sysErrno(err)
 	}
@@ -77,7 +78,7 @@ var _ = (fs.NodeLookuper)((*node)(nil))
 func (n *node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
 	log.Println("lookup", n.path, name)
 
-	fi, err := iofs.Stat(n.fs, name)
+	fi, err := iofs.StatContext(n.ctx, n.fs, name)
 	if err != nil {
 		return nil, sysErrno(err)
 	}
@@ -95,6 +96,7 @@ func (n *node) Lookup(ctx context.Context, name string, out *fuse.EntryOut) (*fs
 	}
 
 	return n.Inode.NewPersistentInode(ctx, &node{
+		ctx:  n.ctx,
 		fs:   subfs,
 		path: filepath.Join(n.path, name),
 	}, fs.StableAttr{
@@ -135,6 +137,7 @@ func (n *node) Create(ctx context.Context, name string, flags uint32, mode uint3
 	}
 
 	return n.Inode.NewPersistentInode(ctx, &node{
+		ctx:  n.ctx,
 		fs:   subfs,
 		path: filepath.Join(n.path, name),
 	}, fs.StableAttr{
@@ -156,7 +159,7 @@ func (n *node) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFl
 			return nil, 0, sysErrno(err)
 		}
 	} else {
-		f, err = n.fs.Open(".")
+		f, err = iofs.OpenContext(n.ctx, n.fs, ".")
 		if err != nil {
 			return nil, 0, sysErrno(err)
 		}

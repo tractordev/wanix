@@ -1,6 +1,7 @@
 package fusekit
 
 import (
+	"context"
 	"errors"
 	"io"
 	iofs "io/fs"
@@ -24,7 +25,7 @@ func (m *mount) Close() error {
 	return m.Server.Unmount()
 }
 
-func Mount(fsys iofs.FS, path string) (closer io.Closer, err error) {
+func Mount(fsys iofs.FS, path string, fsctx context.Context) (closer io.Closer, err error) {
 	exec.Command("umount", path).Run()
 
 	if err := os.MkdirAll(path, 0755); err != nil {
@@ -37,7 +38,7 @@ func Mount(fsys iofs.FS, path string) (closer io.Closer, err error) {
 	}
 	opts.Debug = false
 
-	server, err := fs.Mount(path, &node{fs: fsys}, opts)
+	server, err := fs.Mount(path, &node{fs: fsys, ctx: fsctx}, opts)
 	if err != nil {
 		return nil, err
 	}
