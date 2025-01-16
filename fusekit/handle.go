@@ -20,21 +20,9 @@ type handle struct {
 var _ = (fs.FileReader)((*handle)(nil))
 
 func (h *handle) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	log.Println("read", h.path)
+	log.Println("read", h.path, off)
 
-	if ra, ok := h.file.(io.ReaderAt); ok {
-		n, err := ra.ReadAt(dest, off)
-		if err != nil && err != io.EOF {
-			return nil, sysErrno(err)
-		}
-		return fuse.ReadResultData(dest[:n]), 0
-	}
-
-	if off > 0 {
-		return nil, sysErrno(iofs.ErrNotSupported)
-	}
-
-	n, err := h.file.Read(dest)
+	n, err := iofs.ReadAt(h.file, dest, off)
 	if err != nil && err != io.EOF {
 		return nil, sysErrno(err)
 	}
