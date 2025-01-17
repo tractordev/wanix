@@ -8,7 +8,7 @@ import (
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/fusekit"
+	"tractor.dev/wanix/fs/fusekit"
 	"tractor.dev/wanix/kernel"
 )
 
