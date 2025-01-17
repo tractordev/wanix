@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"io/fs"
 	"log"
 	"os"
@@ -10,8 +9,7 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fusekit"
-	"tractor.dev/wanix/kernel/fsys"
-	"tractor.dev/wanix/kernel/proc"
+	"tractor.dev/wanix/kernel"
 )
 
 func serveCmd() *cli.Command {
@@ -21,39 +19,20 @@ func serveCmd() *cli.Command {
 		Run: func(ctx *cli.Context, args []string) {
 			log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
-			kdev := fsys.New()
-			kdev.Register("hellofs", func(args []string) (fs.FS, error) {
-				log.Println("NEW HELLOFS:", args)
+			k := kernel.New()
+			k.Fsys.Register("hellofs", func(args []string) (fs.FS, error) {
 				return fskit.MapFS{"hellofile": fskit.RawNode([]byte("hello, world\n"))}, nil
 			})
 
-			kproc := proc.New()
-			kproc.Register("ns", func(args []string) (fs.FS, error) {
-				return nil, nil
-			})
-
-			p, err := kproc.Alloc("ns")
+			root, err := k.NewRoot()
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			kroot := fskit.MapFS{
-				"#dev":  kdev,
-				"#proc": kproc,
-			}
+			root.Bind("#fsys", "fsys")
+			root.Bind("#proc", "proc")
 
-			nsfs := p.Namespace()
-			if err := nsfs.Bind(kroot, ".", ".", ""); err != nil {
-				log.Fatalf("kernel bind fail: %v\n", err)
-			}
-			if err := nsfs.Bind(nsfs, "#dev", "dev", ""); err != nil {
-				log.Fatalf("dev bind fail: %v\n", err)
-			}
-			if err := nsfs.Bind(nsfs, "#proc", "proc", ""); err != nil {
-				log.Fatalf("proc bind fail: %v\n", err)
-			}
-
-			mount, err := fusekit.Mount(nsfs, "/tmp/wanix", proc.NewContextWithPID(context.Background(), p.ID()))
+			mount, err := fusekit.Mount(root.Namespace(), "/tmp/wanix", root.Context())
 			if err != nil {
 				log.Fatalf("Mount fail: %v\n", err)
 			}

@@ -2,7 +2,6 @@ package fsys
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"strconv"
 
@@ -86,7 +85,6 @@ func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(ctx *cli.Context, args []string) {
-				fmt.Println("CMD:", args)
 				if args[0] == "mount" {
 					var err error
 					r.fs, err = r.factory(args[1:])

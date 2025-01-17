@@ -2,7 +2,7 @@ package proc
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"strconv"
 
 	"tractor.dev/toolkit-go/engine/cli"
@@ -23,10 +23,6 @@ func (k *contextKey) String() string { return "wanix/kernel context value " + k.
 var (
 	ProcessContextKey = &contextKey{"process"}
 )
-
-func NewContextWithPID(ctx context.Context, pid string) context.Context {
-	return context.WithValue(ctx, ProcessContextKey, pid)
-}
 
 func PIDFromContext(ctx context.Context) (string, bool) {
 	p, ok := ctx.Value(ProcessContextKey).(string)
@@ -62,7 +58,7 @@ func (d *Device) Alloc(kind string) (*Process, error) {
 		id:      d.nextID,
 		typ:     kind,
 		factory: factory,
-		fs:      ns.New(),
+		ns:      ns.New(),
 	}
 	d.resources[rid] = p
 	return p, nil
@@ -104,7 +100,7 @@ func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) 
 
 type Process struct {
 	factory func([]string) (fs.FS, error)
-	fs      *ns.FS
+	ns      *ns.FS
 	id      int
 	typ     string
 }
@@ -113,8 +109,16 @@ func (r *Process) ID() string {
 	return strconv.Itoa(r.id)
 }
 
+func (r *Process) Context() context.Context {
+	return context.WithValue(context.Background(), ProcessContextKey, r.ID())
+}
+
 func (r *Process) Namespace() *ns.FS {
-	return r.fs
+	return r.ns
+}
+
+func (r *Process) Bind(srcPath, dstPath string) error {
+	return r.ns.Bind(r.ns, srcPath, dstPath, "")
 }
 
 func (r *Process) Open(name string) (fs.File, error) {
@@ -127,11 +131,15 @@ func (r *Process) OpenContext(ctx context.Context, name string) (fs.File, error)
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(ctx *cli.Context, args []string) {
-				fmt.Println("proc ctl:", args)
+				if len(args) == 3 && args[0] == "bind" {
+					if err := r.Bind(args[1], args[2]); err != nil {
+						log.Println(err)
+					}
+				}
 			},
 		}),
 		"type": p9.FieldFile(r.typ, nil),
-		"ns":   r.fs,
+		"ns":   r.ns,
 	}
 	return fs.OpenContext(ctx, fsys, name)
 }
