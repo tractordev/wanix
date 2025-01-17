@@ -1,11 +1,15 @@
 package ns
 
 import (
-	"io/fs"
+	"context"
 	"reflect"
 	"sort"
 	"testing"
 	"testing/fstest"
+
+	"tractor.dev/wanix/fs"
+
+	"tractor.dev/wanix/fs/fskit"
 )
 
 func TestNamespace(t *testing.T) {
@@ -21,6 +25,7 @@ func TestNamespace(t *testing.T) {
 
 	// Test file binding
 	ns.Bind(testFS, "file1.txt", "bound-file.txt", "replace")
+
 	content, err := fs.ReadFile(ns, "bound-file.txt")
 	if err != nil {
 		t.Fatalf("Failed to open bound file: %v", err)
@@ -53,6 +58,127 @@ func TestNamespace(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for nonexistent file")
 	}
+}
+
+func TestFileBindOverRootBind(t *testing.T) {
+	abfs := fskit.MapFS{
+		"a": fskit.RawNode([]byte("content1")),
+		"b": fskit.RawNode([]byte("content2")),
+	}
+
+	cfs := fskit.MapFS{
+		"c": abfs,
+	}
+
+	ns := New()
+	if err := ns.Bind(abfs, ".", ".", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := ns.Bind(cfs, "c", "c", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	e, err := fs.ReadDir(ns, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e) != 3 {
+		// a, b, c
+		t.Fatalf("unexpected number of entries: %v", len(e))
+	}
+}
+
+func TestRecursiveSubpathBind(t *testing.T) {
+	ns := New()
+
+	loopFS := fskit.MapFS{
+		"ctl": fskit.RawNode([]byte("content1")),
+		"ns":  ns,
+	}
+
+	rootFS := fskit.MapFS{
+		"inner": loopFS,
+	}
+
+	ns.Bind(rootFS, ".", ".", "")
+
+	_, err := fs.StatContext(context.Background(), ns, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHiddenSelfBind(t *testing.T) {
+	abFS := fskit.MapFS{
+		"a": fskit.RawNode([]byte("content1")),
+		"b": fskit.RawNode([]byte("content2")),
+	}
+
+	mfs := fskit.MapFS{
+		"one":  abFS,
+		"#two": abFS,
+	}
+
+	ns := New()
+	if err := ns.Bind(mfs, ".", ".", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := ns.Bind(ns, "#two", "two", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	e, err := fs.ReadDir(ns, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e) != 2 {
+		// one, two
+		t.Fatal("unexpected number of non-hidden entries")
+	}
+
+	e, err = fs.ReadDir(ns, "two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e) != 2 {
+		// a, b
+		t.Fatal("unexpected number of non-hidden entries")
+	}
+
+	_, err = fs.Stat(ns, "two/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNamespaceHidden(t *testing.T) {
+	testFS := fstest.MapFS{
+		"a":  {Data: []byte("content1")},
+		"b":  {Data: []byte("content2")},
+		"#c": {Data: []byte("hidden")},
+	}
+
+	ns := New()
+	ns.Bind(testFS, ".", "#foo", "replace")
+
+	e, _ := fs.ReadDir(ns, ".")
+	if len(e) != 0 {
+		t.Fatal("expected empty root dir listing")
+	}
+
+	e, _ = fs.ReadDir(ns, "#foo")
+	if len(e) != 2 {
+		t.Fatal("expected only 2 files in #foo dir listing")
+	}
+
+	b, err := fs.ReadFile(ns, "#foo/#c")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != "hidden" {
+		t.Fatal("unexpected hidden file contents")
+	}
+
 }
 
 func TestUnionBinding(t *testing.T) {

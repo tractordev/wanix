@@ -2,6 +2,7 @@ package ns
 
 import (
 	"context"
+	"path"
 	"slices"
 	"sort"
 	"strings"
@@ -66,9 +67,33 @@ func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 	return nil
 }
 
+func (ns *FS) Stat(name string) (fs.FileInfo, error) {
+	return ns.StatContext(context.Background(), name)
+}
+
+func (ns *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
+	}
+
+	// we implement Stat to try and avoid using Open for Stat
+	// since it involves calling Stat on all sub filesystem roots
+	// which could lead to stack overflow when there is a cycle.
+
+	if name == "." {
+		return fskit.Entry(name, fs.ModeDir|0755), nil
+	}
+
+	file, err := fs.OpenContext(ctx, ns, name)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return file.Stat()
+}
+
 // Open implements fs.FS interface
 func (ns *FS) Open(name string) (fs.File, error) {
-	//misc.CallerLog(fmt.Sprintf("%T open %s", ns, name))
 	return ns.OpenContext(context.Background(), name)
 }
 
@@ -130,8 +155,7 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 			relativePath = strings.TrimPrefix(relativePath, "/")
 			for _, ref := range refs {
 				if ref.path != "." {
-					// skip file bindings
-					continue
+					relativePath = path.Join(ref.path, relativePath)
 				}
 				fi, err := fs.StatContext(ctx, ref.fs, relativePath)
 				if err != nil {
@@ -163,15 +187,7 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 		}
 	}
 
-	if dir != nil {
-		slices.SortFunc(dirEntries, func(a, b fs.DirEntry) int {
-			return strings.Compare(a.Name(), b.Name())
-		})
-		return fskit.DirFile(dir, dirEntries...), nil
-	}
-
 	// Synthesized parent directories
-	var list []fs.DirEntry
 	var need = make(map[string]bool)
 	if name == "." {
 		for fname, refs := range ns.bindings {
@@ -180,7 +196,7 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 				if fname != "." {
 					for _, ref := range refs {
 						if info, err := ref.fileInfo(ctx, fname); err == nil {
-							list = append(list, info)
+							dirEntries = append(dirEntries, info)
 						}
 					}
 				}
@@ -197,7 +213,7 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 				if i < 0 {
 					for _, ref := range refs {
 						if info, err := ref.fileInfo(ctx, fname); err == nil {
-							list = append(list, info)
+							dirEntries = append(dirEntries, info)
 						}
 					}
 				} else {
@@ -208,19 +224,19 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 		// If the name is not binding,
 		// and there are no children of the name,
 		// then the directory is treated as not existing.
-		if list == nil && len(need) == 0 {
+		if dirEntries == nil && len(need) == 0 {
 			return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 		}
 	}
-	for _, fi := range list {
+	for _, fi := range dirEntries {
 		delete(need, fi.Name())
 	}
 	for name := range need {
-		list = append(list, fskit.Entry(name, fs.ModeDir|0755))
+		dirEntries = append(dirEntries, fskit.Entry(name, fs.ModeDir|0755))
 	}
-	slices.SortFunc(list, func(a, b fs.DirEntry) int {
+	slices.SortFunc(dirEntries, func(a, b fs.DirEntry) int {
 		return strings.Compare(a.Name(), b.Name())
 	})
 
-	return fskit.DirFile(fskit.Entry(name, fs.ModeDir|0755), list...), nil
+	return fskit.DirFile(fskit.Entry(name, fs.ModeDir|0755), dirEntries...), nil
 }

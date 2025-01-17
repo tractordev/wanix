@@ -167,7 +167,7 @@ func TestMemFSChmodDot(t *testing.T) {
 		".":       RawNode(fs.FileMode(0777 | fs.ModeDir)),
 	}
 	buf := new(strings.Builder)
-	fs.WalkDir(m, ".", func(path string, d fs.DirEntry, err error) error {
+	fs.WalkDir(m, ".", func(path string, d fs.DirEntry, _ error) error {
 		fi, err := d.Info()
 		if err != nil {
 			return err

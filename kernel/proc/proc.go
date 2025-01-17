@@ -51,6 +51,23 @@ func (d *Device) Register(kind string, factory func([]string) (fs.FS, error)) {
 	d.types[kind] = factory
 }
 
+func (d *Device) Alloc(kind string) (*Process, error) {
+	factory, ok := d.types[kind]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	d.nextID++
+	rid := strconv.Itoa(d.nextID)
+	p := &Process{
+		id:      d.nextID,
+		typ:     kind,
+		factory: factory,
+		fs:      ns.New(),
+	}
+	d.resources[rid] = p
+	return p, nil
+}
+
 func (d *Device) Open(name string) (fs.File, error) {
 	return d.OpenContext(context.Background(), name)
 }
@@ -68,19 +85,11 @@ func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) 
 			return &fskit.FuncFile{
 				Node: fskit.Entry(name, 0555),
 				ReadFunc: func(n *fskit.Node) error {
-					factory, ok := d.types[name]
-					if !ok {
-						return fs.ErrNotExist
+					p, err := d.Alloc(name)
+					if err != nil {
+						return err
 					}
-					d.nextID++
-					rid := strconv.Itoa(d.nextID)
-					d.resources[rid] = &Process{
-						id:      d.nextID,
-						typ:     name,
-						factory: factory,
-						fs:      ns.New(),
-					}
-					fskit.SetData(n, []byte(rid+"\n"))
+					fskit.SetData(n, []byte(p.ID()+"\n"))
 					return nil
 				},
 			}, nil
@@ -95,13 +104,17 @@ func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) 
 
 type Process struct {
 	factory func([]string) (fs.FS, error)
-	fs      fs.FS
+	fs      *ns.FS
 	id      int
 	typ     string
 }
 
 func (r *Process) ID() string {
 	return strconv.Itoa(r.id)
+}
+
+func (r *Process) Namespace() *ns.FS {
+	return r.fs
 }
 
 func (r *Process) Open(name string) (fs.File, error) {

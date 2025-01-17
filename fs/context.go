@@ -45,10 +45,15 @@ func ReadDirContext(ctx context.Context, fsys FS, name string) ([]DirEntry, erro
 	return list, err
 }
 
+type StatContextFS interface {
+	FS
+	StatContext(ctx context.Context, name string) (FileInfo, error)
+}
+
 func StatContext(ctx context.Context, fsys FS, name string) (FileInfo, error) {
-	// if fsys, ok := fsys.(StatFS); ok {
-	// 	return fsys.Stat(name)
-	// }
+	if fsys, ok := fsys.(StatContextFS); ok {
+		return fsys.StatContext(ctx, name)
+	}
 
 	file, err := OpenContext(ctx, fsys, name)
 	if err != nil {

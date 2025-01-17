@@ -13,6 +13,36 @@ type MapFS map[string]fs.FS
 
 var _ fs.FS = MapFS(nil)
 
+func (fsys MapFS) Stat(name string) (fs.FileInfo, error) {
+	return fsys.StatContext(context.Background(), name)
+}
+
+func (fsys MapFS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
+	}
+
+	// we implement Stat to try and avoid using Open for Stat
+	// since it involves calling Stat on all sub filesystem roots
+	// which could lead to stack overflow when there is a cycle.
+
+	if name == "." {
+		return Entry(name, fs.ModeDir|0555), nil
+	}
+
+	subfs, found := fsys[name]
+	if found {
+		return fs.StatContext(ctx, subfs, ".")
+	}
+
+	file, err := fs.OpenContext(ctx, fsys, name)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return file.Stat()
+}
+
 func (fsys MapFS) Open(name string) (fs.File, error) {
 	return fsys.OpenContext(context.Background(), name)
 }
@@ -56,13 +86,13 @@ func (fsys MapFS) OpenContext(ctx context.Context, name string) (fs.File, error)
 	if name == "." {
 		// elem = "."
 		for fname, subfs := range fsys {
-			fi, err := fs.StatContext(ctx, subfs, ".")
-			if err != nil {
-				continue
-			}
 			i := strings.Index(fname, "/")
 			if i < 0 {
 				if fname != "." {
+					fi, err := fs.StatContext(ctx, subfs, ".")
+					if err != nil {
+						continue
+					}
 					list = append(list, RawNode(fi, fname))
 				}
 			} else {
