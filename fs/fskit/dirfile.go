@@ -35,6 +35,9 @@ func (d *dirFile) Read(b []byte) (int, error) {
 }
 
 func (d *dirFile) ReadDir(count int) ([]fs.DirEntry, error) {
+	if count == -1 {
+		return d.entries, nil
+	}
 	n := len(d.entries) - d.offset
 	if n == 0 && count > 0 {
 		return nil, io.EOF

@@ -3,6 +3,7 @@ package fskit
 import (
 	"fmt"
 	"io/fs"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -65,5 +66,21 @@ func TestMapFSFileInfoName(t *testing.T) {
 	got := info.Name()
 	if want != got {
 		t.Errorf("MapFS FileInfo.Name want:\n%s\ngot:\n%s\n", want, got)
+	}
+}
+
+func TestMapFSSub(t *testing.T) {
+	subdirFS := MapFS{
+		"hello": RawNode([]byte("hello, world\n")),
+	}
+	m := MapFS{
+		"dir": subdirFS,
+	}
+	sub, err := m.Sub("dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(sub, subdirFS) {
+		t.Fatal("Sub(dir) is not subdirFS")
 	}
 }

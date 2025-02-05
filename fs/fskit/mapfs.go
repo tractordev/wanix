@@ -4,6 +4,7 @@ import (
 	"context"
 	"path"
 	"slices"
+	"sort"
 	"strings"
 
 	"tractor.dev/wanix/fs"
@@ -12,6 +13,41 @@ import (
 type MapFS map[string]fs.FS
 
 var _ fs.FS = MapFS(nil)
+
+// Sub returns an [fs.FS] corresponding to the subtree rooted at fsys's dir.
+//
+// This operates the same as [fs.Sub] with some additional handling:
+// - if dir is a direct path to a [fs.FS], it will return that FS
+// - if dir is a subpath of a key in the map, it will return a [fs.SubdirFS]
+func (fsys MapFS) Sub(dir string) (fs.FS, error) {
+	if dir == "." {
+		return fsys, nil
+	}
+	// check if dir is directly in map
+	subfs, found := fsys[dir]
+	if found {
+		return subfs, nil
+	}
+	// check subpaths of map dirs
+	var sortedKeys []string
+	for p := range fsys {
+		sortedKeys = append(sortedKeys, p)
+	}
+	sort.Slice(sortedKeys, func(i, j int) bool {
+		// sort by length, longest first
+		return len(sortedKeys[i]) > len(sortedKeys[j])
+	})
+	for _, key := range sortedKeys {
+		if strings.HasPrefix(dir, key) {
+			relativePath := strings.TrimPrefix(dir, key)
+			relativePath = strings.TrimPrefix(relativePath, "/")
+			return &fs.SubdirFS{Fsys: fsys[key], Dir: relativePath}, nil
+		}
+	}
+	// if we get here, dir is not in map
+	// TODO: or should this return a [fs.SubdirFS] to error when used?
+	return nil, &fs.PathError{Op: "sub", Path: dir, Err: fs.ErrNotExist}
+}
 
 func (fsys MapFS) Stat(name string) (fs.FileInfo, error) {
 	return fsys.StatContext(context.Background(), name)

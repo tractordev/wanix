@@ -175,8 +175,19 @@ func (fsys MemFS) Remove(name string) error {
 		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotExist}
 	}
 
-	// TODO: Rohit: fail if name is a directory and not empty
-	// TODO: handle synthesized directories?
+	if isDir, err := fs.IsDir(fsys, name); err != nil {
+		return err
+	} else if isDir {
+		empty, err := fs.IsEmpty(fsys, name)
+		if err != nil {
+			return err
+		}
+		if !empty {
+			return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotEmpty}
+		}
+	}
+
+	// TODO: RemoveAll, gets into synthesized directories
 
 	delete(fsys, name)
 	return nil

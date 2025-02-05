@@ -29,35 +29,35 @@ func Sub(fsys FS, dir string) (FS, error) {
 	if fsys, ok := fsys.(SubFS); ok {
 		return fsys.Sub(dir)
 	}
-	return &subFS{fsys, dir}, nil
+	return &SubdirFS{fsys, dir}, nil
 }
 
-type subFS struct {
-	fsys FS
-	dir  string
+type SubdirFS struct {
+	Fsys FS
+	Dir  string
 }
 
 // fullName maps name to the fully-qualified name dir/name.
-func (f *subFS) fullName(op string, name string) (string, error) {
+func (f *SubdirFS) fullName(op string, name string) (string, error) {
 	if !ValidPath(name) {
 		return "", &PathError{Op: op, Path: name, Err: ErrInvalid}
 	}
-	return path.Join(f.dir, name), nil
+	return path.Join(f.Dir, name), nil
 }
 
 // shorten maps name, which should start with f.dir, back to the suffix after f.dir.
-func (f *subFS) shorten(name string) (rel string, ok bool) {
-	if name == f.dir {
+func (f *SubdirFS) shorten(name string) (rel string, ok bool) {
+	if name == f.Dir {
 		return ".", true
 	}
-	if len(name) >= len(f.dir)+2 && name[len(f.dir)] == '/' && name[:len(f.dir)] == f.dir {
-		return name[len(f.dir)+1:], true
+	if len(name) >= len(f.Dir)+2 && name[len(f.Dir)] == '/' && name[:len(f.Dir)] == f.Dir {
+		return name[len(f.Dir)+1:], true
 	}
 	return "", false
 }
 
 // fixErr shortens any reported names in PathErrors by stripping f.dir.
-func (f *subFS) fixErr(err error) error {
+func (f *SubdirFS) fixErr(err error) error {
 	if e, ok := err.(*PathError); ok {
 		if short, ok := f.shorten(e.Path); ok {
 			e.Path = short
@@ -66,59 +66,44 @@ func (f *subFS) fixErr(err error) error {
 	return err
 }
 
-func (f *subFS) Open(name string) (File, error) {
+func (f *SubdirFS) Open(name string) (File, error) {
 	return f.OpenContext(context.Background(), name)
 }
 
-func (f *subFS) OpenContext(ctx context.Context, name string) (File, error) {
+func (f *SubdirFS) OpenContext(ctx context.Context, name string) (File, error) {
 	full, err := f.fullName("open", name)
 	if err != nil {
 		return nil, err
 	}
-	file, err := OpenContext(ctx, f.fsys, full)
+	file, err := OpenContext(ctx, f.Fsys, full)
 	return file, f.fixErr(err)
 }
 
-// func (f *subFS) ReadDir(name string) ([]DirEntry, error) {
-// 	full, err := f.fullName("read", name)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	dir, err := ReadDir(f.fsys, full)
-// 	return dir, f.fixErr(err)
-// }
+func (f *SubdirFS) Create(name string) (File, error) {
+	full, err := f.fullName("create", name)
+	if err != nil {
+		return nil, err
+	}
+	return Create(f.Fsys, full)
+}
 
-// func (f *subFS) ReadFile(name string) ([]byte, error) {
-// 	full, err := f.fullName("read", name)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	data, err := ReadFile(f.fsys, full)
-// 	return data, f.fixErr(err)
-// }
+func (f *SubdirFS) Mkdir(name string, perm FileMode) error {
+	full, err := f.fullName("mkdir", name)
+	if err != nil {
+		return err
+	}
+	return Mkdir(f.Fsys, full, perm)
+}
 
-// func (f *subFS) Glob(pattern string) ([]string, error) {
-// 	// Check pattern is well-formed.
-// 	if _, err := path.Match(pattern, ""); err != nil {
-// 		return nil, err
-// 	}
-// 	if pattern == "." {
-// 		return []string{"."}, nil
-// 	}
+func (f *SubdirFS) Remove(name string) error {
+	full, err := f.fullName("remove", name)
+	if err != nil {
+		return err
+	}
+	return Remove(f.Fsys, full)
+}
 
-// 	full := f.dir + "/" + pattern
-// 	list, err := Glob(f.fsys, full)
-// 	for i, name := range list {
-// 		name, ok := f.shorten(name)
-// 		if !ok {
-// 			return nil, errors.New("invalid result from inner fsys Glob: " + name + " not in " + f.dir) // can't use fmt in this package
-// 		}
-// 		list[i] = name
-// 	}
-// 	return list, f.fixErr(err)
-// }
-
-func (f *subFS) Sub(dir string) (FS, error) {
+func (f *SubdirFS) Sub(dir string) (FS, error) {
 	if dir == "." {
 		return f, nil
 	}
@@ -126,5 +111,5 @@ func (f *subFS) Sub(dir string) (FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &subFS{f.fsys, full}, nil
+	return &SubdirFS{f.Fsys, full}, nil
 }

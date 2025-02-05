@@ -26,6 +26,8 @@ func RawNode(attrs ...any) *Node {
 	n := &Node{}
 	for _, m := range attrs {
 		switch v := m.(type) {
+		case int64:
+			n.size = v
 		case int:
 			n.size = int64(v)
 		case time.Time:
@@ -69,6 +71,9 @@ func (n *Node) IsDir() bool                { return n.mode&fs.ModeDir != 0 }
 func (n *Node) Sys() any                   { return n.sys }
 
 func (n *Node) Size() int64 {
+	if n.size < 0 {
+		return 0
+	}
 	if n.size > 0 {
 		return n.size
 	}

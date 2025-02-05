@@ -21,11 +21,15 @@ func OpenContext(ctx context.Context, fsys FS, name string) (File, error) {
 	return fsys.Open(name)
 }
 
+type ReadDirContextFS interface {
+	FS
+	ReadDirContext(ctx context.Context, name string) ([]DirEntry, error)
+}
+
 func ReadDirContext(ctx context.Context, fsys FS, name string) ([]DirEntry, error) {
-	// ReadDirFS doesn't implement context
-	// if fsys, ok := fsys.(ReadDirFS); ok {
-	// 	return fsys.ReadDir(name)
-	// }
+	if fsys, ok := fsys.(ReadDirContextFS); ok {
+		return fsys.ReadDirContext(ctx, name)
+	}
 
 	file, err := OpenContext(ctx, fsys, name)
 	if err != nil {

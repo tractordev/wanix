@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -57,26 +58,41 @@ func DirExists(fsys FS, path string) (bool, error) {
 }
 
 func WriteFile(fsys FS, filename string, data []byte, perm FileMode) error {
-	// TODO: use Create, which should fallback to OpenFile
-	of, ok := fsys.(OpenFileFS)
-	if !ok {
-		return ErrPermission
-	}
-	f, err := of.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
+	// var f File
+	// var err error
+	// if c, ok := fsys.(CreateFS); ok {
+	// 	f, err = c.Create(filename)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// } else if of, ok := fsys.(OpenFileFS); ok {
+	// 	f, err = of.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// } else {
+	// 	// for now, we'll fallback to a regular open and try to write to the file
+	// 	f, err = fsys.Open(filename)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
+	f, err := Create(fsys, filename)
+	if errors.Is(err, ErrNotSupported) {
+		f, err = fsys.Open(filename)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
 		return err
 	}
-	fw, ok := f.(io.WriteCloser)
-	if !ok {
-		f.Close()
-		return ErrPermission
-	}
-	n, err := fw.Write(data)
+	n, err := Write(f, data)
 	if err == nil && n < len(data) {
 		err = io.ErrShortWrite
 	}
-	if err1 := fw.Close(); err == nil {
+	if err1 := f.Close(); err == nil {
 		err = err1
 	}
+	// TODO: use perm?
 	return err
 }

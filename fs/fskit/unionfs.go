@@ -2,35 +2,9 @@ package fskit
 
 import (
 	"context"
-	"sort"
 
 	"tractor.dev/wanix/fs"
 )
-
-func UnionDir(name string, mode fs.FileMode, dirs ...fs.File) fs.File {
-	entryMap := make(map[string]fs.DirEntry)
-	for _, f := range dirs {
-		rd, ok := f.(fs.ReadDirFile)
-		if !ok {
-			continue
-		}
-		e, err := rd.ReadDir(-1)
-		if err != nil {
-			continue
-		}
-		for _, entry := range e {
-			entryMap[entry.Name()] = entry
-		}
-	}
-	var entries []fs.DirEntry
-	for _, entry := range entryMap {
-		entries = append(entries, entry)
-	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name() < entries[j].Name()
-	})
-	return DirFile(Entry(name, mode), entries...)
-}
 
 // read-only union of filesystems
 type UnionFS []fs.FS
@@ -106,4 +80,38 @@ func (f UnionFS) ReadDir(name string) ([]fs.DirEntry, error) {
 		return dir.ReadDir(0)
 	}
 	return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrInvalid}
+}
+
+// Sub returns an [fs.FS] corresponding to the subtree rooted at fsys's dir.
+//
+// If dir is ".", Sub returns fsys unchanged.
+// If only one filesystem in the union contains dir, Sub returns that filesystem's subtree directly.
+// Otherwise, Sub returns a new UnionFS containing all valid subtrees.
+func (f UnionFS) Sub(dir string) (fs.FS, error) {
+	if !fs.ValidPath(dir) {
+		return nil, &fs.PathError{Op: "sub", Path: dir, Err: fs.ErrInvalid}
+	}
+	if dir == "." {
+		return f, nil
+	}
+
+	// Collect all valid sub-filesystems
+	var subFs []fs.FS
+	for _, fsys := range f {
+		if sub, err := fs.Sub(fsys, dir); err == nil {
+			subFs = append(subFs, sub)
+		}
+	}
+
+	if len(subFs) == 0 {
+		return nil, &fs.PathError{Op: "sub", Path: dir, Err: fs.ErrNotExist}
+	}
+
+	// If only one filesystem has this directory, return it directly
+	if len(subFs) == 1 {
+		return subFs[0], nil
+	}
+
+	// Otherwise return a union of all sub-filesystems
+	return UnionFS(subFs), nil
 }

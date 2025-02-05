@@ -6,12 +6,15 @@ import (
 )
 
 var (
-	ErrInvalid      = iofs.ErrInvalid
-	ErrPermission   = iofs.ErrPermission
-	ErrExist        = iofs.ErrExist
-	ErrNotExist     = iofs.ErrNotExist
-	ErrClosed       = iofs.ErrClosed
+	ErrInvalid    = iofs.ErrInvalid
+	ErrPermission = iofs.ErrPermission
+	ErrExist      = iofs.ErrExist
+	ErrNotExist   = iofs.ErrNotExist
+	ErrClosed     = iofs.ErrClosed
+
+	// new errors
 	ErrNotSupported = errors.New("operation not supported")
+	ErrNotEmpty     = errors.New("directory not empty")
 
 	SkipAll = iofs.SkipAll
 	SkipDir = iofs.SkipDir
