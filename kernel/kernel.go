@@ -1,8 +1,8 @@
-//go:build !js && !wasm
-
 package kernel
 
 import (
+	"io/fs"
+
 	"tractor.dev/wanix/kernel/fsys"
 	"tractor.dev/wanix/kernel/proc"
 )
@@ -10,14 +10,19 @@ import (
 type K struct {
 	Fsys *fsys.Device
 	Proc *proc.Device
+	Mod  map[string]fs.FS
 }
 
 func New() *K {
-	k := &K{
+	return &K{
 		Fsys: fsys.New(),
 		Proc: proc.New(),
+		Mod:  make(map[string]fs.FS),
 	}
-	return k
+}
+
+func (k *K) AddModule(name string, mod fs.FS) {
+	k.Mod[name] = mod
 }
 
 func (k *K) NewRoot() (*proc.Process, error) {
@@ -32,6 +37,12 @@ func (k *K) NewRoot() (*proc.Process, error) {
 	}
 	if err := p.Namespace().Bind(k.Proc, ".", "#proc", ""); err != nil {
 		return nil, err
+	}
+
+	for name, mod := range k.Mod {
+		if err := p.Namespace().Bind(mod, ".", name, ""); err != nil {
+			return nil, err
+		}
 	}
 
 	return p, nil

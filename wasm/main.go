@@ -11,11 +11,13 @@ import (
 	"tractor.dev/toolkit-go/duplex/talk"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/kernel"
+	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/jsutil"
 )
 
 func main() {
 	k := kernel.New()
+	k.AddModule("#web", web.New(k.Fsys))
 
 	root, err := k.NewRoot()
 	if err != nil {

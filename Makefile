@@ -1,5 +1,6 @@
-.PHONY: wanix wasm
+.PHONY: all wanix wasm
 
+all: wasm wanix 
 
 wanix:
 	go build -o wanix ./cmd/wanix
