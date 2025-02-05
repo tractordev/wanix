@@ -19,6 +19,7 @@ func (m *Main) InitializeCLI(root *cli.Command) {
 	root.Usage = "wanix"
 	root.Version = Version
 	root.AddCommand(serveCmd())
+	root.AddCommand(mountCmd())
 }
 
 func fatal(err error) {
