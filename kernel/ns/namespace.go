@@ -14,26 +14,85 @@ import (
 
 // FS represents a namespace with Plan9-style file and directory bindings
 type FS struct {
-	bindings map[string][]fileRef
+	bindings map[string][]pathRef
+	ctx      context.Context
 }
 
-func New() *FS {
-	return &FS{bindings: make(map[string][]fileRef)}
-}
-
-// fileRef represents a reference to a name in a specific filesystem,
-// possibly the root of the filesystem
-type fileRef struct {
+// pathRef represents a reference to a name in a specific filesystem,
+// possibly the root of the filesystem.
+// can this be replaced by subFS?
+type pathRef struct {
 	fs   fs.FS
 	path string
 }
 
-func (ref *fileRef) fileInfo(ctx context.Context, fname string) (*fskit.Node, error) {
+func (ref *pathRef) fileInfo(ctx context.Context, fname string) (*fskit.Node, error) {
 	fi, err := fs.StatContext(ctx, ref.fs, ref.path)
 	if err != nil {
 		return nil, err
 	}
 	return fskit.RawNode(fi, fname), nil
+}
+
+func New(ctx context.Context) *FS {
+	fsys := &FS{
+		bindings: make(map[string][]pathRef),
+	}
+	fsys.ctx = context.WithValue(ctx, NamespaceContextKey, fsys)
+	return fsys
+}
+
+func (ns *FS) Context() context.Context {
+	return ns.ctx
+}
+
+// Sub returns an [fs.FS] corresponding to the subtree rooted at fsys's dir.
+//
+// This operates the same as [fs.Sub] with some additional handling:
+// - if dir is a nested [fs.FS], it will return that FS
+// - otherwise it will return a [fs.SubdirFS] which implements most [fs.FS] extensions
+// - (TODO) if dir is a single root binding, it will return that [fs.FS]
+// - (TODO) if dir is a binding to a subpath, it will return a [fs.SubdirFS]
+// - (TODO) if dir has multiple bindings, it will return a new namespace [FS]
+func (ns *FS) Sub(dir string) (fs.FS, error) {
+	if !fs.ValidPath(dir) {
+		return nil, &fs.PathError{Op: "sub", Path: dir, Err: fs.ErrInvalid}
+	}
+	if dir == "." {
+		if refs, ok := ns.bindings["."]; ok && len(refs) == 1 && refs[0].path == "." {
+			return refs[0].fs, nil
+		}
+		return ns, nil
+	}
+
+	// check if dir is a direct binding to a single root
+	if refs, ok := ns.bindings[dir]; ok && len(refs) == 1 && refs[0].path == "." {
+		return refs[0].fs, nil
+	}
+
+	// Check subpaths of bindings
+	var sortedPaths []string
+	for p := range ns.bindings {
+		sortedPaths = append(sortedPaths, p)
+	}
+	sort.Slice(sortedPaths, func(i, j int) bool {
+		// sort by length, longest first
+		return len(sortedPaths[i]) > len(sortedPaths[j])
+	})
+	for _, bindPath := range sortedPaths {
+		refs := ns.bindings[bindPath]
+		if strings.HasPrefix(dir, bindPath) || bindPath == "." {
+			relativePath := strings.TrimPrefix(dir, bindPath)
+			relativePath = strings.TrimPrefix(relativePath, "/")
+			// TODO: return a new namespace with the bindings if len(refs) > 1
+			if refs[0].path == "." {
+				return fs.Sub(refs[0].fs, relativePath)
+			} else {
+				return fs.Sub(refs[0].fs, path.Join(refs[0].path, relativePath))
+			}
+		}
+	}
+	return nil, nil
 }
 
 // Bind adds a file or directory to the namespace. If specified, mode is "after" (default), "before", or "replace",
@@ -53,14 +112,14 @@ func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 	}
 	file.Close()
 
-	ref := fileRef{fs: src, path: srcPath}
+	ref := pathRef{fs: src, path: srcPath}
 	switch mode {
 	case "", "after":
-		ns.bindings[dstPath] = append([]fileRef{ref}, ns.bindings[dstPath]...)
+		ns.bindings[dstPath] = append([]pathRef{ref}, ns.bindings[dstPath]...)
 	case "before":
 		ns.bindings[dstPath] = append(ns.bindings[dstPath], ref)
 	case "replace":
-		ns.bindings[dstPath] = []fileRef{ref}
+		ns.bindings[dstPath] = []pathRef{ref}
 	default:
 		return &fs.PathError{Op: "bind", Path: mode, Err: fs.ErrInvalid}
 	}
@@ -68,13 +127,20 @@ func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 }
 
 func (ns *FS) Stat(name string) (fs.FileInfo, error) {
-	return ns.StatContext(context.Background(), name)
+	return ns.StatContext(ns.ctx, name)
 }
 
 func (ns *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 	}
+
+	_, cname, _ := FromContext(ctx)
+	if cname == "" {
+		ctx = context.WithValue(ctx, PathContextKey, name)
+	}
+
+	// TODO: merge ctx with ns.ctx
 
 	// we implement Stat to try and avoid using Open for Stat
 	// since it involves calling Stat on all sub filesystem roots
@@ -94,7 +160,7 @@ func (ns *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error)
 
 // Open implements fs.FS interface
 func (ns *FS) Open(name string) (fs.File, error) {
-	return ns.OpenContext(context.Background(), name)
+	return ns.OpenContext(ns.ctx, name)
 }
 
 // OpenContext ...
@@ -103,8 +169,16 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
 
+	_, cname, _ := FromContext(ctx)
+	if cname == "" {
+		ctx = context.WithValue(ctx, PathContextKey, name)
+	}
+
+	// TODO: merge ctx with ns.ctx
+
 	var dir *fskit.Node
 	var dirEntries []fs.DirEntry
+	var foundDir bool
 
 	// Check direct bindings
 	if refs, exists := ns.bindings[name]; exists {
@@ -117,6 +191,7 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 				// directory binding, add entries
 				if dir == nil {
 					dir = fskit.RawNode(fi, name)
+					foundDir = true
 				}
 				entries, err := fs.ReadDirContext(ctx, ref.fs, ref.path)
 				if err != nil {
@@ -165,6 +240,7 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 					// directory found in under dir binding
 					if dir == nil {
 						dir = fskit.RawNode(fi, name)
+						foundDir = true
 					}
 					entries, err := fs.ReadDirContext(ctx, ref.fs, relativePath)
 					if err != nil {
@@ -222,9 +298,9 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 			}
 		}
 		// If the name is not binding,
-		// and there are no children of the name,
+		// and there are no children of the name and no dir was found,
 		// then the directory is treated as not existing.
-		if dirEntries == nil && len(need) == 0 {
+		if dirEntries == nil && len(need) == 0 && !foundDir {
 			return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 		}
 	}

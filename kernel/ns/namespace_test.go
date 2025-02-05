@@ -21,7 +21,7 @@ func TestNamespace(t *testing.T) {
 	}
 
 	// Create and initialize namespace
-	ns := New()
+	ns := New(context.Background())
 
 	// Test file binding
 	ns.Bind(testFS, "file1.txt", "bound-file.txt", "replace")
@@ -60,6 +60,65 @@ func TestNamespace(t *testing.T) {
 	}
 }
 
+func TestSubFS(t *testing.T) {
+	ns := New(context.Background())
+
+	subFS := fskit.MapFS{
+		"subfile":     fskit.RawNode([]byte("rootsub")),
+		"subdir/file": fskit.RawNode([]byte("subdirfile")),
+	}
+
+	rootFS := fskit.MapFS{
+		"rootfile": fskit.RawNode([]byte("rootfile")),
+		"rootsub":  subFS,
+	}
+
+	bindsubFS := fskit.MapFS{
+		"bindfile": fskit.RawNode([]byte("bindfile")),
+		"bindsub":  subFS,
+	}
+
+	ns.Bind(rootFS, ".", ".", "")
+	ns.Bind(bindsubFS, ".", "bind", "")
+
+	subfs, err := ns.Sub(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(subfs, rootFS) {
+		t.Fatal("Sub(.) is not rootFS")
+	}
+
+	subfs, err = ns.Sub("bind")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(subfs, bindsubFS) {
+		t.Fatal("Sub(bind) is not bindsubFS")
+	}
+
+	// requires fskit.MapFS to have proper Sub() implementation
+	subfs, err = ns.Sub("bind/bindsub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(subfs, subFS) {
+		t.Fatalf("Sub(bind/bindsub) is not subFS: %T", subfs)
+	}
+
+	subfs, err = ns.Sub("rootsub/subdir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subdirfs, ok := subfs.(*fs.SubdirFS)
+	if !ok {
+		t.Fatalf("Sub(rootsub/subdir) is not a SubdirFS: %T", subfs)
+	}
+	if !reflect.DeepEqual(subdirfs.Fsys, subFS) {
+		t.Fatalf("Sub(rootsub/subdir) is not a SubdirFS of subFS: %s %T", subdirfs.Dir, subdirfs.Fsys)
+	}
+}
+
 func TestFileBindOverRootBind(t *testing.T) {
 	abfs := fskit.MapFS{
 		"a": fskit.RawNode([]byte("content1")),
@@ -70,7 +129,7 @@ func TestFileBindOverRootBind(t *testing.T) {
 		"c": abfs,
 	}
 
-	ns := New()
+	ns := New(context.Background())
 	if err := ns.Bind(abfs, ".", ".", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +148,7 @@ func TestFileBindOverRootBind(t *testing.T) {
 }
 
 func TestRecursiveSubpathBind(t *testing.T) {
-	ns := New()
+	ns := New(context.Background())
 
 	loopFS := fskit.MapFS{
 		"ctl": fskit.RawNode([]byte("content1")),
@@ -119,7 +178,7 @@ func TestHiddenSelfBind(t *testing.T) {
 		"#two": abFS,
 	}
 
-	ns := New()
+	ns := New(context.Background())
 	if err := ns.Bind(mfs, ".", ".", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +217,7 @@ func TestNamespaceHidden(t *testing.T) {
 		"#c": {Data: []byte("hidden")},
 	}
 
-	ns := New()
+	ns := New(context.Background())
 	ns.Bind(testFS, ".", "#foo", "replace")
 
 	e, _ := fs.ReadDir(ns, ".")
@@ -193,7 +252,7 @@ func TestUnionBinding(t *testing.T) {
 	}
 
 	// Create namespace with union binding at root and in dir
-	ns := New()
+	ns := New(context.Background())
 	ns.Bind(fs1, ".", ".", "")
 	ns.Bind(fs2, ".", ".", "")
 	ns.Bind(fs2, ".", "dir", "")
@@ -223,7 +282,7 @@ func TestBindingModes(t *testing.T) {
 	fs2 := fstest.MapFS{"file.txt": {Data: []byte("fs2")}}
 
 	// Test replace mode
-	ns := New()
+	ns := New(context.Background())
 	ns.Bind(fs1, ".", "test", "replace")
 	ns.Bind(fs2, ".", "test", "replace")
 
@@ -236,7 +295,7 @@ func TestBindingModes(t *testing.T) {
 	}
 
 	// Test after mode (default)
-	ns = New()
+	ns = New(context.Background())
 	ns.Bind(fs2, ".", "test", "")
 	ns.Bind(fs1, ".", "test", "after")
 
@@ -249,7 +308,7 @@ func TestBindingModes(t *testing.T) {
 	}
 
 	// Test before mode
-	ns = New()
+	ns = New(context.Background())
 	ns.Bind(fs1, ".", "test", "replace")
 	ns.Bind(fs2, ".", "test", "before")
 
@@ -270,7 +329,7 @@ func TestSynthesizedDirectories(t *testing.T) {
 	}
 
 	// Bind a file in a deep path
-	ns := New()
+	ns := New(context.Background())
 	ns.Bind(testFS, "file.txt", "a/b/c/file.txt", "")
 
 	// Test that we can read parent directories
@@ -334,7 +393,7 @@ func TestSynthesizedDirectories(t *testing.T) {
 		})
 	}
 	// Test directory binding with synthesized parents
-	ns2 := New()
+	ns2 := New(context.Background())
 	ns2.Bind(testFS, ".", "x/y/z", "")
 
 	// Verify parent directories are synthesized
@@ -371,5 +430,72 @@ func TestSynthesizedDirectories(t *testing.T) {
 				t.Errorf("ReadDir(%q) got entry name %q, want %q", dir, entry.Name(), expectedName)
 			}
 		})
+	}
+}
+
+func TestMkdirOnLeaf(t *testing.T) {
+	ns := New(context.Background())
+
+	memfs := fskit.MemFS{
+		"file": fskit.RawNode([]byte("content")),
+	}
+
+	middlefs := fskit.MapFS{
+		"dir": memfs,
+	}
+
+	ns.Bind(middlefs, ".", "sub", "")
+
+	// first we'll use Sub manually to get the memfs
+
+	subfs, err := ns.Sub("sub/dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(subfs, memfs) {
+		t.Fatalf("Sub(sub/dir) is not memfs: %T", subfs)
+	}
+
+	err = fs.Mkdir(subfs, "newdir1", 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir, err := fs.ReadDir(ns, "sub/dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dir) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(dir))
+	}
+
+	// now we'll use Mkdir on the namespace directly
+
+	err = fs.Mkdir(ns, "sub/dir/newdir2", 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir, err = fs.ReadDir(ns, "sub/dir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dir) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(dir))
+	}
+
+	// now we'll use MkdirAll on the namespace directly
+
+	err = fs.MkdirAll(ns, "sub/dir/newdir3/newdir4/newdir5", 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir, err = fs.ReadDir(ns, "sub/dir/newdir3/newdir4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dir) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(dir))
 	}
 }
