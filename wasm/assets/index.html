@@ -1,0 +1,70 @@
+<html>
+	<head>
+		<meta charset="utf-8"/>
+        <script src="./v86/libv86.js"></script>
+        <script src="./l2wfs.js"></script>
+        <link rel="stylesheet" href="./xterm/xterm-5.3.0.min.css" />
+        <script src="./xterm/xterm-5.3.0.min.js"></script>
+        <script src="./xterm/xterm-fit-0.8.0.min.js"></script>
+	</head>
+	<body>
+        <!-- <div id="screen_container">
+            <div style="white-space: pre; font: 14px monospace; line-height: 14px"></div>
+            <canvas style="display: none"></canvas>
+        </div> -->
+        <script type="module">
+            // const downloader = async () => await downloadChunks(generateRange(9).map(suffix => `./v86/image/state/initial.state.${suffix}`));
+            // const buffer = await downloader();
+            window.makeVM = () => {
+                return new V86({
+                    wasm_path: "./v86/v86.wasm",
+                    // screen_container: document.getElementById("screen_container"),
+                    memory_size: 512 * 1024 * 1024,
+                    vga_memory_size: 8 * 1024 * 1024,
+                    bios: { url: "./v86/seabios.bin" },
+                    vga_bios: { url: "./v86/vgabios.bin" },
+                    net_device_type: "virtio",
+                    // autostart: true,
+                    // bzimage_initrd_from_filesystem: true,
+                    // cmdline: "rw root=host9p rootfstype=9p rootflags=trans=virtio,cache=loose modules=virtio_pci console=ttyS0 console=tty1",
+                    // filesystem: {
+                    //     baseurl: `./v86/image/fs/`,
+                    //     basefs: `./v86/image/fs.json`,
+                    // },
+
+                    cmdline: "tsc=reliable mitigations=off random.trust_cpu=on modules=virtio_pci wtux=wanix",
+                    bzimage: { url: "./v86/wtux/bzImage" },
+                    initrd: { url: "./v86/wtux/initramfs.gz" },
+                });
+            };
+        </script>
+        <script src="wasm_exec.js"></script>
+        <script type="module">
+            import { Wanix } from "./wanix.js";
+
+            window.wanix = new Wanix();
+
+            window.list = (name) => { 
+                window.wanix.readDir(name).then(console.log); 
+                return undefined 
+            };
+            window.read = (name) => { 
+                window.wanix.readFile(name).then(d => (new TextDecoder()).decode(d)).then(console.log); 
+                return undefined 
+            };
+            window.write = (name, content) => { 
+                window.wanix.writeFile(name, content); 
+                return undefined 
+            };
+            window.mkdir = (name) => { 
+                window.wanix.makeDir(name); 
+                return undefined 
+            };
+            window.rm = (name) => { 
+                window.wanix.remove(name); 
+                return undefined 
+            };
+
+        </script>
+	</body>
+</html>
