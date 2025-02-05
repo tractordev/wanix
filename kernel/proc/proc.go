@@ -9,7 +9,7 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/kernel/ns"
-	"tractor.dev/wanix/kernel/p9"
+	"tractor.dev/wanix/misc"
 )
 
 // contextKey is a value for use with context.WithValue. It's used as
@@ -18,7 +18,7 @@ type contextKey struct {
 	name string
 }
 
-func (k *contextKey) String() string { return "wanix/kernel context value " + k.name }
+func (k *contextKey) String() string { return "proc context value " + k.name }
 
 var (
 	ProcessContextKey = &contextKey{"process"}
@@ -36,11 +36,16 @@ type Device struct {
 }
 
 func New() *Device {
-	return &Device{
+	d := &Device{
 		types:     make(map[string]func([]string) (fs.FS, error)),
 		resources: make(map[string]fs.FS),
 		nextID:    0,
 	}
+	// empty namespace process
+	d.Register("ns", func(args []string) (fs.FS, error) {
+		return nil, nil
+	})
+	return d
 }
 
 func (d *Device) Register(kind string, factory func([]string) (fs.FS, error)) {
@@ -54,11 +59,12 @@ func (d *Device) Alloc(kind string) (*Process, error) {
 	}
 	d.nextID++
 	rid := strconv.Itoa(d.nextID)
+	ctx := context.WithValue(context.Background(), ProcessContextKey, rid)
 	p := &Process{
 		id:      d.nextID,
 		typ:     kind,
 		factory: factory,
-		ns:      ns.New(),
+		ns:      ns.New(ctx),
 	}
 	d.resources[rid] = p
 	return p, nil
@@ -93,7 +99,7 @@ func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) 
 	}
 	pid, ok := PIDFromContext(ctx)
 	if ok {
-		fsys["self"] = p9.FieldFile(pid, nil)
+		fsys["self"] = misc.FieldFile(pid, nil)
 	}
 	return fs.OpenContext(ctx, fskit.UnionFS{fsys, fskit.MapFS(d.resources)}, name)
 }
@@ -110,7 +116,7 @@ func (r *Process) ID() string {
 }
 
 func (r *Process) Context() context.Context {
-	return context.WithValue(context.Background(), ProcessContextKey, r.ID())
+	return r.Namespace().Context()
 }
 
 func (r *Process) Namespace() *ns.FS {
@@ -127,7 +133,7 @@ func (r *Process) Open(name string) (fs.File, error) {
 
 func (r *Process) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	fsys := fskit.MapFS{
-		"ctl": p9.ControlFile(&cli.Command{
+		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(ctx *cli.Context, args []string) {
@@ -138,7 +144,7 @@ func (r *Process) OpenContext(ctx context.Context, name string) (fs.File, error)
 				}
 			},
 		}),
-		"type": p9.FieldFile(r.typ, nil),
+		"type": misc.FieldFile(r.typ, nil),
 		"ns":   r.ns,
 	}
 	return fs.OpenContext(ctx, fsys, name)

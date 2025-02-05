@@ -11,7 +11,7 @@ import (
 
 func TestDevice(t *testing.T) {
 	dev := New()
-	dev.Register("hellofs", func() (fs.FS, error) {
+	dev.Register("hellofs", func(_ []string) (fs.FS, error) {
 		return fskit.MapFS{"hellofile": fskit.RawNode([]byte("hello, world\n"))}, nil
 	})
 

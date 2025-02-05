@@ -8,7 +8,7 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/kernel/p9"
+	"tractor.dev/wanix/misc"
 )
 
 type Device struct {
@@ -29,12 +29,8 @@ func (d *Device) Register(kind string, factory func([]string) (fs.FS, error)) {
 	d.types[kind] = factory
 }
 
-func (d *Device) Open(name string) (fs.File, error) {
-	return d.OpenContext(context.Background(), name)
-}
-
-func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	return fs.OpenContext(ctx, fskit.UnionFS{fskit.MapFS{
+func (d *Device) Sub(name string) (fs.FS, error) {
+	return fs.Sub(fskit.UnionFS{fskit.MapFS{
 		"ctl": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			return fskit.Entry(name, 0555, []byte("ctl\n")).Open(".")
 		}),
@@ -68,6 +64,18 @@ func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) 
 	}, fskit.MapFS(d.resources)}, name)
 }
 
+func (d *Device) Open(name string) (fs.File, error) {
+	return d.OpenContext(context.Background(), name)
+}
+
+func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) {
+	fsys, err := d.Sub(".")
+	if err != nil {
+		return nil, err
+	}
+	return fs.OpenContext(ctx, fsys, name)
+}
+
 type Resource struct {
 	factory func([]string) (fs.FS, error)
 	fs      fs.FS
@@ -75,13 +83,9 @@ type Resource struct {
 	typ     string
 }
 
-func (r *Resource) Open(name string) (fs.File, error) {
-	return r.OpenContext(context.Background(), name)
-}
-
-func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (r *Resource) Sub(name string) (fs.FS, error) {
 	fsys := fskit.MapFS{
-		"ctl": p9.ControlFile(&cli.Command{
+		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(ctx *cli.Context, args []string) {
@@ -94,10 +98,22 @@ func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error
 				}
 			},
 		}),
-		"type": p9.FieldFile(r.typ, nil),
+		"type": misc.FieldFile(r.typ, nil),
 	}
 	if r.fs != nil {
 		fsys["mount"] = r.fs
+	}
+	return fs.Sub(fsys, name)
+}
+
+func (r *Resource) Open(name string) (fs.File, error) {
+	return r.OpenContext(context.Background(), name)
+}
+
+func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error) {
+	fsys, err := r.Sub(".")
+	if err != nil {
+		return nil, err
 	}
 	return fs.OpenContext(ctx, fsys, name)
 }
