@@ -32,7 +32,7 @@ func main() {
 	fs.WriteFile(root.Namespace(), "fsys/1/ctl", []byte("mount"), 0755)
 	fs.WriteFile(root.Namespace(), "proc/1/ctl", []byte("bind fsys/1/mount opfs"), 0755)
 
-	port := js.Global().Get("window").Get("port")
+	port := js.Global().Get("window").Get("wanixPort")
 	wr := &jsutil.Writer{Value: port}
 	rd := &jsutil.Reader{Value: port}
 	sess, err := mux.DialIO(wr, rd)
@@ -42,6 +42,5 @@ func main() {
 
 	peer := talk.NewPeer(sess, codec.CBORCodec{})
 	setupAPI(peer, root)
-
 	peer.Respond()
 }

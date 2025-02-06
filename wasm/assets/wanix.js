@@ -3,16 +3,16 @@ import * as duplex from "./duplex.min.js";
 export class Wanix {
     constructor() {
         const channel = new MessageChannel();
-        window.port = new duplex.PortConn(channel.port2);
-
-        const go = new window.Go();
-        WebAssembly.instantiateStreaming(fetch("./wanix.wasm"), go.importObject).then((obj) => {
-            go.run(obj.instance);
-        });
-
         const sess = new duplex.Session(new duplex.PortConn(channel.port1));
         this.peer = new duplex.Peer(sess, new duplex.CBORCodec());
+
+        const go = new window.Go(); 
+        window.wanixPort = new duplex.PortConn(channel.port2)
+        WebAssembly.instantiateStreaming(fetch("./wanix.wasm"), go.importObject).then(obj => {
+            go.run(obj.instance);
+        });   
     }
+
 
     async readDir(name) {
         return (await this.peer.call("ReadDir", [name])).value;
