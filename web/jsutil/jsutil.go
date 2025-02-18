@@ -4,11 +4,21 @@ package jsutil
 
 import (
 	"io"
+	"strings"
 	"syscall/js"
 )
 
 func Log(args ...any) {
 	js.Global().Get("console").Call("log", args...)
+}
+
+func Get(path string) (v js.Value) {
+	parts := strings.Split(path, ".")
+	v = js.Global()
+	for _, part := range parts {
+		v = v.Get(part)
+	}
+	return
 }
 
 func Await(promise js.Value) js.Value {
