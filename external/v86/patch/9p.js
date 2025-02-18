@@ -257,6 +257,15 @@ Virtio9p.prototype.ReceiveRequest = async function (bufchain) {
     const buffer = new Uint8Array(bufchain.length_readable);
     bufchain.get_next_blob(buffer);
 
+    if (window.wanix) {
+        window.wanix.virtioHandle(buffer, (buffer) => {
+            bufchain.set_next_blob(buffer);
+            this.virtqueue.push_reply(bufchain);
+            this.virtqueue.flush_replies();
+        });
+        return;
+    }
+
     const state = { offset : 0 };
     var header = marshall.Unmarshall(["w", "b", "h"], buffer, state);
     var size = header[0];
