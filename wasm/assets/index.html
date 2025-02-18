@@ -82,6 +82,10 @@
                 }, 1000);
             }
 
+            if (!window.location.search.includes('autoboot=false')) {
+                bootVM();
+            }
+
         </script>
 	</body>
 </html>
