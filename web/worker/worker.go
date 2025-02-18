@@ -1,25 +1,31 @@
+//go:build js && wasm
+
 package worker
 
 import (
 	"context"
-	"log"
 	"strconv"
+	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/kernel"
 	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/web/api"
 )
 
 type Device struct {
 	resources map[string]fs.FS
 	nextID    int
+	k         *kernel.K
 }
 
-func New() *Device {
+func New(k *kernel.K) *Device {
 	return &Device{
 		resources: make(map[string]fs.FS),
 		nextID:    0,
+		k:         k,
 	}
 }
 
@@ -36,6 +42,7 @@ func (d *Device) Sub(name string) (fs.FS, error) {
 							id:    d.nextID,
 							state: "allocated",
 							src:   "",
+							k:     d.k,
 						}
 						fskit.SetData(n, []byte(rid+"\n"))
 						return nil
@@ -60,9 +67,11 @@ func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) 
 }
 
 type Resource struct {
-	id    int
-	state string
-	src   string
+	id     int
+	state  string
+	src    string
+	worker js.Value
+	k      *kernel.K
 }
 
 func (r *Resource) Sub(name string) (fs.FS, error) {
@@ -73,11 +82,27 @@ func (r *Resource) Sub(name string) (fs.FS, error) {
 			Run: func(ctx *cli.Context, args []string) {
 				switch args[0] {
 				case "start":
+					var url js.Value = js.Undefined()
+					if len(args) > 1 {
+						url = js.ValueOf(args[1])
+					} else {
+						blob := js.Global().Get("Blob").New(js.ValueOf([]any{r.src}), js.ValueOf(map[string]any{"type": "text/javascript"}))
+						url = js.Global().Get("URL").Call("createObjectURL", blob)
+					}
+					r.worker = js.Global().Get("Worker").New(url, js.ValueOf(map[string]any{"type": "module"}))
+					ch := js.Global().Get("MessageChannel").New()
+					connPort := js.Global().Get("wanix").Call("_toport", ch.Get("port1"))
+					go api.PortResponder(connPort, r.k.Root)
+					r.worker.Call("postMessage", map[string]any{"worker": map[string]any{
+						"id":   r.id,
+						"fsys": ch.Get("port2"),
+					}}, []any{ch.Get("port2")})
 					r.state = "running"
-					log.Println("start")
 				case "terminate":
+					if !r.worker.IsUndefined() {
+						r.worker.Call("terminate")
+					}
 					r.state = "terminated"
-					log.Println("terminate")
 				}
 			},
 		}),
