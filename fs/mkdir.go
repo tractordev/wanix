@@ -53,6 +53,9 @@ func MkdirAll(fsys FS, name string, perm FileMode) error {
 	}
 
 	err := Mkdir(fsys, name, perm)
+	if errors.Is(err, ErrExist) {
+		return nil
+	}
 	if !errors.Is(err, ErrNotExist) {
 		return err
 	}
