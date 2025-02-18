@@ -4,7 +4,6 @@ import (
 	"errors"
 	"hash/fnv"
 	"io"
-	"log"
 	"math"
 	"os"
 	"path"
@@ -141,7 +140,6 @@ func (l *p9file) GetAttr(req p9.AttrMask) (p9.QID, p9.AttrMask, p9.Attr, error) 
 	}
 	m |= p9.FileMode(fi.Mode().Perm())
 
-	log.Println("9p getattr", l.path, fi)
 	attr := &p9.Attr{
 		Mode: m,
 		// UID:              p9.UID(stat.Uid),
