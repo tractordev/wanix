@@ -4,6 +4,7 @@ import (
 	"io/fs"
 
 	"tractor.dev/wanix/kernel/fsys"
+	"tractor.dev/wanix/kernel/ns"
 	"tractor.dev/wanix/kernel/proc"
 )
 
@@ -11,6 +12,9 @@ type K struct {
 	Fsys *fsys.Device
 	Proc *proc.Device
 	Mod  map[string]fs.FS
+
+	NS   *ns.FS
+	Root *proc.Process
 }
 
 func New() *K {
@@ -30,6 +34,11 @@ func (k *K) NewRoot() (*proc.Process, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// kludge: give the kernel a namespace / root proc
+	// for modules that need it (web/sw, web/worker)
+	k.Root = p
+	k.NS = p.Namespace()
 
 	// bind hidden kernel devices
 	if err := p.Namespace().Bind(k.Fsys, ".", "#fsys", ""); err != nil {
