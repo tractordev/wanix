@@ -8,17 +8,17 @@
         <script src="./xterm/xterm-fit-0.8.0.min.js"></script>
 	</head>
 	<body>
-        <!-- <div id="screen_container">
+        <div id="screen_container" style="display: none;">
             <div style="white-space: pre; font: 14px monospace; line-height: 14px"></div>
             <canvas style="display: none"></canvas>
-        </div> -->
+        </div>
         <script type="module">
             // const downloader = async () => await downloadChunks(generateRange(9).map(suffix => `./v86/image/state/initial.state.${suffix}`));
             // const buffer = await downloader();
             window.makeVM = () => {
                 return new V86({
                     wasm_path: "./v86/v86.wasm",
-                    // screen_container: document.getElementById("screen_container"),
+                    screen_container: document.getElementById("screen_container"),
                     memory_size: 512 * 1024 * 1024,
                     vga_memory_size: 8 * 1024 * 1024,
                     bios: { url: "./v86/seabios.bin" },
@@ -32,7 +32,7 @@
                     //     basefs: `./v86/image/fs.json`,
                     // },
 
-                    cmdline: "tsc=reliable mitigations=off random.trust_cpu=on modules=virtio_pci wtux=wanix",
+                    cmdline: "tsc=reliable mitigations=off random.trust_cpu=on modules=virtio_pci wmode=wanix",
                     bzimage: { url: "./linux/bzImage" },
                     initrd: { url: "./linux/initramfs.gz" },
                 });
@@ -69,11 +69,14 @@
                 return undefined 
             };
 
-            window.bootVM = () => {
+            window.bootVM = (debug=false) => {
                 read("web/dom/new/xterm")
                 write("web/dom/body/ctl", "append-child 1")
                 read("web/vm/new")
                 write("proc/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
+                if (debug) {
+                    document.querySelector("#screen_container").style.display = "block";
+                }
                 setTimeout(() => {  
                     write("web/vm/1/ctl", "start")
                 }, 1000);
