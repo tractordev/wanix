@@ -5,3 +5,4 @@
 /local
 /wanix
 /wasm/assets/wanix.wasm
+/wasm/assets/wasm_exec.js
