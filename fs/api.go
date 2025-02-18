@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"os"
 	"time"
 )
 
@@ -14,8 +15,14 @@ func OpenFile(fsys FS, name string, flag int, perm FileMode) (File, error) {
 	if o, ok := fsys.(OpenFileFS); ok {
 		return o.OpenFile(name, flag, perm)
 	}
-	// TODO: implement derived OpenFile using Open
-	return nil, ErrNotSupported
+
+	// Handle different file modes
+	if flag&os.O_CREATE != 0 {
+		return Create(fsys, name)
+	}
+
+	// just fall back to Open
+	return fsys.Open(name)
 }
 
 type ChmodFS interface {
