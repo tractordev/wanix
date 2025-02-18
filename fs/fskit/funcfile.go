@@ -61,6 +61,7 @@ func (f *FuncFile) ReadAt(b []byte, off int64) (int, error) {
 		return f.Read(b)
 	}
 
+	f.mu.Unlock()
 	return f.openFile.ReadAt(b, off)
 }
 
