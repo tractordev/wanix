@@ -1,6 +1,8 @@
-.PHONY: all wanix wasm-tinygo wasm-go
+.PHONY: all wanix wasm-tinygo wasm-go v86 linux
 
-all: wasm-tinygo wanix 
+all: linux v86 wasm-tinygo wanix 
+
+build: wasm-tinygo wanix
 
 wanix:
 	go build -o wanix ./cmd/wanix
@@ -12,3 +14,9 @@ wasm-tinygo:
 wasm-go:
 	GOOS=js GOARCH=wasm go build -o wasm/assets/wanix.wasm ./wasm
 	cp wasm/assets/wasm_exec.go.js wasm/assets/wasm_exec.js
+
+v86:
+	cd external/v86 && make build
+
+linux:
+	cd external/linux && make build
