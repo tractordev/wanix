@@ -33,8 +33,8 @@
                     // },
 
                     cmdline: "tsc=reliable mitigations=off random.trust_cpu=on modules=virtio_pci wtux=wanix",
-                    bzimage: { url: "./v86/wtux/bzImage" },
-                    initrd: { url: "./v86/wtux/initramfs.gz" },
+                    bzimage: { url: "./linux/bzImage" },
+                    initrd: { url: "./linux/initramfs.gz" },
                 });
             };
         </script>
@@ -42,28 +42,42 @@
         <script type="module">
             import { Wanix } from "./wanix.js";
 
-            window.wanix = new Wanix();
+            new Wanix();
 
             window.list = (name) => { 
-                window.wanix.readDir(name).then(console.log); 
+                window.wanix.instance.readDir(name).then(console.log); 
                 return undefined 
             };
             window.read = (name) => { 
-                window.wanix.readFile(name).then(d => (new TextDecoder()).decode(d)).then(console.log); 
+                window.wanix.instance.readFile(name).then(d => (new TextDecoder()).decode(d)).then(console.log); 
                 return undefined 
             };
             window.write = (name, content) => { 
-                window.wanix.writeFile(name, content); 
+                window.wanix.instance.writeFile(name, content); 
                 return undefined 
             };
             window.mkdir = (name) => { 
-                window.wanix.makeDir(name); 
+                window.wanix.instance.makeDir(name); 
                 return undefined 
             };
             window.rm = (name) => { 
-                window.wanix.remove(name); 
+                window.wanix.instance.remove(name); 
                 return undefined 
             };
+            window.stat = (name) => { 
+                window.wanix.instance.stat(name).then(console.log); 
+                return undefined 
+            };
+
+            window.bootVM = () => {
+                read("web/dom/new/xterm")
+                write("web/dom/body/ctl", "append-child 1")
+                read("web/vm/new")
+                write("proc/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
+                setTimeout(() => {  
+                    write("web/vm/1/ctl", "start")
+                }, 1000);
+            }
 
         </script>
 	</body>

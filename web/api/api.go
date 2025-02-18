@@ -1,18 +1,36 @@
 //go:build js && wasm
 
-package main
+package api
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"path"
+	"syscall/js"
 
+	"tractor.dev/toolkit-go/duplex/codec"
+	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/toolkit-go/duplex/rpc"
 	"tractor.dev/toolkit-go/duplex/talk"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/kernel/proc"
+	"tractor.dev/wanix/web/jsutil"
 )
+
+func PortResponder(port js.Value, root *proc.Process) {
+	wr := &jsutil.Writer{Value: port}
+	rd := &jsutil.Reader{Value: port}
+	sess, err := mux.DialIO(wr, rd)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	peer := talk.NewPeer(sess, codec.CBORCodec{})
+	setupAPI(peer, root)
+	peer.Respond()
+}
 
 type openInode struct {
 	Path    string
@@ -116,6 +134,18 @@ func setupAPI(peer *talk.Peer, root *proc.Process) {
 			return
 		}
 
+	}))
+	peer.Handle("Stat", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+		var args []string
+		c.Receive(&args)
+
+		fi, err := fs.Stat(root.Namespace(), args[0])
+		if err != nil {
+			r.Return(err)
+			return
+		}
+
+		r.Return(fmt.Sprintf("%v", fi))
 	}))
 	peer.Handle("Remove", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
 		var args []string
