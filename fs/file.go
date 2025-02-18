@@ -64,3 +64,15 @@ func ReadAt(f File, p []byte, off int64) (int, error) {
 
 	return f.Read(p)
 }
+
+type SyncFile interface {
+	File
+	Sync() error
+}
+
+func Sync(f File) error {
+	if sf, ok := f.(SyncFile); ok {
+		return sf.Sync()
+	}
+	return ErrNotSupported
+}
