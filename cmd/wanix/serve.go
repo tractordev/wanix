@@ -12,11 +12,14 @@ import (
 )
 
 func serveCmd() *cli.Command {
+	var (
+		port string
+	)
 	cmd := &cli.Command{
 		Usage: "serve",
 		Short: "serve wanix",
 		Run: func(ctx *cli.Context, args []string) {
-			fmt.Println("serving on http://localhost:8080 ...")
+			fmt.Printf("serving on http://localhost:%s ...\n", port)
 
 			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
 				"v86":   v86.Dir,
@@ -28,8 +31,9 @@ func serveCmd() *cli.Command {
 				w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
 				http.FileServerFS(fsys).ServeHTTP(w, r)
 			}))
-			http.ListenAndServe(`:8080`, nil)
+			http.ListenAndServe(":"+port, nil)
 		},
 	}
+	cmd.Flags().StringVar(&port, "port", "8080", "port to serve on")
 	return cmd
 }
