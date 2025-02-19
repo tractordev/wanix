@@ -5,7 +5,9 @@ package sw
 import (
 	"bytes"
 	"context"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"syscall/js"
 
@@ -110,8 +112,9 @@ func (d *Device) handleMessage(this js.Value, args []js.Value) interface{} {
 
 		jsResp.Call("postMessage", js.ValueOf(map[string]interface{}{
 			"status":     rw.Code,
-			"statusText": rw.Result().Status,
+			"statusText": rw.Result().Status[4:],
 			"body":       buf.String(),
+			"headers":    headers,
 		}))
 	}()
 
@@ -126,6 +129,13 @@ func (d *Device) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
+		contentType := mime.TypeByExtension(filepath.Ext(path))
+		if contentType == "" {
+			contentType = http.DetectContentType(b)
+		}
+		w.Header().Add("Content-Type", contentType)
 		w.WriteHeader(http.StatusOK)
 		w.Write(b)
 		return
