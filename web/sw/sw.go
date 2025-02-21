@@ -110,10 +110,13 @@ func (d *Device) handleMessage(this js.Value, args []js.Value) interface{} {
 		var buf bytes.Buffer
 		rw.Body.WriteTo(&buf)
 
+		jsBuf := js.Global().Get("Uint8Array").New(buf.Len())
+		js.CopyBytesToJS(jsBuf, buf.Bytes())
+
 		jsResp.Call("postMessage", js.ValueOf(map[string]interface{}{
 			"status":     rw.Code,
 			"statusText": rw.Result().Status[4:],
-			"body":       buf.String(),
+			"body":       jsBuf,
 			"headers":    headers,
 		}))
 	}()

@@ -201,7 +201,7 @@ type termDataFile struct {
 }
 
 func newTermData(term js.Value) *termDataFile {
-	buf := misc.NewBufferedPipe()
+	buf := misc.NewBufferedPipe(true)
 	enc := js.Global().Get("TextEncoder").New()
 	term.Call("onData", js.FuncOf(func(this js.Value, args []js.Value) any {
 		jsbuf := enc.Call("encode", args[0])

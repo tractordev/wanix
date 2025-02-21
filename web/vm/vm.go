@@ -109,7 +109,7 @@ type serial struct {
 }
 
 func newSerial(vm js.Value) *serial {
-	buf := misc.NewBufferedPipe()
+	buf := misc.NewBufferedPipe(true)
 	vm.Call("add_listener", "serial0-output-byte", js.FuncOf(func(this js.Value, args []js.Value) any {
 		buf.Write([]byte{byte(args[0].Int())})
 		return nil

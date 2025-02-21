@@ -52,6 +52,10 @@
                 window.wanix.instance.readFile(name).then(d => (new TextDecoder()).decode(d)).then(console.log); 
                 return undefined 
             };
+            window.readBytes = (name) => { 
+                window.wanix.instance.readFile(name).then(console.log); 
+                return undefined 
+            };
             window.write = (name, content) => { 
                 window.wanix.instance.writeFile(name, content); 
                 return undefined 
@@ -68,12 +72,24 @@
                 window.wanix.instance.stat(name).then(console.log); 
                 return undefined 
             };
+            window.tail = async (name) => {
+                const fd = await window.wanix.instance.open(name);
+                while (true) {
+                    const data = await window.wanix.instance.read(fd, 1024);
+                    if (!data) {
+                        break;
+                    }
+                    console.log((new TextDecoder()).decode(data));
+                }
+                window.wanix.instance.close(fd);
+                return undefined;
+            };
 
             window.bootVM = (debug=false) => {
                 read("web/dom/new/xterm")
                 write("web/dom/body/ctl", "append-child 1")
                 read("web/vm/new")
-                write("proc/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
+                write("#proc/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
                 if (debug) {
                     document.querySelector("#screen_container").style.display = "block";
                 }
@@ -83,7 +99,7 @@
             }
 
             if (!window.location.search.includes('autoboot=false')) {
-                bootVM();
+                bootVM(window.location.search.includes('console=true'));
             }
 
         </script>

@@ -102,16 +102,16 @@ self.onmessage = async (e) => {
         let env = ["FOO=bar"];
         let fds = [
             new OpenFile(new File([])), // stdin
-            ConsoleStdout.lineBuffered(msg => console.log(`[WASI stdout] ${msg}`)),
+            ConsoleStdout.lineBuffered(msg => buf.get({sync: "stdout", data: msg+"\n"})),
             ConsoleStdout.lineBuffered(msg => console.warn(`[WASI stderr] ${msg}`)),
             new PreopenDir(".", new WanixDir(new WanixMap(buf, ".", null), null)),
         ];
         let wasi = new WASI(args, env, fds);
-
-        let wasm = await WebAssembly.compileStreaming(fetch("./browser_wasi_shim/example_rs.wasm"));
+        let wasm = await WebAssembly.compileStreaming(fetch("/sw/"+e.data.path));
         let inst = await WebAssembly.instantiate(wasm, {
             "wasi_snapshot_preview1": wasi.wasiImport,
         });
-        wasi.start(inst);
+        const exitcode = wasi.start(inst);
+        buf.get({sync: "exit", code: exitcode});
     }
 }

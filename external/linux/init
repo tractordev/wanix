@@ -26,4 +26,4 @@ fi
 sleep 1 
 
 # start shell on $console with job control
-setsid /bin/busybox sh -c "cd ${startdir} && exec /bin/busybox sh </dev/${console} >/dev/${console} 2>&1"
+setsid /bin/busybox sh -c "cd ${startdir} && LD_PRELOAD=/lib/preload.so exec /bin/busybox sh </dev/${console} >/dev/${console} 2>&1"

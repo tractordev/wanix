@@ -30,17 +30,31 @@ export class WanixFS {
         return (await this.peer.call("WriteFile", [name, contents])).value;
     }
 
+    async remove(name) {
+        await this.peer.call("Remove", [name]);
+    }
+
+    async open(name) {
+        return (await this.peer.call("Open", [name])).value;
+    }
+
+    async read(fd, count) {
+        return (await this.peer.call("Read", [fd, count])).value;
+    }
+
+    async write(fd, data) {
+        return (await this.peer.call("Write", [fd, data])).value;
+    }
+
+    async close(fd) {
+        return (await this.peer.call("Close", [fd])).value;
+    }
+
+    // deprecated
     async openInode(name) {
         return (await this.peer.call("OpenInode", [name])).value;
     }
 
-    async read(name, offset, count) {
-        return (await this.peer.call("Read", [name, offset, count])).value;
-    }
-
-    async remove(name) {
-        await this.peer.call("Remove", [name]);
-    }
 }
 
 

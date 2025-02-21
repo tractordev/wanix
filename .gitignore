@@ -6,4 +6,4 @@
 /wanix
 /wasm/assets/wanix.wasm
 /wasm/assets/wasm_exec.js
-/wasm/assets/browser_wasi_shim/example_rs.wasm
+/wasm/assets/debug

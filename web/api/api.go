@@ -3,11 +3,9 @@
 package api
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log"
-	"path"
 	"syscall/js"
 
 	"tractor.dev/toolkit-go/duplex/codec"
@@ -43,64 +41,161 @@ type openInode struct {
 }
 
 func setupAPI(peer *talk.Peer, root *proc.Process) {
-	peer.Handle("OpenInode", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+	fds := make(map[int]fs.File)
+	fdCounter := 0
+
+	peer.Handle("Open", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
 		var args []string
 		c.Receive(&args)
-		// log.Println("OpenInode", args)
 
 		f, err := root.Namespace().Open(args[0])
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				r.Return(openInode{Error: fs.ErrNotExist.Error()})
-				return
-			}
-			r.Return(err)
-			return
-		}
-		defer f.Close()
-
-		fi, err := f.Stat()
-		if err != nil {
 			r.Return(err)
 			return
 		}
 
-		var entries []openInode
-		if fi.IsDir() {
-			e, err := fs.ReadDir(root.Namespace(), args[0])
-			if err != nil {
-				r.Return(err)
-				return
-			}
-			for _, ee := range e {
-				efi, err := ee.Info()
-				if err != nil {
-					r.Return(err)
-					return
-				}
-				entries = append(entries, openInode{
-					Name:  efi.Name(),
-					IsDir: efi.IsDir(),
-					Mode:  uint32(efi.Mode()),
-					Size:  int64(efi.Size()),
-				})
-			}
-		}
-
-		node := openInode{
-			Path:    args[0],
-			Name:    path.Base(args[0]),
-			Size:    fi.Size(),
-			IsDir:   fi.IsDir(),
-			Mode:    uint32(fi.Mode()),
-			Entries: entries,
-		}
-
-		err = r.Return(node)
-		if err != nil {
-			log.Println("err:", err)
-		}
+		fdCounter++
+		fds[fdCounter] = f
+		r.Return(fdCounter)
 	}))
+	peer.Handle("Close", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+		var args []any
+		c.Receive(&args)
+
+		fd, ok := args[0].(uint64)
+		if !ok {
+			log.Panicf("arg 0 is not a uint64: %T %v", args[1], args[1])
+		}
+
+		f, ok := fds[int(fd)]
+		if !ok {
+			r.Return(fs.ErrInvalid)
+			return
+		}
+
+		r.Return(f.Close())
+		delete(fds, int(fd))
+	}))
+	peer.Handle("Read", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+		var args []any
+		c.Receive(&args)
+
+		fd, ok := args[0].(uint64)
+		if !ok {
+			log.Panicf("arg 0 is not a uint64: %T %v", args[1], args[1])
+		}
+
+		f, ok := fds[int(fd)]
+		if !ok {
+			r.Return(fs.ErrInvalid)
+			return
+		}
+
+		count, ok := args[1].(uint64)
+		if !ok {
+			panic("arg 1 is not a uint64")
+		}
+
+		buf := make([]byte, count)
+		n, err := f.Read(buf)
+		if err == io.EOF {
+			r.Return([]byte{})
+			return
+		}
+		if err != nil {
+			r.Return(err)
+			return
+		}
+
+		r.Return(buf[:n])
+	}))
+	peer.Handle("Write", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+		var args []any
+		c.Receive(&args)
+
+		fd, ok := args[0].(uint64)
+		if !ok {
+			log.Panicf("arg 0 is not a uint64: %T %v", args[1], args[1])
+		}
+
+		f, ok := fds[int(fd)]
+		if !ok {
+			r.Return(fs.ErrInvalid)
+			return
+		}
+
+		data, ok := args[1].([]byte)
+		if !ok {
+			panic("arg 1 is not a []byte")
+		}
+
+		n, err := fs.Write(f, data)
+		if err != nil {
+			r.Return(err)
+			return
+		}
+
+		r.Return(n)
+	}))
+
+	// peer.Handle("OpenInode", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+	// 	var args []string
+	// 	c.Receive(&args)
+	// 	// log.Println("OpenInode", args)
+
+	// 	f, err := root.Namespace().Open(args[0])
+	// 	if err != nil {
+	// 		if errors.Is(err, fs.ErrNotExist) {
+	// 			r.Return(openInode{Error: fs.ErrNotExist.Error()})
+	// 			return
+	// 		}
+	// 		r.Return(err)
+	// 		return
+	// 	}
+	// 	defer f.Close()
+
+	// 	fi, err := f.Stat()
+	// 	if err != nil {
+	// 		r.Return(err)
+	// 		return
+	// 	}
+
+	// 	var entries []openInode
+	// 	if fi.IsDir() {
+	// 		e, err := fs.ReadDir(root.Namespace(), args[0])
+	// 		if err != nil {
+	// 			r.Return(err)
+	// 			return
+	// 		}
+	// 		for _, ee := range e {
+	// 			efi, err := ee.Info()
+	// 			if err != nil {
+	// 				r.Return(err)
+	// 				return
+	// 			}
+	// 			entries = append(entries, openInode{
+	// 				Name:  efi.Name(),
+	// 				IsDir: efi.IsDir(),
+	// 				Mode:  uint32(efi.Mode()),
+	// 				Size:  int64(efi.Size()),
+	// 			})
+	// 		}
+	// 	}
+
+	// 	node := openInode{
+	// 		Path:    args[0],
+	// 		Name:    path.Base(args[0]),
+	// 		Size:    fi.Size(),
+	// 		IsDir:   fi.IsDir(),
+	// 		Mode:    uint32(fi.Mode()),
+	// 		Entries: entries,
+	// 	}
+
+	// 	err = r.Return(node)
+	// 	if err != nil {
+	// 		log.Println("err:", err)
+	// 	}
+	// }))
 	peer.Handle("ReadDir", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
 		var args []string
 		c.Receive(&args)
@@ -156,45 +251,6 @@ func setupAPI(peer *talk.Peer, root *proc.Process) {
 			r.Return(err)
 			return
 		}
-	}))
-	peer.Handle("Read", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
-		var args []any
-		c.Receive(&args)
-
-		name, ok := args[0].(string)
-		if !ok {
-			panic("arg 0 is not a string")
-		}
-
-		offset, ok := args[1].(uint64)
-		if !ok {
-			log.Panicf("arg 1 is not a uint64: %T %v", args[1], args[1])
-		}
-
-		count, ok := args[2].(uint64)
-		if !ok {
-			panic("arg 2 is not a uint64")
-		}
-
-		f, err := root.Namespace().Open(name)
-		if err != nil {
-			r.Return(err)
-			return
-		}
-		defer f.Close()
-
-		buf := make([]byte, count)
-		n, err := fs.ReadAt(f, buf, int64(offset))
-		if err == io.EOF {
-			r.Return([]byte{})
-			return
-		}
-		if err != nil {
-			r.Return(err)
-			return
-		}
-
-		r.Return(buf[:n])
 	}))
 	peer.Handle("ReadFile", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
 		var args []string
