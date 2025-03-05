@@ -17,10 +17,11 @@ self.addEventListener("fetch", async (event) => {
 
     const req = event.request;
     const url = new URL(req.url);
-    const headers = {}
+    const headers = {};
     for (var p of req.headers) {
-        headers[p[0]] = p[1]
+        headers[p[0]] = p[1];
     }
+    headers["X-ServiceWorker"] = self.location.href;
 
     event.respondWith(new Promise(async (resolve) => {
         const ch = new MessageChannel();
@@ -40,7 +41,7 @@ self.addEventListener("fetch", async (event) => {
             responder: ch.port2
         }, [ch.port2]);
         try {
-            const reply = await Promise.race([response, timeout(1000)]);
+            const reply = await Promise.race([response, timeout(2000)]);
 
             if (reply.error) {
                 throw new Error(reply.error);
