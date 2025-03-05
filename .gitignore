@@ -7,3 +7,4 @@
 /wasm/assets/wanix.wasm
 /wasm/assets/wasm_exec.js
 /wasm/assets/debug
+/wasm/assets/wasi/wasi.js
