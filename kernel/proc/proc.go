@@ -207,7 +207,7 @@ func (r *Process) Sub(name string) (fs.FS, error) {
 			}
 			return nil
 		}),
-		"env": misc.FieldFile(r.env, func(in []byte) error {
+		"env": misc.FieldFile(strings.Join(r.env, "\n"), func(in []byte) error {
 			if len(in) > 0 {
 				r.env = strings.Split(strings.TrimSpace(string(in)), " ")
 			}
