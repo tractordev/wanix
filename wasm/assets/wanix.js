@@ -34,6 +34,10 @@ export class WanixFS {
         await this.peer.call("Remove", [name]);
     }
 
+    async truncate(name, size) {
+        await this.peer.call("Truncate", [name, size]);
+    }
+
     async open(name) {
         return (await this.peer.call("Open", [name])).value;
     }
@@ -50,9 +54,8 @@ export class WanixFS {
         return (await this.peer.call("Close", [fd])).value;
     }
 
-    // deprecated
-    async openInode(name) {
-        return (await this.peer.call("OpenInode", [name])).value;
+    async sync(fd) {
+        return (await this.peer.call("Sync", [fd])).value;
     }
 
 }
@@ -82,40 +85,4 @@ export class Wanix extends WanixFS {
         }); 
         
     }
-}
-
-export class ValueBuffer {
-    constructor(buf) {
-        this.shared = buf;
-        this.ctrl = new Int32Array(this.shared, 0, 2);
-        this.status = new Int32Array(this.shared, 4, 1);
-        this.len = new Int32Array(this.shared, 8, 1);
-        this.data = new Uint8Array(this.shared, 12);
-    }
-
-    set(value) {
-        const buf = (new TextEncoder()).encode(JSON.stringify(value));
-        this.len[0] = buf.length;
-        this.data.set(buf, 0);
-        this.status[0] = 0;
-
-        Atomics.store(this.ctrl, 0, 1);
-        Atomics.notify(this.ctrl, 0);
-    }
-
-    get(msg) {
-        this.ctrl[0] = 0; 
-        postMessage(msg);
-        Atomics.wait(this.ctrl, 0, 0);
-        const data = this.data.slice(0, this.len[0]);
-        return JSON.parse(new TextDecoder().decode(data));
-    }
-
-    getBytes(msg) {
-        this.ctrl[0] = 0; 
-        postMessage(msg);
-        Atomics.wait(this.ctrl, 0, 0);
-        return this.data.slice(0, this.len[0]);
-    }
-
 }
