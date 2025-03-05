@@ -19,6 +19,10 @@ type Node struct {
 	size    int64
 	sys     any
 	data    []byte
+
+	reader io.Reader
+	writer io.Writer
+
 	// nodes   []*N
 }
 
@@ -29,6 +33,8 @@ func RawNode(attrs ...any) *Node {
 		case int64:
 			n.size = v
 		case int:
+			n.size = int64(v)
+		case uint64:
 			n.size = int64(v)
 		case time.Time:
 			n.modTime = v
@@ -44,6 +50,18 @@ func RawNode(attrs ...any) *Node {
 			n.size = v.Size()
 			n.modTime = v.ModTime()
 			n.sys = v.Sys()
+
+		// these must come after fs.FileInfo since
+		// some of our fs.FileInfo implementations
+		// are also io.Readers...
+		case io.ReadWriter:
+			n.reader = v
+			n.writer = v
+		case io.Reader:
+			n.reader = v
+		case io.Writer:
+			n.writer = v
+
 			// case *N:
 			// n.nodes = append(n.nodes, v)
 		}
@@ -147,6 +165,10 @@ func (f *nodeFile) Read(b []byte) (int, error) {
 		return 0, fs.ErrClosed
 	}
 
+	if f.reader != nil {
+		return f.reader.Read(b)
+	}
+
 	if f.offset >= int64(len(f.data)) {
 		return 0, io.EOF
 	}
@@ -189,6 +211,10 @@ func (f *nodeFile) ReadAt(b []byte, offset int64) (int, error) {
 		return 0, fs.ErrClosed
 	}
 
+	if f.reader != nil {
+		return f.reader.Read(b)
+	}
+
 	if offset < 0 || offset > int64(len(f.data)) {
 		return 0, &fs.PathError{Op: "read", Path: f.name, Err: fs.ErrInvalid}
 	}
@@ -205,6 +231,10 @@ func (f *nodeFile) Write(b []byte) (int, error) {
 
 	if f.closed {
 		return 0, fs.ErrClosed
+	}
+
+	if f.writer != nil {
+		return f.writer.Write(b)
 	}
 
 	n := len(b)
@@ -233,6 +263,10 @@ func (f *nodeFile) WriteAt(b []byte, offset int64) (int, error) {
 
 	if f.closed {
 		return 0, fs.ErrClosed
+	}
+
+	if f.writer != nil {
+		return f.writer.Write(b)
 	}
 
 	if offset < 0 || offset > int64(len(f.data)) {
