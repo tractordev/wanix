@@ -12,20 +12,24 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/kernel"
 	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/web/jsutil"
 )
 
 type Device struct {
 	types     map[string]func([]string) (fs.FS, error)
 	resources map[string]fs.FS
 	nextID    int
+	k         *kernel.K
 }
 
-func New() *Device {
+func New(k *kernel.K) *Device {
 	d := &Device{
 		types:     make(map[string]func([]string) (fs.FS, error)),
 		resources: make(map[string]fs.FS),
 		nextID:    0,
+		k:         k,
 	}
 	for _, tag := range []string{"div", "iframe", "xterm"} {
 		d.Register(tag, func(args []string) (fs.FS, error) {
@@ -69,6 +73,7 @@ func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) 
 						term := js.Global().Get("Terminal").New()
 						el.Set("term", term)
 						termData = newTermData(term)
+						setupFileDrop(el, d.k.NS)
 					} else {
 						el = js.Global().Get("document").Call("createElement", name)
 					}
@@ -233,4 +238,35 @@ func (s *termDataFile) Read(p []byte) (int, error) {
 
 func (s *termDataFile) Close() error {
 	return nil
+}
+
+// TODO: handle multiple files, put in dir under opfs
+func setupFileDrop(el js.Value, fsys fs.FS) {
+	defaultHandler := js.FuncOf(func(this js.Value, args []js.Value) any {
+		args[0].Call("preventDefault")
+		args[0].Call("stopPropagation")
+		return nil
+	})
+	el.Call("addEventListener", "dragenter", defaultHandler)
+	el.Call("addEventListener", "dragover", defaultHandler)
+	el.Call("addEventListener", "drop", js.FuncOf(func(this js.Value, args []js.Value) any {
+		args[0].Call("preventDefault")
+		args[0].Call("stopPropagation")
+		file := args[0].Get("dataTransfer").Get("files").Index(0)
+		if file.IsUndefined() {
+			return nil
+		}
+		//term := args[0].Get("target").Call("closest", ".terminal").Get("parentElement").Get("term")
+		go func() {
+			jsBuf := js.Global().Get("Uint8Array").New(jsutil.Await(file.Call("arrayBuffer")))
+			buf := make([]byte, jsBuf.Get("length").Int())
+			js.CopyBytesToGo(buf, jsBuf)
+			filename := "opfs/" + file.Get("name").String()
+			if err := fs.WriteFile(fsys, filename, buf, 0644); err != nil {
+				js.Global().Get("console").Call("error", err.Error())
+				return
+			}
+		}()
+		return nil
+	}))
 }

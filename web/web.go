@@ -21,7 +21,7 @@ import (
 func New(k *kernel.K, ctx js.Value) fskit.MapFS {
 	workerfs := worker.New(k)
 	webfs := fskit.MapFS{
-		"dom":    dom.New(),
+		"dom":    dom.New(k),
 		"vm":     vm.New(),
 		"worker": workerfs,
 	}
@@ -41,7 +41,7 @@ func New(k *kernel.K, ctx js.Value) fskit.MapFS {
 		if err != nil {
 			return err
 		}
-		args := append([]string{fmt.Sprintf("pid=%s", p.ID()), "/wasi_worker.js"}, strings.Split(p.Cmd(), " ")...)
+		args := append([]string{fmt.Sprintf("pid=%s", p.ID()), "/wasi/worker.js"}, strings.Split(p.Cmd(), " ")...)
 		return w.Start(args...)
 	})
 
