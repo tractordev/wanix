@@ -67,7 +67,7 @@ func StartFor(fsys fs.FS, ctx js.Value, debug bool) {
 			virtioSend.Invoke(jsBuf)
 		}
 	}()
-	srv := p9.NewServer(p9kit.Attacher(fsys))
+	srv := p9.NewServer(p9kit.Attacher(fsys)) //, p9.WithServerLogger(ulog.Log))
 	go func() {
 		if err := srv.Handle(inR, outW); err != nil {
 			log.Fatal(err)
