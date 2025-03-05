@@ -3,6 +3,7 @@ package fs
 import (
 	"context"
 	"path"
+	"time"
 )
 
 // Sub returns an [FS] corresponding to the subtree rooted at fsys's dir.
@@ -93,6 +94,22 @@ func (f *SubdirFS) Mkdir(name string, perm FileMode) error {
 		return err
 	}
 	return Mkdir(f.Fsys, full, perm)
+}
+
+func (f *SubdirFS) Truncate(name string, size int64) error {
+	full, err := f.fullName("truncate", name)
+	if err != nil {
+		return err
+	}
+	return Truncate(f.Fsys, full, size)
+}
+
+func (f *SubdirFS) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	full, err := f.fullName("chtimes", name)
+	if err != nil {
+		return err
+	}
+	return Chtimes(f.Fsys, full, atime, mtime)
 }
 
 func (f *SubdirFS) Remove(name string) error {
