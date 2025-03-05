@@ -125,15 +125,33 @@ func (d *Device) handleMessage(this js.Value, args []js.Value) interface{} {
 }
 
 func (d *Device) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("X-ServiceWorker", r.Header.Get("X-ServiceWorker"))
+	w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
+	w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
 	if strings.HasPrefix(r.URL.Path, "/sw/") {
 		path := strings.TrimPrefix(r.URL.Path, "/sw/")
+
+		entries, err := fs.ReadDir(d.k.NS, strings.TrimSuffix(path, "/"))
+		if err == nil {
+			if !strings.HasSuffix(r.URL.Path, "/") {
+				http.Redirect(w, r, r.URL.Path+"/", http.StatusTemporaryRedirect)
+				return
+			}
+			for _, entry := range entries {
+				if entry.Name() == "index.html" {
+					http.ServeFileFS(w, r, d.k.NS, filepath.Join(path, entry.Name()))
+					return
+				}
+			}
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+
 		b, err := fs.ReadFile(d.k.NS, path)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
-		w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
 		contentType := mime.TypeByExtension(filepath.Ext(path))
 		if contentType == "" {
 			contentType = http.DetectContentType(b)
