@@ -3,10 +3,10 @@
 package api
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"syscall/js"
+	"time"
 
 	"tractor.dev/toolkit-go/duplex/codec"
 	"tractor.dev/toolkit-go/duplex/mux"
@@ -76,6 +76,23 @@ func setupAPI(peer *talk.Peer, root *proc.Process) {
 		r.Return(f.Close())
 		delete(fds, int(fd))
 	}))
+	peer.Handle("Sync", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+		var args []any
+		c.Receive(&args)
+
+		fd, ok := args[0].(uint64)
+		if !ok {
+			log.Panicf("arg 0 is not a uint64: %T %v", args[1], args[1])
+		}
+
+		f, ok := fds[int(fd)]
+		if !ok {
+			r.Return(fs.ErrInvalid)
+			return
+		}
+
+		r.Return(fs.Sync(f))
+	}))
 	peer.Handle("Read", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
 		var args []any
 		c.Receive(&args)
@@ -137,65 +154,6 @@ func setupAPI(peer *talk.Peer, root *proc.Process) {
 
 		r.Return(n)
 	}))
-
-	// peer.Handle("OpenInode", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
-	// 	var args []string
-	// 	c.Receive(&args)
-	// 	// log.Println("OpenInode", args)
-
-	// 	f, err := root.Namespace().Open(args[0])
-	// 	if err != nil {
-	// 		if errors.Is(err, fs.ErrNotExist) {
-	// 			r.Return(openInode{Error: fs.ErrNotExist.Error()})
-	// 			return
-	// 		}
-	// 		r.Return(err)
-	// 		return
-	// 	}
-	// 	defer f.Close()
-
-	// 	fi, err := f.Stat()
-	// 	if err != nil {
-	// 		r.Return(err)
-	// 		return
-	// 	}
-
-	// 	var entries []openInode
-	// 	if fi.IsDir() {
-	// 		e, err := fs.ReadDir(root.Namespace(), args[0])
-	// 		if err != nil {
-	// 			r.Return(err)
-	// 			return
-	// 		}
-	// 		for _, ee := range e {
-	// 			efi, err := ee.Info()
-	// 			if err != nil {
-	// 				r.Return(err)
-	// 				return
-	// 			}
-	// 			entries = append(entries, openInode{
-	// 				Name:  efi.Name(),
-	// 				IsDir: efi.IsDir(),
-	// 				Mode:  uint32(efi.Mode()),
-	// 				Size:  int64(efi.Size()),
-	// 			})
-	// 		}
-	// 	}
-
-	// 	node := openInode{
-	// 		Path:    args[0],
-	// 		Name:    path.Base(args[0]),
-	// 		Size:    fi.Size(),
-	// 		IsDir:   fi.IsDir(),
-	// 		Mode:    uint32(fi.Mode()),
-	// 		Entries: entries,
-	// 	}
-
-	// 	err = r.Return(node)
-	// 	if err != nil {
-	// 		log.Println("err:", err)
-	// 	}
-	// }))
 	peer.Handle("ReadDir", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
 		var args []string
 		c.Receive(&args)
@@ -240,7 +198,38 @@ func setupAPI(peer *talk.Peer, root *proc.Process) {
 			return
 		}
 
-		r.Return(fmt.Sprintf("%v", fi))
+		r.Return(struct {
+			Size    int64
+			Mode    uint32
+			IsDir   bool
+			ModTime time.Time
+		}{
+			Size:    fi.Size(),
+			Mode:    uint32(fi.Mode()),
+			IsDir:   fi.IsDir(),
+			ModTime: fi.ModTime(),
+		})
+	}))
+	peer.Handle("Truncate", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+		var args []any
+		c.Receive(&args)
+
+		path, ok := args[0].(string)
+		if !ok {
+			panic("arg 0 is not a string")
+		}
+
+		usize, ok := args[1].(uint64)
+		if !ok {
+			log.Panicf("arg 1 is not a uint64: %T %v", args[1], args[1])
+		}
+		size := int64(usize)
+
+		err := fs.Truncate(root.Namespace(), path, size)
+		if err != nil {
+			r.Return(err)
+			return
+		}
 	}))
 	peer.Handle("Remove", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
 		var args []string
