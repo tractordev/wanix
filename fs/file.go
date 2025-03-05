@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"fmt"
 	"io"
 )
 
@@ -36,7 +37,7 @@ func WriteAt(f File, data []byte, off int64) (int, error) {
 func Seek(f File, offset int64, whence int) (int64, error) {
 	s, ok := f.(io.Seeker)
 	if !ok {
-		return 0, ErrNotSupported
+		return 0, fmt.Errorf("%w: Seek", ErrNotSupported)
 	}
 	return s.Seek(offset, whence)
 }
@@ -74,5 +75,5 @@ func Sync(f File) error {
 	if sf, ok := f.(SyncFile); ok {
 		return sf.Sync()
 	}
-	return ErrNotSupported
+	return fmt.Errorf("%w: Sync", ErrNotSupported)
 }
