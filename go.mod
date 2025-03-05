@@ -2,7 +2,7 @@ module tractor.dev/wanix
 
 go 1.23.1
 
-replace github.com/hugelgupf/p9 => github.com/progrium/p9 v0.0.0-20250227004919-318e829e843d
+replace github.com/hugelgupf/p9 => github.com/progrium/p9 v0.0.0-20250227010111-4025760ecd04
 
 require (
 	github.com/hanwen/go-fuse/v2 v2.7.2

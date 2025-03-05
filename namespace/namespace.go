@@ -1,4 +1,4 @@
-package ns
+package namespace
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"tractor.dev/wanix/fs"
-
 	"tractor.dev/wanix/fs/fskit"
 )
 

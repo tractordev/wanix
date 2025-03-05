@@ -1,4 +1,4 @@
-package fsys
+package cap
 
 import (
 	"fmt"
@@ -11,8 +11,10 @@ import (
 
 func TestDevice(t *testing.T) {
 	dev := New(nil)
-	dev.Register("hellofs", func(_ []string) (fs.FS, error) {
-		return fskit.MapFS{"hellofile": fskit.RawNode([]byte("hello, world\n"))}, nil
+	dev.Register("hellofs", func(_ *Resource) (Mounter, error) {
+		return func(_ []string) (fs.FS, error) {
+			return fskit.MapFS{"hellofile": fskit.RawNode([]byte("hello, world\n"))}, nil
+		}, nil
 	})
 
 	// check for new/hellofs

@@ -1,15 +1,13 @@
 package main
 
 import (
-	"io/fs"
 	"log"
 	"os"
 	"os/signal"
 
 	"tractor.dev/toolkit-go/engine/cli"
-	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs/fusekit"
-	"tractor.dev/wanix/kernel"
 )
 
 func mountCmd() *cli.Command {
@@ -19,10 +17,7 @@ func mountCmd() *cli.Command {
 		Run: func(ctx *cli.Context, args []string) {
 			log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
 
-			k := kernel.New()
-			k.Fsys.Register("hellofs", func(args []string) (fs.FS, error) {
-				return fskit.MapFS{"hellofile": fskit.RawNode([]byte("hello, world\n"))}, nil
-			})
+			k := wanix.New()
 
 			root, err := k.NewRoot()
 			if err != nil {

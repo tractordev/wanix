@@ -78,7 +78,7 @@ self.onmessage = async (e) => {
             break;
 
         case "exit":
-            await fs.writeFile(`proc/${pid}/exit`, e.data.code.toString());
+            await fs.writeFile(`task/${pid}/exit`, e.data.code.toString());
             call.respond(true);
             break;
         
@@ -88,14 +88,14 @@ self.onmessage = async (e) => {
         // console.log(performance.now() - start);
     }
 
-    const cmd = await fs.readFile(`proc/${pid}/cmd`);
-    const env = await fs.readFile(`proc/${pid}/env`);
+    const cmd = await fs.readFile(`task/${pid}/cmd`);
+    const env = await fs.readFile(`task/${pid}/env`);
     worker.postMessage({
         buffer: shared, 
         args: (new TextDecoder()).decode(cmd).trim().split(" "),
         env: (new TextDecoder()).decode(env).trim().split("\n"), //["GOPATH=/", "GOROOT=."]
-        stdin: `proc/${pid}/fd/worker0`,
-        stdout: `proc/${pid}/fd/worker1`,
-        stderr: `proc/${pid}/fd/worker2`,
+        stdin: `task/${pid}/.sys/fd0`,
+        stdout: `task/${pid}/.sys/fd1`,
+        stderr: `task/${pid}/.sys/fd2`,
     });
 }

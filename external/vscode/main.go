@@ -2,12 +2,9 @@ package main
 
 import (
 	"embed"
-	"fmt"
 	"log"
-	"os"
-	"strings"
 
-	"tractor.dev/wanix/kernel/fsys"
+	"tractor.dev/wanix/cap"
 )
 
 //go:embed assets
@@ -20,18 +17,19 @@ func fatal(err error) {
 }
 
 func main() {
-	go func() {
-		log.Println("launching vscode...")
-		b, err := os.ReadFile("/web/dom/new/iframe")
-		fatal(err)
-		id := strings.TrimSpace(string(b))
-		fatal(os.WriteFile("/web/dom/body/ctl", []byte(fmt.Sprintf("append-child %s", id)), 0))
-		fatal(os.WriteFile("/web/dom/style", []byte("iframe { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }"), 0))
-		// for the moment, "go9p" is hardcoded mount point for exported fs.
-		// similarly, for now "/sw" is hardcoded path for wanix root fs.
-		fatal(os.WriteFile(fmt.Sprintf("/web/dom/%s/attrs", id), []byte("src=/sw/go9p/assets/"), 0))
-	}()
+	// go func() {
+	// 	log.Println("launching vscode...")
+	// 	b, err := os.ReadFile("/web/dom/new/iframe")
+	// 	fatal(err)
+	// 	id := strings.TrimSpace(string(b))
+	// 	time.Sleep(1 * time.Second) // kludge: wait for fsa readdir cache to expire
+	// 	fatal(os.WriteFile("/web/dom/body/ctl", []byte(fmt.Sprintf("append-child %s", id)), 0))
+	// 	fatal(os.WriteFile("/web/dom/style", []byte("iframe { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }"), 0))
+	// 	// for the moment, "go9p" is hardcoded mount point for exported fs.
+	// 	// similarly, for now "/sw" is hardcoded path for wanix root fs.
+	// 	fatal(os.WriteFile(fmt.Sprintf("/web/dom/%s/attrs", id), []byte("src=/sw/go9p/assets/"), 0))
+	// }()
 
 	log.Println("exporting fs...")
-	fatal(fsys.Export(assets))
+	fatal(cap.Export(assets))
 }

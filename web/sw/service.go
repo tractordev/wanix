@@ -12,20 +12,20 @@ import (
 	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal/httprecorder"
-	"tractor.dev/wanix/kernel"
 	"tractor.dev/wanix/misc"
 	"tractor.dev/wanix/web/jsutil"
 )
 
-type Device struct {
+type Service struct {
 	active js.Value
-	k      *kernel.K
+	k      *wanix.K
 }
 
-func Activate(ch js.Value, k *kernel.K) *Device {
+func Activate(ch js.Value, k *wanix.K) *Service {
 	reg := jsutil.Await(jsutil.Get("navigator.serviceWorker").Call("getRegistration"))
 	if reg.IsUndefined() {
 		swPath := "./sw.js"
@@ -33,7 +33,7 @@ func Activate(ch js.Value, k *kernel.K) *Device {
 		reg = jsutil.Await(jsutil.Get("navigator.serviceWorker.ready"))
 	}
 
-	d := &Device{
+	d := &Service{
 		active: reg.Get("active"),
 		k:      k,
 	}
@@ -43,7 +43,7 @@ func Activate(ch js.Value, k *kernel.K) *Device {
 	return d
 }
 
-func (d *Device) Sub(name string) (fs.FS, error) {
+func (d *Service) Sub(name string) (fs.FS, error) {
 	fsys := fskit.MapFS{
 		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
@@ -68,11 +68,11 @@ func (d *Device) Sub(name string) (fs.FS, error) {
 	return fs.Sub(fsys, name)
 }
 
-func (d *Device) Open(name string) (fs.File, error) {
+func (d *Service) Open(name string) (fs.File, error) {
 	return d.OpenContext(context.Background(), name)
 }
 
-func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	fsys, err := d.Sub(".")
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) 
 	return fs.OpenContext(ctx, fsys, name)
 }
 
-func (d *Device) handleMessage(this js.Value, args []js.Value) interface{} {
+func (d *Service) handleMessage(this js.Value, args []js.Value) interface{} {
 	if args[0].Get("data").Get("request").IsUndefined() {
 		return nil
 	}
@@ -124,7 +124,7 @@ func (d *Device) handleMessage(this js.Value, args []js.Value) interface{} {
 	return nil
 }
 
-func (d *Device) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("X-ServiceWorker", r.Header.Get("X-ServiceWorker"))
 	w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
 	w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")

@@ -91,15 +91,7 @@ func (fsys MemFS) Create(name string) (fs.File, error) {
 		return nil, &fs.PathError{Op: "create", Path: name, Err: fs.ErrNotExist}
 	}
 
-	ok, err := fs.Exists(fsys, name)
-	if err != nil {
-		return nil, err
-	}
-	if ok {
-		return nil, &fs.PathError{Op: "create", Path: name, Err: fs.ErrExist}
-	}
-
-	fsys[name] = Entry(name, fs.FileMode(0666), time.Now())
+	fsys[name] = Entry(name, fs.FileMode(0644), time.Now())
 	return fsys[name].Open(".")
 }
 

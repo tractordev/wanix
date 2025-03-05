@@ -1,7 +1,7 @@
 # WANIX
 [![Discord](https://img.shields.io/discord/415940907729420288?label=Discord)](https://discord.gg/nQbgRjEBU4) ![GitHub Sponsors](https://img.shields.io/github/sponsors/progrium?label=Sponsors)
 
-A virtual operating system for the web, inspired by Plan 9.
+A virtual operating system kit for the web, inspired by Plan 9.
 
 ### Features
 
@@ -10,16 +10,14 @@ A virtual operating system for the web, inspired by Plan 9.
 * Per-process namespaces for security, isolation, and custom environments
 * Built-in emulator for x86 support, Linux compatibility, and Docker-like functionality
 * Runs in the browser as well as natively on Mac, Windows, and Linux
-* Web: Filesystem capabilities for OPFS, web workers, service workers, and DOM
-* Web: Executes WASI WebAssembly *and* x86 executables in their own web workers
+* Web: Filesystem interfaces for OPFS, DOM, web workers, and service workers
+* Web: Runs WASI WebAssembly *and* x86 executables
 
 ### Example Uses
 
-* Use as foundation for a modern web-native operating system
-* Use as toolkit for building dynamic filesystems
-* Run legacy software in the browser more easily
 * Embed systems software and development tools in web applications
-* Experiment with Plan 9 capabilities on your native platform
+* Experiment with Plan 9 capabilities in browser or natively
+* Use as foundation for a modern web-native operating system
 
 ## Install
 

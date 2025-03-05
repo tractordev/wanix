@@ -9,79 +9,19 @@ import (
 	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/kernel"
 	"tractor.dev/wanix/misc"
 	"tractor.dev/wanix/web/api"
 )
-
-type Device struct {
-	resources map[string]fs.FS
-	nextID    int
-	k         *kernel.K
-}
-
-func New(k *kernel.K) *Device {
-	return &Device{
-		resources: make(map[string]fs.FS),
-		nextID:    0,
-		k:         k,
-	}
-}
-
-func (d *Device) Alloc() (*Resource, error) {
-	d.nextID++
-	rid := strconv.Itoa(d.nextID)
-	r := &Resource{
-		id:    d.nextID,
-		state: "allocated",
-		src:   "",
-		k:     d.k,
-	}
-	d.resources[rid] = r
-	return r, nil
-}
-
-func (d *Device) Sub(name string) (fs.FS, error) {
-	return fs.Sub(fskit.UnionFS{fskit.MapFS{
-		"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
-			if name == "." {
-				return &fskit.FuncFile{
-					Node: fskit.Entry(name, 0555),
-					ReadFunc: func(n *fskit.Node) error {
-						r, err := d.Alloc()
-						if err != nil {
-							return err
-						}
-						fskit.SetData(n, []byte(r.ID()+"\n"))
-						return nil
-					},
-				}, nil
-			}
-			return nil, fs.ErrNotExist
-		}),
-	}, fskit.MapFS(d.resources)}, name)
-}
-
-func (d *Device) Open(name string) (fs.File, error) {
-	return d.OpenContext(context.Background(), name)
-}
-
-func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, err := d.Sub(".")
-	if err != nil {
-		return nil, err
-	}
-	return fs.OpenContext(ctx, fsys, name)
-}
 
 type Resource struct {
 	id     int
 	state  string
 	src    string
 	worker js.Value
-	k      *kernel.K
+	k      *wanix.K
 }
 
 func (r *Resource) ID() string {

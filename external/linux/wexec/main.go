@@ -29,20 +29,20 @@ func main() {
 	args[0] = strings.TrimPrefix(filepath.Join(wd, args[0]), "/wanix/")
 
 	debug("allocating pid")
-	pidRaw, err := os.ReadFile("/wanix/proc/new/wasi")
+	pidRaw, err := os.ReadFile("/wanix/task/new/wasi")
 	if err != nil {
 		log.Fatal(err)
 	}
 	pid := strings.TrimSpace(string(pidRaw))
 
 	debug("writing cmd")
-	if err := appendFile(fmt.Sprintf("/wanix/proc/%s/cmd", pid), []byte(strings.Join(args, " "))); err != nil {
+	if err := appendFile(fmt.Sprintf("/wanix/task/%s/cmd", pid), []byte(strings.Join(args, " "))); err != nil {
 		log.Fatal(err)
 	}
 
 	debug("writing env")
 	env := strings.Join(append(os.Environ(), ""), "\n")
-	if err := appendFile(fmt.Sprintf("/wanix/proc/%s/env", pid), []byte(env)); err != nil {
+	if err := appendFile(fmt.Sprintf("/wanix/task/%s/env", pid), []byte(env)); err != nil {
 		log.Fatal(err)
 	}
 
@@ -53,7 +53,7 @@ func main() {
 		defer wg.Done()
 		debug("polling fd/1 => stdout")
 		for {
-			b, err := os.ReadFile(fmt.Sprintf("/wanix/proc/%s/fd/1", pid))
+			b, err := os.ReadFile(fmt.Sprintf("/wanix/task/%s/fd/1", pid))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -69,7 +69,7 @@ func main() {
 		defer wg.Done()
 		debug("polling fd/2 => stderr")
 		for {
-			b, err := os.ReadFile(fmt.Sprintf("/wanix/proc/%s/fd/2", pid))
+			b, err := os.ReadFile(fmt.Sprintf("/wanix/task/%s/fd/2", pid))
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -82,13 +82,13 @@ func main() {
 	}()
 
 	debug("starting")
-	if err := appendFile(fmt.Sprintf("/wanix/proc/%s/ctl", pid), []byte("start")); err != nil {
+	if err := appendFile(fmt.Sprintf("/wanix/task/%s/ctl", pid), []byte("start")); err != nil {
 		log.Fatal(err)
 	}
 
 	debug("waiting for exit")
 	for {
-		b, err := os.ReadFile(fmt.Sprintf("/wanix/proc/%s/exit", pid))
+		b, err := os.ReadFile(fmt.Sprintf("/wanix/task/%s/exit", pid))
 		if err != nil {
 			log.Fatal(err)
 		}

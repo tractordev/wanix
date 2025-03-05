@@ -13,7 +13,8 @@ import (
 	"tractor.dev/toolkit-go/duplex/rpc"
 	"tractor.dev/toolkit-go/duplex/talk"
 	"tractor.dev/wanix/fs"
-	"tractor.dev/wanix/kernel/proc"
+	"tractor.dev/wanix/task"
+	proc "tractor.dev/wanix/task"
 	"tractor.dev/wanix/web/jsutil"
 )
 
@@ -40,7 +41,7 @@ type openInode struct {
 	Error   string
 }
 
-func setupAPI(peer *talk.Peer, root *proc.Process) {
+func setupAPI(peer *talk.Peer, root *task.Process) {
 	fds := make(map[int]fs.File)
 	fdCounter := 0
 

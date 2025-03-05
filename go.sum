@@ -12,8 +12,8 @@ github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyua
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/moby/sys/mountinfo v0.6.2 h1:BzJjoreD5BMFNmD9Rus6gdd1pLuecOFPt8wC+Vygl78=
 github.com/moby/sys/mountinfo v0.6.2/go.mod h1:IJb6JQeOklcdMU9F5xQ8ZALD+CUr5VlGpwtX+VE0rpI=
-github.com/progrium/p9 v0.0.0-20250227004919-318e829e843d h1:OcRmczQanjkxYQRmUR7jYtqO/+/RMcVFsw9aq1tnFDE=
-github.com/progrium/p9 v0.0.0-20250227004919-318e829e843d/go.mod h1:LoNwfBWP+QlCkjS1GFNylCthRIk/TkMZd6ICTbC+hrI=
+github.com/progrium/p9 v0.0.0-20250227010111-4025760ecd04 h1:W1mpQ3XuBi8HzLTvexAl8YDj6JS+lQkRYBF4CLj1qYw=
+github.com/progrium/p9 v0.0.0-20250227010111-4025760ecd04/go.mod h1:LoNwfBWP+QlCkjS1GFNylCthRIk/TkMZd6ICTbC+hrI=
 github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 h1:pyC9PaHYZFgEKFdlp3G8RaCKgVpHZnecvArXvPXcFkM=
 github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701/go.mod h1:P3a5rG4X7tI17Nn3aOIAYr5HbIMukwXG0urG0WuL8OA=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=

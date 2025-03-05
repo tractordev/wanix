@@ -1,4 +1,4 @@
-package ns
+package namespace
 
 import (
 	"context"

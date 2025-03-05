@@ -1,28 +1,28 @@
-package kernel
+package wanix
 
 import (
 	"io/fs"
 
-	"tractor.dev/wanix/kernel/fsys"
-	"tractor.dev/wanix/kernel/ns"
-	"tractor.dev/wanix/kernel/proc"
+	"tractor.dev/wanix/cap"
+	"tractor.dev/wanix/namespace"
+	"tractor.dev/wanix/task"
 )
 
 type K struct {
-	Fsys *fsys.Device
-	Proc *proc.Device
+	Cap  *cap.Service
+	Task *task.Service
 	Mod  map[string]fs.FS
 
-	nsch chan *ns.FS
-	NS   *ns.FS
-	Root *proc.Process
+	nsch chan *namespace.FS
+	NS   *namespace.FS
+	Root *task.Process
 }
 
 func New() *K {
-	nsch := make(chan *ns.FS, 1)
+	nsch := make(chan *namespace.FS, 1)
 	return &K{
-		Fsys: fsys.New(nsch),
-		Proc: proc.New(),
+		Cap:  cap.New(nsch),
+		Task: task.New(),
 		Mod:  make(map[string]fs.FS),
 		nsch: nsch,
 	}
@@ -32,8 +32,8 @@ func (k *K) AddModule(name string, mod fs.FS) {
 	k.Mod[name] = mod
 }
 
-func (k *K) NewRoot() (*proc.Process, error) {
-	p, err := k.Proc.Alloc("ns")
+func (k *K) NewRoot() (*task.Process, error) {
+	p, err := k.Task.Alloc("ns")
 	if err != nil {
 		return nil, err
 	}
@@ -44,10 +44,10 @@ func (k *K) NewRoot() (*proc.Process, error) {
 	k.NS = p.Namespace()
 	k.nsch <- k.NS
 	// bind hidden kernel devices
-	if err := p.Namespace().Bind(k.Fsys, ".", "#fsys", ""); err != nil {
+	if err := p.Namespace().Bind(k.Cap, ".", "#cap", ""); err != nil {
 		return nil, err
 	}
-	if err := p.Namespace().Bind(k.Proc, ".", "#proc", ""); err != nil {
+	if err := p.Namespace().Bind(k.Task, ".", "#task", ""); err != nil {
 		return nil, err
 	}
 

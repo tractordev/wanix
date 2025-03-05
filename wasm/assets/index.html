@@ -89,8 +89,7 @@
                 read("web/dom/new/xterm")
                 write("web/dom/body/ctl", "append-child 1")
                 read("web/vm/new")
-                write("proc/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
-                write("proc/1/ctl", "bind opfs/tmp tmp")
+                write("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
                 if (debug) {
                     document.querySelector("#screen_container").style.display = "block";
                 }

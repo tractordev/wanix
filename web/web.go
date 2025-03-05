@@ -7,10 +7,11 @@ import (
 	"strings"
 	"syscall/js"
 
+	"tractor.dev/wanix"
+	"tractor.dev/wanix/cap"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/kernel"
-	"tractor.dev/wanix/kernel/proc"
+	"tractor.dev/wanix/task"
 	"tractor.dev/wanix/web/dom"
 	"tractor.dev/wanix/web/fsa"
 	"tractor.dev/wanix/web/sw"
@@ -18,25 +19,26 @@ import (
 	"tractor.dev/wanix/web/worker"
 )
 
-func New(k *kernel.K, ctx js.Value) fskit.MapFS {
+func New(k *wanix.K, ctx js.Value) fskit.MapFS {
 	workerfs := worker.New(k)
+	opfs, _ := fsa.OPFS()
 	webfs := fskit.MapFS{
 		"dom":    dom.New(k),
 		"vm":     vm.New(),
 		"worker": workerfs,
+		"opfs":   opfs,
 	}
 	if !ctx.Get("sw").IsUndefined() {
 		webfs["sw"] = sw.Activate(ctx.Get("sw"), k)
 	}
 
-	k.Fsys.Register("pickerfs", func(s []string) (fs.FS, error) {
-		return fsa.ShowDirectoryPicker(), nil
-	})
-	k.Fsys.Register("opfs", func(s []string) (fs.FS, error) {
-		return fsa.OPFS()
+	k.Cap.Register("pickerfs", func(_ *cap.Resource) (cap.Mounter, error) {
+		return func(_ []string) (fs.FS, error) {
+			return fsa.ShowDirectoryPicker(), nil
+		}, nil
 	})
 
-	k.Proc.Register("wasi", func(p *proc.Process) error {
+	k.Task.Register("wasi", func(p *task.Process) error {
 		w, err := workerfs.Alloc()
 		if err != nil {
 			return err
