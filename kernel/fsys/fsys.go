@@ -3,11 +3,15 @@ package fsys
 import (
 	"context"
 	"log"
+	"net"
 	"strconv"
+	"sync"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/p9kit"
+	"tractor.dev/wanix/kernel/ns"
 	"tractor.dev/wanix/misc"
 )
 
@@ -15,13 +19,35 @@ type Device struct {
 	types     map[string]func([]string) (fs.FS, error)
 	resources map[string]fs.FS
 	nextID    int
+
+	exportA  net.Conn
+	exportB  net.Conn
+	once     sync.Once
+	copyOnce func()
 }
 
-func New() *Device {
+func New(nsch <-chan *ns.FS) *Device {
+	exportA, exportB := net.Pipe()
 	return &Device{
 		types:     make(map[string]func([]string) (fs.FS, error)),
 		resources: make(map[string]fs.FS),
 		nextID:    0,
+
+		exportA: exportA,
+		exportB: exportB,
+		copyOnce: func() {
+			go func() {
+				fsys, err := p9kit.ClientFS(exportB, "") //p9.WithClientLogger(ulog.Log)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				if err := (<-nsch).Bind(fsys, ".", "go9p", ""); err != nil {
+					log.Println(err)
+					return
+				}
+			}()
+		},
 	}
 }
 
@@ -31,6 +57,15 @@ func (d *Device) Register(kind string, factory func([]string) (fs.FS, error)) {
 
 func (d *Device) Sub(name string) (fs.FS, error) {
 	return fs.Sub(fskit.UnionFS{fskit.MapFS{
+		"export": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
+			return &fskit.FuncFile{
+				Node: fskit.Entry(name, 0644, d.exportA),
+				ReadFunc: func(n *fskit.Node) error {
+					d.once.Do(d.copyOnce)
+					return nil
+				},
+			}, nil
+		}),
 		"ctl": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			return fskit.Entry(name, 0555, []byte("ctl\n")).Open(".")
 		}),

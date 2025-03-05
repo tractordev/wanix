@@ -10,7 +10,7 @@ import (
 )
 
 func TestDevice(t *testing.T) {
-	dev := New()
+	dev := New(nil)
 	dev.Register("hellofs", func(_ []string) (fs.FS, error) {
 		return fskit.MapFS{"hellofile": fskit.RawNode([]byte("hello, world\n"))}, nil
 	})

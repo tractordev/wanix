@@ -13,15 +13,18 @@ type K struct {
 	Proc *proc.Device
 	Mod  map[string]fs.FS
 
+	nsch chan *ns.FS
 	NS   *ns.FS
 	Root *proc.Process
 }
 
 func New() *K {
+	nsch := make(chan *ns.FS, 1)
 	return &K{
-		Fsys: fsys.New(),
+		Fsys: fsys.New(nsch),
 		Proc: proc.New(),
 		Mod:  make(map[string]fs.FS),
+		nsch: nsch,
 	}
 }
 
@@ -39,7 +42,7 @@ func (k *K) NewRoot() (*proc.Process, error) {
 	// for modules that need it (web/sw, web/worker)
 	k.Root = p
 	k.NS = p.Namespace()
-
+	k.nsch <- k.NS
 	// bind hidden kernel devices
 	if err := p.Namespace().Bind(k.Fsys, ".", "#fsys", ""); err != nil {
 		return nil, err
