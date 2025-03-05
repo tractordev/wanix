@@ -4,6 +4,7 @@ import (
 	"errors"
 	"hash/fnv"
 	"io"
+	"log"
 	"math"
 	"os"
 	"path"
@@ -201,7 +202,11 @@ func (l *p9file) ReadAt(p []byte, offset int64) (int, error) {
 
 // WriteAt implements p9.File.WriteAt.
 func (l *p9file) WriteAt(p []byte, offset int64) (int, error) {
-	return fs.WriteAt(l.file, p, offset)
+	i, err := fs.WriteAt(l.file, p, offset)
+	if errors.Is(err, fs.ErrNotSupported) {
+		log.Println(err)
+	}
+	return i, err
 }
 
 // Create implements p9.File.Create.
@@ -282,6 +287,9 @@ func (l *p9file) SetAttr(valid p9.SetAttrMask, attr p9.SetAttr) error {
 
 	if valid.Size {
 		if err := fs.Truncate(l.fsys, l.path, int64(attr.Size)); err != nil {
+			if errors.Is(err, fs.ErrNotSupported) {
+				log.Printf("truncate on %T: %s %s\n", l.fsys, l.path, err)
+			}
 			return err
 		}
 	}
@@ -290,6 +298,9 @@ func (l *p9file) SetAttr(valid p9.SetAttrMask, attr p9.SetAttr) error {
 		if err := fs.Chtimes(l.fsys, l.path,
 			time.Unix(int64(attr.ATimeSeconds), int64(attr.ATimeNanoSeconds)),
 			time.Unix(int64(attr.MTimeSeconds), int64(attr.MTimeNanoSeconds))); err != nil {
+			if errors.Is(err, fs.ErrNotSupported) {
+				log.Printf("chtimes on %T: %s %s\n", l.fsys, l.path, err)
+			}
 			return err
 		}
 	}

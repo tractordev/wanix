@@ -13,8 +13,8 @@ import (
 	"github.com/hugelgupf/p9/p9"
 )
 
-func ClientFS(conn net.Conn, aname string) (fs.FS, error) {
-	client, err := p9.NewClient(conn)
+func ClientFS(conn net.Conn, aname string, o ...p9.ClientOpt) (fs.FS, error) {
+	client, err := p9.NewClient(conn, o...)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,6 @@ func (fsys *FS) Remove(name string) error {
 }
 
 func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
-	// log.Println("readdir:", name)
 	f, err := fsys.walk(name)
 	if err != nil {
 		return nil, err
@@ -266,36 +265,35 @@ func (f *remoteFile) Stat() (fs.FileInfo, error) {
 	return fileInfo(f.file, f.name)
 }
 
-// func (f *remoteFile) ReadDir(n int) ([]fs.DirEntry, error) {
-// 	fmt.Println("readdir:", f.name)
-// 	var dirents []p9.Dirent
-// 	offset := uint64(0)
-// 	nleft := n
-// 	for {
-// 		d, err := f.file.Readdir(offset, uint32(nleft))
-// 		if err != nil {
-// 			if err == io.EOF {
-// 				break
-// 			}
-// 			return nil, err
-// 		}
-// 		if len(d) == 0 {
-// 			break
-// 		}
-// 		dirents = append(dirents, d...)
-// 		nleft -= len(d)
-// 		offset = d[len(d)-1].Offset
-// 	}
+func (f *remoteFile) ReadDir(n int) ([]fs.DirEntry, error) {
+	var dirents []p9.Dirent
+	offset := uint64(0)
+	nleft := n
+	for {
+		d, err := f.file.Readdir(offset, uint32(nleft))
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		if len(d) == 0 {
+			break
+		}
+		dirents = append(dirents, d...)
+		nleft -= len(d)
+		offset = d[len(d)-1].Offset
+	}
 
-// 	var entries []fs.DirEntry
-// 	for _, entry := range dirents {
-// 		_, child, err := f.root.Walk(append(f.path, entry.Name))
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		if fi, err := fileInfo(child, entry.Name); err == nil {
-// 			entries = append(entries, fi.(fs.DirEntry))
-// 		}
-// 	}
-// 	return entries, nil
-// }
+	var entries []fs.DirEntry
+	for _, entry := range dirents {
+		_, child, err := f.root.Walk(append(f.path, entry.Name))
+		if err != nil {
+			return nil, err
+		}
+		if fi, err := fileInfo(child, entry.Name); err == nil {
+			entries = append(entries, fi.(fs.DirEntry))
+		}
+	}
+	return entries, nil
+}
