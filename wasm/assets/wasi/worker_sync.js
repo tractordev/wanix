@@ -9,7 +9,8 @@ import {
 	Directory, 
 	DirectoryHandle, 
 	PreopenDirectory,
-	ConsoleStdout
+	ConsoleStdout,
+	applyPatchPollOneoff
 } from "./wasi.js";
 
 self.onmessage = async (e) => {
@@ -27,12 +28,13 @@ self.onmessage = async (e) => {
 	// ConsoleStdout.lineBuffered(msg => { console.log(`[WASI stdout] ${msg}`); /*buf.get({sync: "stdout", data: msg+"\n"}) */ }),
 	// ConsoleStdout.lineBuffered(msg => console.warn(`[WASI stderr] ${msg}`)),	
 	
+	applyPatchPollOneoff(wasi);
 	const go = new Go(); // set up Go runtime (even for non-Go WASM)
 	const imports = Object.assign(go.importObject, {
 		"wasi_snapshot_preview1": wasi.wasiImport,
 	});
 
-	const wasm = await WebAssembly.compileStreaming(fetch("/sw/"+e.data.args[0]));
+	const wasm = await WebAssembly.compileStreaming(fetch("/:/"+e.data.args[0]));
 	const inst = await WebAssembly.instantiate(wasm, imports);
 	go.run(inst);
 	const code = wasi.start(inst);

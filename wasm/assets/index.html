@@ -32,6 +32,7 @@
                     //     basefs: `./v86/image/fs.json`,
                     // },
 
+                    // cmdline: "rw root=host9p rootfstype=9p rootflags=trans=virtio,version=9p2000.L,aname=opfs/root,cache=none,msize=8192,access=client tsc=reliable mitigations=off random.trust_cpu=on modules=virtio_pci wmode=wanix init=/init",
                     cmdline: "tsc=reliable mitigations=off random.trust_cpu=on modules=virtio_pci wmode=wanix",
                     bzimage: { url: "./linux/bzImage" },
                     initrd: { url: "./linux/initramfs.gz" },
@@ -86,16 +87,27 @@
             };
 
             window.bootVM = (debug=false) => {
-                read("web/dom/new/xterm")
-                write("web/dom/body/ctl", "append-child 1")
-                read("web/vm/new")
-                write("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
-                if (debug) {
-                    document.querySelector("#screen_container").style.display = "block";
+                const query = new URLSearchParams(window.location.search)
+                const url = query.get("tty");
+                
+                if (url) {
+                    read("cap/new/ws")
+                    write("cap/1/ctl", `mount ${url}`);
+                    read("web/vm/new")
+                    write("task/1/ctl", "bind cap/1/data web/vm/1/ttyS0")
+                } else {
+                    read("web/dom/new/xterm")
+                    write("web/dom/body/ctl", "append-child 1")
+                    read("web/vm/new")
+                    write("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
+                    if (debug) {
+                        document.querySelector("#screen_container").style.display = "block";
+                    }
                 }
+                
                 setTimeout(() => {  
                     write("web/vm/1/ctl", "start")
-                }, 1000);
+                }, 500);
             }
 
             if (!window.location.search.includes('autoboot=false')) {

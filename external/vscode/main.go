@@ -26,8 +26,8 @@ func main() {
 	// 	fatal(os.WriteFile("/web/dom/body/ctl", []byte(fmt.Sprintf("append-child %s", id)), 0))
 	// 	fatal(os.WriteFile("/web/dom/style", []byte("iframe { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }"), 0))
 	// 	// for the moment, "go9p" is hardcoded mount point for exported fs.
-	// 	// similarly, for now "/sw" is hardcoded path for wanix root fs.
-	// 	fatal(os.WriteFile(fmt.Sprintf("/web/dom/%s/attrs", id), []byte("src=/sw/go9p/assets/"), 0))
+	// 	// similarly, for now "/:" is hardcoded path for wanix root fs.
+	// 	fatal(os.WriteFile(fmt.Sprintf("/web/dom/%s/attrs", id), []byte("src=/:/go9p/assets/"), 0))
 	// }()
 
 	log.Println("exporting fs...")

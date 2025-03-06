@@ -128,8 +128,8 @@ func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("X-ServiceWorker", r.Header.Get("X-ServiceWorker"))
 	w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
 	w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
-	if strings.HasPrefix(r.URL.Path, "/sw/") {
-		path := strings.TrimPrefix(r.URL.Path, "/sw/")
+	if strings.HasPrefix(r.URL.Path, "/:/") {
+		path := strings.TrimPrefix(r.URL.Path, "/:/")
 
 		entries, err := fs.ReadDir(d.k.NS, strings.TrimSuffix(path, "/"))
 		if err == nil {
