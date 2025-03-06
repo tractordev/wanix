@@ -1,7 +1,7 @@
 # WANIX
 [![Discord](https://img.shields.io/discord/415940907729420288?label=Discord)](https://discord.gg/nQbgRjEBU4) ![GitHub Sponsors](https://img.shields.io/github/sponsors/progrium?label=Sponsors)
 
-A virtual operating system kit for the web, inspired by Plan 9.
+A virtual operating system kit for the local-first web, inspired by Plan 9.
 
 ### Features
 
