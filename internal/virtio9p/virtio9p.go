@@ -9,6 +9,7 @@ import (
 	"syscall/js"
 
 	"github.com/hugelgupf/p9/p9"
+	"github.com/u-root/uio/ulog"
 	"tractor.dev/wanix/fs/p9kit"
 )
 
@@ -27,9 +28,9 @@ func StartFor(fsys fs.FS, ctx js.Value, debug bool) {
 			if err != nil {
 				log.Println(err)
 			}
-			if debug {
-				log.Printf("virtio >>%s %v\n", p9kit.MessageTypes[int(buf[4])], buf)
-			}
+			// if debug {
+			// 	log.Printf("virtio >>%s %v\n", p9kit.MessageTypes[int(buf[4])], buf)
+			// }
 		}()
 		return nil
 	}))
@@ -61,13 +62,17 @@ func StartFor(fsys fs.FS, ctx js.Value, debug bool) {
 				log.Println("virtioSend is undefined")
 				return
 			}
-			if debug {
-				log.Printf("virtio <<%s %v\n", p9kit.MessageTypes[int(buf[4])], buf)
-			}
+			// if debug {
+			// 	log.Printf("virtio <<%s %v\n", p9kit.MessageTypes[int(buf[4])], buf)
+			// }
 			virtioSend.Invoke(jsBuf)
 		}
 	}()
-	srv := p9.NewServer(p9kit.Attacher(fsys)) //, p9.WithServerLogger(ulog.Log))
+	var o []p9.ServerOpt
+	if debug {
+		o = append(o, p9.WithServerLogger(ulog.Log))
+	}
+	srv := p9.NewServer(p9kit.Attacher(fsys), o...)
 	go func() {
 		if err := srv.Handle(inR, outW); err != nil {
 			log.Fatal(err)
