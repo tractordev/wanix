@@ -1,8 +1,11 @@
+//go:build !js && !wasm
+
 package main
 
 import (
 	"log"
 
+	"tractor.dev/toolkit-go/desktop"
 	"tractor.dev/toolkit-go/engine"
 	"tractor.dev/toolkit-go/engine/cli"
 )
@@ -10,7 +13,10 @@ import (
 var Version string
 
 func main() {
-	engine.Run(Main{})
+	desktop.Start(func() {
+		engine.Run(Main{})
+		desktop.Stop()
+	})
 }
 
 type Main struct{}
@@ -20,6 +26,7 @@ func (m *Main) InitializeCLI(root *cli.Command) {
 	root.Version = Version
 	root.AddCommand(serveCmd())
 	root.AddCommand(mountCmd())
+	root.AddCommand(consoleCmd())
 }
 
 func fatal(err error) {

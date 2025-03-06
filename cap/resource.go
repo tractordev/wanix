@@ -15,7 +15,7 @@ type Resource struct {
 	fs      fs.FS
 	id      int
 	typ     string
-	extra   map[string]fs.FS
+	Extra   map[string]fs.FS
 }
 
 func (r *Resource) Sub(name string) (fs.FS, error) {
@@ -38,7 +38,7 @@ func (r *Resource) Sub(name string) (fs.FS, error) {
 	if r.fs != nil {
 		fsys["mount"] = r.fs
 	}
-	for k, v := range r.extra {
+	for k, v := range r.Extra {
 		fsys[k] = v
 	}
 	return fs.Sub(fsys, name)

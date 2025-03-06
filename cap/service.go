@@ -2,7 +2,6 @@ package cap
 
 import (
 	"context"
-	"log"
 	"net"
 	"strconv"
 
@@ -28,19 +27,17 @@ func New(nsch <-chan *namespace.FS) *Service {
 		allocators: map[string]Allocator{
 			"loopback": func(r *Resource) (Mounter, error) {
 				loopbackA, loopbackB := net.Pipe()
-				r.extra["loopback"] = fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
+				r.Extra["loopback"] = fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 					return &fskit.FuncFile{
 						Node: fskit.Entry(name, 0644, loopbackA),
 						ReadFunc: func(n *fskit.Node) (err error) {
-							log.Println("mounting")
-							go delete(r.extra, "loopback")
+							delete(r.Extra, "loopback")
 							r.fs, err = r.mounter(nil)
 							return
 						},
 					}, nil
 				})
 				return func(_ []string) (fs.FS, error) {
-					log.Println("mount")
 					return p9kit.ClientFS(loopbackB, "", p9.WithClientLogger(ulog.Log))
 				}, nil
 			},
@@ -80,7 +77,7 @@ func (d *Service) Sub(name string) (fs.FS, error) {
 						id:      d.nextID,
 						typ:     name,
 						mounter: nil,
-						extra:   map[string]fs.FS{},
+						Extra:   map[string]fs.FS{},
 					}
 					mounter, err := alloc(r)
 					if err != nil {
