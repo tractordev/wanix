@@ -1,31 +1,22 @@
 # Contributing
 
-## Development
+## Build from source
 
-### Docker
+First make sure you have the following tools installed:
 
-```bash
- > docker build -t wanix:dev .
- > docker run -p 7777:7777 wanix:dev
-```
+- [Docker](https://docs.docker.com/get-docker/)
+- [Go 1.23+](https://golang.org/dl/)
+- [TinyGo 0.35+](https://tinygo.org/getting-started/install/)
 
-### Editors
+Docker is used to build some dependency artifacts that would otherwise require
+much more tooling to build. We use both big Go and TinyGo to build the project.
 
-**VSCODE**
+With a fresh checkout, run `make all` to build everything. This will take a moment
+the first time to build the dependency artifacts, but unless you make changes to
+the dependencies, it will be much faster on subsequent builds.
 
-- [Go for Visual Studio (Recommended)](https://marketplace.visualstudio.com/items?itemName=golang.go)
+After the first build, you can run `make build` to just build the `wanix` binary.
+Either way, you will end up with a native `wanix` executable in the root of the repo.
 
-- Workspace Settings:
+From here, typically you will run `./wanix serve` to serve Wanix in your browser.
 
-  - Since we are using `syscall/js`, we need to set the `GOOS` and `GOARCH` environment variables to `js` and `wasm` respectively.
-
-  ```json
-  {
-    "go.toolsEnvVars": {
-      "GOOS": "js",
-      "GOARCH": "wasm"
-    }
-  }
-  ```
-
----

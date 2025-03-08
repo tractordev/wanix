@@ -34,6 +34,8 @@ brew tap progrium/homebrew-taps
 brew install wanix
 ```
 
+If you want to build from source, see the [CONTRIBUTING.md](CONTRIBUTING.md) doc.
+
 ## Usage
 
 TODO
