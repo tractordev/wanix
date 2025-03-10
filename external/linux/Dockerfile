@@ -40,12 +40,12 @@ RUN cd /build/busybox-1.35.0 && \
     ln -s busybox sh
 
 # Get and build kernel
-RUN wget https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.15.137.tar.xz && \
-    tar xf linux-5.15.137.tar.xz && \
-    rm linux-5.15.137.tar.xz
+RUN wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.13.6.tar.xz && \
+    tar xf linux-6.13.6.tar.xz && \
+    rm linux-6.13.6.tar.xz
 
-COPY kernel.config /build/linux-5.15.137/.config
-RUN cd /build/linux-5.15.137 && \
+COPY kernel.config /build/linux-6.13.6/.config
+RUN cd /build/linux-6.13.6 && \
     make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- oldconfig < /dev/null && \
     make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- bzImage -j$(nproc) && \
     cp arch/x86/boot/bzImage /build/
