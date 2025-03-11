@@ -11,8 +11,8 @@ import (
 
 func TestMapFS(t *testing.T) {
 	m := MapFS{
-		"hello":             RawNode([]byte("hello, world\n")),
-		"fortune/k/ken.txt": RawNode([]byte("If a program is too slow, it must have a loop.\n")),
+		"hello":             RawNode("hello", []byte("hello, world\n")),
+		"fortune/k/ken.txt": RawNode("ken.txt", []byte("If a program is too slow, it must have a loop.\n")),
 	}
 	if err := fstest.TestFS(m, "hello", "fortune", "fortune/k", "fortune/k/ken.txt"); err != nil {
 		t.Fatal(err)

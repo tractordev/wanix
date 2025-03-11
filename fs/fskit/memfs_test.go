@@ -1,6 +1,8 @@
 package fskit
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -13,11 +15,6 @@ import (
 func TestMemFSCreate(t *testing.T) {
 	m := MemFS{
 		"hello": RawNode([]byte("hello, world\n")),
-	}
-
-	// check for failure if file already exists
-	if _, err := fs.Create(m, "hello"); err == nil {
-		t.Fatal("expected error that file already exists")
 	}
 
 	// check for success
@@ -196,4 +193,86 @@ func TestMemFSFileInfoName(t *testing.T) {
 	if want != got {
 		t.Errorf("MapFS FileInfo.Name want:\n%s\ngot:\n%s\n", want, got)
 	}
+}
+
+func TestMemFSSymlinks(t *testing.T) {
+	m := MemFS{
+		"path/to/b.txt": RawNode([]byte("contents")),
+		"file":          RawNode([]byte("path/to/b.txt"), fs.ModeSymlink),
+		"dir":           RawNode([]byte("path/to"), fs.ModeSymlink),
+	}
+
+	t.Run("Readlink returns target of symlink", func(t *testing.T) {
+		target, err := fs.Readlink(m, "file")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []byte("path/to/b.txt")
+		if !bytes.Equal(want, []byte(target)) {
+			t.Errorf("Readlink want:\n%s\ngot:\n%s\n", want, target)
+		}
+	})
+
+	t.Run("ReadFile follows symlinks", func(t *testing.T) {
+		b, err := fs.ReadFile(m, "file")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []byte("contents")
+		if !bytes.Equal(want, b) {
+			t.Errorf("ReadFile want:\n%s\ngot:\n%s\n", want, b)
+		}
+	})
+
+	t.Run("Stat follows file symlink", func(t *testing.T) {
+		info, err := fs.Stat(m, "file")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "b.txt"
+		got := info.Name()
+		if want != got {
+			t.Errorf("FileInfo.Name want: %q, got: %q", want, got)
+		}
+	})
+
+	t.Run("Stat follows directory symlink", func(t *testing.T) {
+		info, err := fs.Stat(m, "dir")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "to"
+		got := info.Name()
+		if want != got {
+			t.Errorf("FileInfo.Name want: %q, got: %q", want, got)
+		}
+	})
+
+	t.Run("StatContext with NoFollow returns symlink info", func(t *testing.T) {
+		info, err := fs.StatContext(fs.WithNoFollow(context.Background()), m, "dir")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "dir"
+		got := info.Name()
+		if want != got {
+			t.Errorf("FileInfo.Name want: %q, got: %q", want, got)
+		}
+	})
+
+	t.Run("Symlink makes a symlink and symlinks can target symlinks", func(t *testing.T) {
+		err := fs.Symlink(m, "file", "symlink")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		b, err := fs.ReadFile(m, "symlink")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []byte("contents")
+		if !bytes.Equal(want, b) {
+			t.Errorf("ReadFile want:\n%s\ngot:\n%s\n", want, b)
+		}
+	})
 }

@@ -2,6 +2,8 @@ package fskit
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"path"
 	"slices"
 	"strings"
@@ -16,13 +18,76 @@ func (fsys MemFS) Open(name string) (fs.File, error) {
 	return fsys.OpenContext(context.Background(), name)
 }
 
+func (fsys MemFS) Stat(name string) (fs.FileInfo, error) {
+	return fsys.StatContext(context.Background(), name)
+}
+
+func (fsys MemFS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+	f, err := fsys.OpenContext(fs.WithNoFollow(ctx), name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return f.Stat()
+	// fi, err := f.Stat()
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// if fs.FollowSymlinks(ctx) && fs.IsSymlink(fi.Mode()) {
+	// 	target, err := fs.Readlink(fsys, name)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("memfs: readlink %s: %w", name, err)
+	// 	}
+	// 	if origin, fullname, ok := fs.Origin(ctx); ok {
+	// 		if strings.HasPrefix(target, "/") {
+	// 			target = target[1:]
+	// 		} else {
+	// 			target = path.Join(strings.TrimSuffix(fullname, name), target)
+	// 		}
+	// 		return fs.StatContext(ctx, origin, target)
+	// 	} else {
+	// 		if strings.HasPrefix(target, "/") {
+	// 			log.Println("memfs: statcontext: no origin for absolute symlink:", name)
+	// 			return nil, fs.ErrInvalid
+	// 		} else {
+	// 			target = path.Join(path.Dir(name), target)
+	// 			return fs.StatContext(ctx, fsys, target)
+	// 		}
+	// 	}
+	// }
+	// return fi, nil
+}
+
 func (fsys MemFS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
+
 	n := fsys[name]
 	if n != nil {
 		n.name = name
+		if fs.FollowSymlinks(ctx) && fs.IsSymlink(n.Mode()) {
+			target, err := fs.Readlink(fsys, name)
+			if err != nil {
+				return nil, fmt.Errorf("memfs: readlink %s: %w", name, err)
+			}
+			if origin, fullname, ok := fs.Origin(ctx); ok {
+				if strings.HasPrefix(target, "/") {
+					target = target[1:]
+				} else {
+					target = path.Join(strings.TrimSuffix(fullname, name), target)
+				}
+				return fs.OpenContext(ctx, origin, target)
+			} else {
+				if strings.HasPrefix(target, "/") {
+					log.Println("memfs: opencontext: no origin for absolute symlink:", name)
+					return nil, fs.ErrInvalid
+				} else {
+					target = path.Join(path.Dir(name), target)
+					return fs.OpenContext(ctx, fsys, target)
+				}
+			}
+		}
 		if !n.IsDir() {
 			// Ordinary file
 			return fs.OpenContext(ctx, n, ".")
@@ -133,7 +198,8 @@ func (fsys MemFS) Chmod(name string, mode fs.FileMode) error {
 		return &fs.PathError{Op: "chmod", Path: name, Err: fs.ErrNotExist}
 	}
 
-	fsys[name].mode = mode
+	// Preserve the file type bits while updating only the permission bits
+	fsys[name].mode = fsys[name].mode&fs.ModeType | mode&0777
 	return nil
 }
 
@@ -190,6 +256,10 @@ func (fsys MemFS) Rename(oldpath, newpath string) error {
 		return &fs.PathError{Op: "rename", Path: oldpath, Err: fs.ErrNotExist}
 	}
 
+	if oldpath == newpath {
+		return nil
+	}
+
 	ok, err := fs.Exists(fsys, oldpath)
 	if err != nil {
 		return err
@@ -208,5 +278,15 @@ func (fsys MemFS) Rename(oldpath, newpath string) error {
 
 	fsys[newpath] = fsys[oldpath]
 	delete(fsys, oldpath)
+	return nil
+}
+
+func (fsys MemFS) Symlink(oldname, newname string) error {
+	if !fs.ValidPath(newname) {
+		return &fs.PathError{Op: "symlink", Path: oldname, Err: fs.ErrInvalid}
+	}
+
+	// symlinks don't care if target exists so we can just create it
+	fsys[newname] = RawNode([]byte(oldname), fs.FileMode(0777)|fs.ModeSymlink)
 	return nil
 }
