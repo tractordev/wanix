@@ -131,11 +131,13 @@ func (n *Node) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 func (n *Node) file() *nodeFile {
 	nn := *n
-	return &nodeFile{Node: &nn}
+	return &nodeFile{Node: &nn, inode: n}
 }
 
 type nodeFile struct {
 	*Node
+	inode  *Node
+	dirty  bool
 	offset int64
 	closed bool
 	mu     sync.Mutex
@@ -147,6 +149,10 @@ func (f *nodeFile) Close() error {
 
 	if f.closed {
 		return fs.ErrClosed
+	}
+
+	if f.dirty && f.inode != nil {
+		f.inode.data = f.data
 	}
 
 	f.closed = true
@@ -252,27 +258,31 @@ func (f *nodeFile) Write(b []byte) (int, error) {
 		f.data = append(f.data, tail...)
 	}
 	f.modTime = time.Now()
-
+	f.dirty = true
 	f.offset += int64(n)
 	return n, nil
 }
 
 func (f *nodeFile) WriteAt(b []byte, offset int64) (int, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	if f.closed {
+		f.mu.Unlock()
 		return 0, fs.ErrClosed
 	}
 
 	if f.writer != nil {
+		f.mu.Unlock()
 		return f.writer.Write(b)
 	}
 
 	if offset < 0 || offset > int64(len(f.data)) {
+		f.mu.Unlock()
 		return 0, &fs.PathError{Op: "write", Path: f.name, Err: fs.ErrInvalid}
 	}
 
 	f.offset = offset
+	f.dirty = true
+	f.mu.Unlock()
 	return f.Write(b)
 }
