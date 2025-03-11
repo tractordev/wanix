@@ -25,7 +25,11 @@ func (fsys *namedFS) OpenContext(ctx context.Context, name string) (fs.File, err
 		if err != nil {
 			return nil, err
 		}
-		if isDir, _ := fs.IsDir(fsys.FS, "."); isDir {
+		fi, err := f.Stat()
+		if err != nil {
+			return nil, err
+		}
+		if fi.IsDir() {
 			return &renamedDir{File: f, name: fsys.name}, nil
 		} else {
 			return &renamedFile{File: f, name: fsys.name}, nil
