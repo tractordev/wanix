@@ -12,7 +12,7 @@ import (
 	"tractor.dev/wanix/cap"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/task"
 	"tractor.dev/wanix/web/dom"
 	"tractor.dev/wanix/web/fsa"
@@ -49,7 +49,7 @@ func New(k *wanix.K, ctx js.Value) fskit.MapFS {
 			ws.Set("binaryType", "arraybuffer")
 			df := &dataFile{
 				Value: ws,
-				buf:   misc.NewBufferedPipe(true),
+				buf:   internal.NewBufferedPipe(true),
 			}
 			ws.Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
 				go func() {
@@ -81,7 +81,7 @@ func New(k *wanix.K, ctx js.Value) fskit.MapFS {
 
 type dataFile struct {
 	js.Value
-	buf *misc.BufferedPipe
+	buf *internal.BufferedPipe
 }
 
 func (s *dataFile) Stat() (fs.FileInfo, error) {

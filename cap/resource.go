@@ -7,7 +7,7 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/internal"
 )
 
 type Resource struct {
@@ -20,7 +20,7 @@ type Resource struct {
 
 func (r *Resource) Sub(name string) (fs.FS, error) {
 	fsys := fskit.MapFS{
-		"ctl": misc.ControlFile(&cli.Command{
+		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(ctx *cli.Context, args []string) {
@@ -33,7 +33,7 @@ func (r *Resource) Sub(name string) (fs.FS, error) {
 				}
 			},
 		}),
-		"type": misc.FieldFile(r.typ, nil),
+		"type": internal.FieldFile(r.typ, nil),
 	}
 	if r.fs != nil {
 		fsys["mount"] = r.fs

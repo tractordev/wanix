@@ -11,7 +11,7 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/web/jsutil"
 )
 
@@ -35,7 +35,7 @@ func (r *Element) Open(name string) (fs.File, error) {
 
 func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	fsys := fskit.MapFS{
-		"ctl": misc.ControlFile(&cli.Command{
+		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(ctx *cli.Context, args []string) {
@@ -56,8 +56,8 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 				}
 			},
 		}),
-		"type": misc.FieldFile(r.typ),
-		"attrs": misc.FieldFile(
+		"type": internal.FieldFile(r.typ),
+		"attrs": internal.FieldFile(
 			// getter
 			func() (string, error) {
 				var builder strings.Builder
@@ -86,10 +86,10 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 				return nil
 			},
 		),
-		"html": misc.FieldFile(func() (string, error) {
+		"html": internal.FieldFile(func() (string, error) {
 			return r.value.Get("outerHTML").String(), nil
 		}),
-		"text": misc.FieldFile(func() (string, error) {
+		"text": internal.FieldFile(func() (string, error) {
 			return r.value.Get("innerText").String(), nil
 		}),
 	}
@@ -103,11 +103,11 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 
 type termDataFile struct {
 	js.Value
-	buf *misc.BufferedPipe
+	buf *internal.BufferedPipe
 }
 
 func newTermData(term js.Value) *termDataFile {
-	buf := misc.NewBufferedPipe(true)
+	buf := internal.NewBufferedPipe(true)
 	enc := js.Global().Get("TextEncoder").New()
 	term.Call("onData", js.FuncOf(func(this js.Value, args []js.Value) any {
 		jsbuf := enc.Call("encode", args[0])

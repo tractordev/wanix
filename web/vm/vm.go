@@ -12,7 +12,7 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/internal"
 )
 
 type VM struct {
@@ -32,7 +32,7 @@ func (r *VM) Open(name string) (fs.File, error) {
 
 func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	fsys := fskit.MapFS{
-		"ctl": misc.ControlFile(&cli.Command{
+		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(_ *cli.Context, args []string) {
@@ -64,11 +64,11 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 type serial struct {
 	js.Value
-	buf *misc.BufferedPipe
+	buf *internal.BufferedPipe
 }
 
 func newSerial(vm js.Value) *serial {
-	buf := misc.NewBufferedPipe(true)
+	buf := internal.NewBufferedPipe(true)
 	vm.Call("add_listener", "serial0-output-byte", js.FuncOf(func(this js.Value, args []js.Value) any {
 		buf.Write([]byte{byte(args[0].Int())})
 		return nil

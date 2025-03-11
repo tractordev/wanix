@@ -16,8 +16,8 @@ import (
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/internal/httprecorder"
-	"tractor.dev/wanix/misc"
 	"tractor.dev/wanix/web/jsutil"
 )
 
@@ -46,7 +46,7 @@ func Activate(ch js.Value, k *wanix.K) *Service {
 
 func (d *Service) Sub(name string) (fs.FS, error) {
 	fsys := fskit.MapFS{
-		"ctl": misc.ControlFile(&cli.Command{
+		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the active service worker",
 			Run: func(ctx *cli.Context, args []string) {
@@ -62,9 +62,9 @@ func (d *Service) Sub(name string) (fs.FS, error) {
 				}
 			},
 		}),
-		"state": misc.FieldFile(d.active.Get("state").String()),
-		// "err": misc.FieldFile(r.state, nil),
-		// "fsys": misc.FieldFile(r.fs, nil),
+		"state": internal.FieldFile(d.active.Get("state").String()),
+		// "err": internal.FieldFile(r.state, nil),
+		// "fsys": internal.FieldFile(r.fs, nil),
 	}
 	return fs.Sub(fsys, name)
 }

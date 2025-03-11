@@ -11,7 +11,7 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/namespace"
 )
 
@@ -86,7 +86,7 @@ func (r *Process) Open(name string) (fs.File, error) {
 
 func (r *Process) Sub(name string) (fs.FS, error) {
 	return fs.Sub(fskit.MapFS{
-		"ctl": misc.ControlFile(&cli.Command{
+		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(ctx *cli.Context, args []string) {
@@ -104,26 +104,26 @@ func (r *Process) Sub(name string) (fs.FS, error) {
 				}
 			},
 		}),
-		"type": misc.FieldFile(r.typ),
-		"cmd": misc.FieldFile(r.cmd, func(in []byte) error {
+		"type": internal.FieldFile(r.typ),
+		"cmd": internal.FieldFile(r.cmd, func(in []byte) error {
 			if len(in) > 0 {
 				r.cmd = strings.TrimSpace(string(in))
 			}
 			return nil
 		}),
-		"env": misc.FieldFile(strings.Join(r.env, "\n"), func(in []byte) error {
+		"env": internal.FieldFile(strings.Join(r.env, "\n"), func(in []byte) error {
 			if len(in) > 0 {
 				r.env = strings.Split(strings.TrimSpace(string(in)), "\n")
 			}
 			return nil
 		}),
-		"dir": misc.FieldFile(r.dir, func(in []byte) error {
+		"dir": internal.FieldFile(r.dir, func(in []byte) error {
 			if len(in) > 0 {
 				r.dir = strings.TrimSpace(string(in))
 			}
 			return nil
 		}),
-		"exit": misc.FieldFile(r.exit, func(in []byte) error {
+		"exit": internal.FieldFile(r.exit, func(in []byte) error {
 			if len(in) > 0 {
 				r.exit = strings.TrimSpace(string(in))
 			}

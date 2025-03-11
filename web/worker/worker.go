@@ -12,7 +12,7 @@ import (
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/web/api"
 )
 
@@ -74,7 +74,7 @@ func (r *Resource) Start(args ...string) error {
 
 func (r *Resource) Sub(name string) (fs.FS, error) {
 	fsys := fskit.MapFS{
-		"ctl": misc.ControlFile(&cli.Command{
+		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the worker",
 			Run: func(ctx *cli.Context, args []string) {
@@ -89,13 +89,13 @@ func (r *Resource) Sub(name string) (fs.FS, error) {
 				}
 			},
 		}),
-		"state": misc.FieldFile(r.state),
-		"src": misc.FieldFile(r.src, func(data []byte) error {
+		"state": internal.FieldFile(r.state),
+		"src": internal.FieldFile(r.src, func(data []byte) error {
 			r.src = string(data)
 			return nil
 		}),
-		// "err": misc.FieldFile(r.state, nil),
-		// "fsys": misc.FieldFile(r.fs, nil),
+		// "err": internal.FieldFile(r.state, nil),
+		// "fsys": internal.FieldFile(r.fs, nil),
 	}
 	return fs.Sub(fsys, name)
 }

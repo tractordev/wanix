@@ -6,7 +6,7 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/namespace"
 )
 
@@ -41,9 +41,9 @@ func (d *Service) Alloc(kind string) (*Process, error) {
 	d.nextID++
 	rid := strconv.Itoa(d.nextID)
 	ctx := context.WithValue(context.Background(), TaskContextKey, rid)
-	a0, b0 := misc.BufferedConnPipe(false)
-	a1, b1 := misc.BufferedConnPipe(false)
-	a2, b2 := misc.BufferedConnPipe(false)
+	a0, b0 := internal.BufferedConnPipe(false)
+	a1, b1 := internal.BufferedConnPipe(false)
+	a2, b2 := internal.BufferedConnPipe(false)
 	p := &Process{
 		starter: starter,
 		id:      d.nextID,
@@ -103,7 +103,7 @@ func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error)
 	fsys, dir := d.fsys()
 	pid, ok := PIDFromContext(ctx)
 	if ok {
-		dir["self"] = misc.FieldFile(pid, nil)
+		dir["self"] = internal.FieldFile(pid, nil)
 	}
 	return fs.OpenContext(ctx, fsys, name)
 }
