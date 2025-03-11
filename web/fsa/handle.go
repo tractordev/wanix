@@ -12,6 +12,12 @@ import (
 	"tractor.dev/wanix/web/jsutil"
 )
 
+var (
+	DefaultFileMode = fs.FileMode(0744)
+	DefaultDirMode  = fs.FileMode(0755)
+	CacheDuration   = time.Millisecond * 100
+)
+
 type FileHandle struct {
 	name   string
 	append bool
@@ -108,9 +114,10 @@ func (h *FileHandle) Size() int64 {
 }
 
 func (h *FileHandle) Stat() (fs.FileInfo, error) {
-	v, ok := statCache.Load(h.name)
-	if ok && time.Since(v.(stat).atime) < time.Second {
-		return v.(stat).Info(), nil
+	v, cached := statCache.Load(h.name)
+	if cached && v.(Stat).Name != "" && time.Since(v.(Stat).Atime) < CacheDuration {
+		fi := v.(Stat).Info()
+		return fi, nil
 	}
 	if err := h.tryGetFile(); err != nil {
 		return nil, err
@@ -118,19 +125,27 @@ func (h *FileHandle) Stat() (fs.FileInfo, error) {
 	isDir := h.Value.Get("kind").String() == "directory"
 	modTime := h.file.Get("lastModified").Int()
 	var mode fs.FileMode
+	if cached {
+		mode = v.(Stat).Mode
+	}
 	if isDir {
-		mode = 0755 | fs.ModeDir
+		if mode&0777 == 0 {
+			mode |= DefaultDirMode
+		}
+		mode |= fs.ModeDir
 	} else {
-		mode = 0744
+		if mode&0777 == 0 {
+			mode |= DefaultFileMode
+		}
 	}
-	s := stat{
-		name:  h.Name(),
-		size:  uint64(h.Size()),
-		mode:  mode,
-		mtime: time.UnixMilli(int64(modTime)),
-		atime: time.Now(),
+	s := Stat{
+		Name:  h.Name(),
+		Size:  uint64(h.Size()),
+		Mode:  mode,
+		Mtime: time.UnixMilli(int64(modTime)),
+		Atime: time.Now(),
 	}
-	statCache.Store(h.name, s)
+	statCache.Store(h.name, s) // todo: replace with statStore
 	return s.Info(), nil
 }
 

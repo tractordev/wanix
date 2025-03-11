@@ -4,6 +4,8 @@ package fsa
 
 import (
 	"context"
+	"encoding/json"
+	"log"
 	"path"
 	"strings"
 	"sync"
@@ -17,19 +19,39 @@ import (
 
 type FS js.Value
 
-type stat struct {
-	name  string
-	size  uint64
-	mode  fs.FileMode
-	atime time.Time
-	mtime time.Time
+type Stat struct {
+	Name  string
+	Size  uint64
+	Mode  fs.FileMode
+	Atime time.Time
+	Mtime time.Time
 }
 
-func (s stat) Info() fs.FileInfo {
-	return fskit.Entry(path.Base(s.name), s.mode, s.size, s.mtime)
+func (s Stat) Info() fs.FileInfo {
+	return fskit.Entry(path.Base(s.Name), s.Mode, s.Size, s.Mtime)
 }
 
 var statCache sync.Map
+
+// todo: clean all this up!
+func statStore(fsys FS, name string, stat Stat) {
+	statCache.Store(name, stat)
+	go func() {
+		var stats []Stat
+		statCache.Range(func(key, value any) bool {
+			stats = append(stats, value.(Stat))
+			return true
+		})
+		b, err := json.Marshal(stats)
+		if err != nil {
+			log.Println("fsa: statstore: marshal:", err)
+			return
+		}
+		if err := fs.WriteFile(fsys, "#stat", b, 0755); err != nil {
+			log.Println("fsa: statstore: write:", err)
+		}
+	}()
+}
 
 func (fsys FS) walkDir(path string) (js.Value, error) {
 	if path == "." {
@@ -48,7 +70,28 @@ func (fsys FS) walkDir(path string) (js.Value, error) {
 	return cur, nil
 }
 
-// Chtimes is not supported but implement as no-op
+func (fsys FS) Symlink(oldname, newname string) error {
+	if !fs.ValidPath(newname) {
+		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
+	}
+
+	err := fs.WriteFile(fsys, newname, []byte(oldname), 0777)
+	if err != nil {
+		return err
+	}
+
+	v, ok := statCache.Load(newname)
+	if ok {
+		stat := v.(Stat)
+		stat.Mode = fs.FileMode(0777) | fs.ModeSymlink
+		statStore(fsys, newname, stat)
+	} else {
+		statStore(fsys, newname, Stat{Name: newname, Mode: fs.FileMode(0777) | fs.ModeSymlink})
+	}
+
+	return nil
+}
+
 func (fsys FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "chtimes", Path: name, Err: fs.ErrInvalid}
@@ -56,15 +99,45 @@ func (fsys FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 
 	v, ok := statCache.Load(name)
 	if ok {
-		stat := v.(stat)
+		stat := v.(Stat)
 		// stat.atime = atime
-		stat.mtime = mtime
-		statCache.Store(name, stat)
+		stat.Mtime = mtime
+		statStore(fsys, name, stat)
 		return nil
 	}
-	statCache.Store(name, stat{atime: atime, mtime: mtime})
+	statStore(fsys, name, Stat{Name: name, Atime: atime, Mtime: mtime})
 
 	return nil
+}
+
+func (fsys FS) Chmod(name string, mode fs.FileMode) error {
+	if !fs.ValidPath(name) {
+		return &fs.PathError{Op: "chmod", Path: name, Err: fs.ErrInvalid}
+	}
+
+	v, ok := statCache.Load(name)
+	if ok {
+		stat := v.(Stat)
+		// Keep the file type bits and update only the permission bits
+		stat.Mode = (stat.Mode & fs.ModeType) | (mode & fs.ModePerm)
+		statStore(fsys, name, stat)
+		return nil
+	}
+	statStore(fsys, name, Stat{Name: name, Mode: mode & fs.ModePerm})
+	return nil
+}
+
+func (fsys FS) Stat(name string) (fs.FileInfo, error) {
+	return fsys.StatContext(context.Background(), name)
+}
+
+func (fsys FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+	f, err := fsys.OpenContext(fs.WithNoFollow(ctx), name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return f.Stat()
 }
 
 func (fsys FS) Open(name string) (fs.File, error) {
@@ -87,6 +160,24 @@ func (fsys FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 	file, err := jsutil.AwaitErr(dirHandle.Call("getFileHandle", path.Base(name), map[string]any{"create": false}))
 	if err == nil {
+		v, ok := statCache.Load(name)
+		if ok && fs.FollowSymlinks(ctx) && fs.IsSymlink(v.(Stat).Mode) {
+			if origin, fullname, ok := fs.Origin(ctx); ok {
+				target, err := fs.Readlink(fsys, name)
+				if err != nil {
+					return nil, err
+				}
+				if strings.HasPrefix(target, "/") {
+					target = target[1:]
+				} else {
+					target = path.Join(strings.TrimSuffix(fullname, name), target)
+				}
+				return fs.OpenContext(ctx, origin, target)
+			} else {
+				log.Println("fsa: opencontext: no origin for symlink:", name)
+				return nil, fs.ErrInvalid
+			}
+		}
 		return NewFileHandle(name, file, true), nil
 	}
 

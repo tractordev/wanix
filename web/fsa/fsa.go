@@ -5,6 +5,8 @@ package fsa
 
 import (
 	"cmp"
+	"encoding/json"
+	"errors"
 	"log"
 	"syscall/js"
 
@@ -25,19 +27,51 @@ func OPFS() (fs.FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return FS(dir), nil
+	fsys := FS(dir)
+	go func() {
+		b, err := fs.ReadFile(fsys, "#stat")
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return
+			}
+			log.Println("fsa: opfs: read #stat:", err)
+			return
+		}
+		statCache.Clear()
+		var stats []Stat
+		if err := json.Unmarshal(b, &stats); err != nil {
+			log.Println("fsa: opfs: unmarshal #stat:", err)
+			return
+		}
+		for _, s := range stats {
+			statCache.Store(s.Name, s)
+		}
+	}()
+	return fsys, nil
 }
 
 func DirHandleFile(fsys FS, name string, v js.Value) fs.File {
 	var entries []fs.DirEntry
 	err := jsutil.AsyncIter(v.Call("values"), func(e js.Value) error {
-		name := e.Get("name").String()
 		var mode fs.FileMode
 		var size int64
-		if e.Get("kind").String() == "directory" {
-			mode = 0755 | fs.ModeDir
+		name := e.Get("name").String()
+
+		v, cached := statCache.Load(name)
+		if cached {
+			mode = v.(Stat).Mode
+		}
+
+		isDir := e.Get("kind").String() == "directory"
+		if isDir {
+			if mode&0777 == 0 {
+				mode |= DefaultDirMode
+			}
+			mode |= fs.ModeDir
 		} else {
-			mode = 0644
+			if mode&0777 == 0 {
+				mode |= DefaultFileMode
+			}
 			size = int64(jsutil.Await(e.Call("getFile")).Get("size").Int())
 		}
 		entries = append(entries, fskit.Entry(name, mode, size))
