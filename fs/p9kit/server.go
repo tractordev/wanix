@@ -5,7 +5,6 @@ import (
 	"hash/fnv"
 	"io"
 	"log"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -40,9 +39,7 @@ func toQid(name string, _ fs.FileInfo) (uint64, error) {
 	return h.Sum64(), nil
 }
 
-// p9file is a p9.File.
 type p9file struct {
-	// p9.DefaultWalkGetAttr
 	templatefs.NotImplementedFile
 
 	path string
@@ -51,6 +48,7 @@ type p9file struct {
 }
 
 var (
+	// p9file is a p9.File
 	_ p9.File = &p9file{}
 )
 
@@ -63,11 +61,15 @@ func (l *p9file) info() (p9.QID, fs.FileInfo, error) {
 	)
 
 	// Stat the file.
-	if l.file != nil {
-		fi, err = l.file.Stat()
-	} else {
-		fi, err = fs.Stat(l.fsys, l.path)
-	}
+	// if l.file != nil {
+	// 	fi, err = l.file.Stat()
+	// } else {
+	//	fi, err = fs.Stat(l.fsys, l.path)
+	// }
+
+	// prefer fs.Stat since symlinks are resolved
+	fi, err = fs.Stat(l.fsys, l.path)
+
 	if err != nil {
 		return qid, nil, err
 	}
@@ -83,9 +85,10 @@ func (l *p9file) info() (p9.QID, fs.FileInfo, error) {
 
 	qid.Path = ninePath
 
-	// this helps prevent caching and
-	// signals this should be like a device file
-	qid.Version = math.MaxUint32
+	// this prevents caching on
+	// linux when mounted with fscache
+	// TODO: determine "static" files and give version
+	qid.Version = 0
 
 	return qid, fi, nil
 }
@@ -138,6 +141,8 @@ func (l *p9file) GetAttr(req p9.AttrMask) (p9.QID, p9.AttrMask, p9.Attr, error) 
 		m = p9.ModeDirectory
 	} else if fi.Mode().IsRegular() {
 		m = p9.ModeRegular
+	} else if fi.Mode()&fs.ModeSymlink != 0 {
+		m = p9.ModeSymlink
 	}
 	m |= p9.FileMode(fi.Mode().Perm())
 
@@ -239,16 +244,15 @@ func (l *p9file) Mkdir(name string, permissions p9.FileMode, _ p9.UID, _ p9.GID)
 }
 
 // Symlink implements p9.File.Symlink.
-//
-// Not properly implemented.
-// func (l *p9file) Symlink(oldname string, newname string, _ p9.UID, _ p9.GID) (p9.QID, error) {
-// 	if err := os.Symlink(oldname, path.Join(l.path, newname)); err != nil {
-// 		return p9.QID{}, err
-// 	}
-//
-// 	// Blank QID.
-// 	return p9.QID{}, nil
-// }
+func (l *p9file) Symlink(oldname string, newname string, _ p9.UID, _ p9.GID) (p9.QID, error) {
+	if err := fs.Symlink(l.fsys, oldname, path.Join(l.path, newname)); err != nil {
+		log.Println("p9kit: symlink:", err, oldname, path.Join(l.path, newname))
+		return p9.QID{}, err
+	}
+
+	// Blank QID.
+	return p9.QID{}, nil
+}
 
 // Link implements p9.File.Link.
 //
@@ -266,11 +270,9 @@ func (l *p9file) Mkdir(name string, permissions p9.FileMode, _ p9.UID, _ p9.GID)
 // }
 
 // Readlink implements p9.File.Readlink.
-//
-// Not properly implemented.
-// func (l *p9file) Readlink() (string, error) {
-// 	return os.Readlink(l.path)
-// }
+func (l *p9file) Readlink() (string, error) {
+	return fs.Readlink(l.fsys, l.path)
+}
 
 // Renamed implements p9.File.Renamed.
 func (l *p9file) Renamed(parent p9.File, newName string) {
@@ -282,13 +284,14 @@ func (l *p9file) SetAttr(valid p9.SetAttrMask, attr p9.SetAttr) error {
 	// When truncate(2) is called on Linux, Linux will try to set time & size. Fake it. Sorry.
 	supported := p9.SetAttrMask{Size: true, MTime: true, CTime: true, ATime: true}
 	if !valid.IsSubsetOf(supported) {
+		log.Printf("p9kit: unsupported attr: %v", valid)
 		return linux.ENOSYS
 	}
 
 	if valid.Size {
 		if err := fs.Truncate(l.fsys, l.path, int64(attr.Size)); err != nil {
 			if errors.Is(err, fs.ErrNotSupported) {
-				log.Printf("truncate on %T: %s %s\n", l.fsys, l.path, err)
+				log.Printf("p9kit: truncate on %T: %s %s\n", l.fsys, l.path, err)
 			}
 			return err
 		}
@@ -299,7 +302,7 @@ func (l *p9file) SetAttr(valid p9.SetAttrMask, attr p9.SetAttr) error {
 			time.Unix(int64(attr.ATimeSeconds), int64(attr.ATimeNanoSeconds)),
 			time.Unix(int64(attr.MTimeSeconds), int64(attr.MTimeNanoSeconds))); err != nil {
 			if errors.Is(err, fs.ErrNotSupported) {
-				log.Printf("chtimes on %T: %s %s\n", l.fsys, l.path, err)
+				log.Printf("p9kit: chtimes on %T: %s %s\n", l.fsys, l.path, err)
 			}
 			return err
 		}
