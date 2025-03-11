@@ -2,9 +2,7 @@ package fs
 
 import (
 	"errors"
-	"fmt"
 	"path"
-	"reflect"
 )
 
 type RemoveFS interface {
@@ -18,27 +16,11 @@ func Remove(fsys FS, name string) error {
 		return r.Remove(name)
 	}
 
-	if path.Dir(name) != "." {
-		parent, err := Sub(fsys, path.Dir(name))
-		if err != nil {
-			return err
-		}
-		if subfs, ok := parent.(*SubdirFS); ok && reflect.DeepEqual(subfs.Fsys, fsys) {
-			// if parent is a SubdirFS of our fsys, we manually
-			// call Remove to avoid infinite recursion
-			full, err := subfs.fullName("remove", path.Base(name))
-			if err != nil {
-				return err
-			}
-			if r, ok := subfs.Fsys.(RemoveFS); ok {
-				return r.Remove(full)
-			}
-			return fmt.Errorf("%w on %T: Remove %s", ErrNotSupported, subfs.Fsys, full)
-		}
-		return Remove(parent, path.Base(name))
+	rfsys, rname, err := ResolveAs[RemoveFS](fsys, name)
+	if err == nil {
+		return rfsys.Remove(rname)
 	}
-
-	return fmt.Errorf("%w on %T: Remove %s", ErrNotSupported, fsys, name)
+	return opErr(fsys, name, "remove", err)
 }
 
 type RemoveAllFS interface {
@@ -52,7 +34,15 @@ func RemoveAll(fsys FS, name string) error {
 		return r.RemoveAll(name)
 	}
 
-	err := Remove(fsys, name)
+	rfsys, rname, err := ResolveAs[RemoveAllFS](fsys, name)
+	if err == nil {
+		return rfsys.RemoveAll(rname)
+	}
+	if !errors.Is(err, ErrNotSupported) {
+		return opErr(fsys, name, "removeall", err)
+	}
+
+	err = Remove(fsys, name)
 	if !errors.Is(err, ErrNotEmpty) {
 		return err
 	}

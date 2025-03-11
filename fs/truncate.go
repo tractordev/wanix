@@ -1,10 +1,6 @@
 package fs
 
-import (
-	"fmt"
-	"path"
-	"reflect"
-)
+import "errors"
 
 type TruncateFS interface {
 	FS
@@ -16,24 +12,12 @@ func Truncate(fsys FS, name string, size int64) error {
 		return t.Truncate(name, size)
 	}
 
-	if path.Dir(name) != "." {
-		parent, err := Sub(fsys, path.Dir(name))
-		if err != nil {
-			return err
-		}
-		if subfs, ok := parent.(*SubdirFS); ok && reflect.DeepEqual(subfs.Fsys, fsys) {
-			// if parent is a SubdirFS of our fsys, we manually
-			// call Truncate to avoid infinite recursion
-			full, err := subfs.fullName("truncate", path.Base(name))
-			if err != nil {
-				return err
-			}
-			if m, ok := subfs.Fsys.(TruncateFS); ok {
-				return m.Truncate(full, size)
-			}
-			return fmt.Errorf("%w on %T: Truncate %s", ErrNotSupported, subfs.Fsys, full)
-		}
-		return Truncate(parent, path.Base(name), size)
+	rfsys, rname, err := ResolveAs[TruncateFS](fsys, name)
+	if err == nil {
+		return rfsys.Truncate(rname, size)
+	}
+	if !errors.Is(err, ErrNotSupported) {
+		return opErr(fsys, name, "truncate", err)
 	}
 
 	b, err := ReadFile(fsys, name)

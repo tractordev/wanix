@@ -27,8 +27,8 @@ func CopyFS(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
 		return fmt.Errorf("will not overwrite %q", dstPath)
 	}
 	switch mode := srcInfo.Mode(); mode & ModeType {
-	// case os.ModeSymlink:
-	// 	return copySymLink(src, dst)
+	case os.ModeSymlink:
+		return copySymlink(srcFS, srcPath, dstFS, dstPath)
 	case os.ModeDir:
 		return copyDir(srcFS, srcPath, dstFS, dstPath, mode)
 	case 0:
@@ -38,13 +38,13 @@ func CopyFS(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
 	}
 }
 
-// func copySymLink(src, dst string) error {
-// 	target, err := os.Readlink(src)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return os.Symlink(target, dst)
-// }
+func copySymlink(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
+	target, err := Readlink(srcFS, srcPath)
+	if err != nil {
+		return err
+	}
+	return Symlink(dstFS, target, dstPath)
+}
 
 func copyFile(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileMode) error {
 	srcf, err := srcFS.Open(srcPath)

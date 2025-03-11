@@ -1,68 +1,79 @@
 package fs
 
-import (
-	"context"
-	"errors"
-	"slices"
-	"strings"
+import "context"
+
+var (
+	// NoFollowContextKey is the context key for the no-follow flag.
+	NoFollowContextKey = &contextKey{"no-follow"}
+	// OriginContextKey is the context key for the originating filesystem.
+	OriginContextKey = &contextKey{"origin"}
+	// FilepathContextKey is the context key for the fully qualified path relative to the origin.
+	FilepathContextKey = &contextKey{"filepath"}
 )
 
-type OpenContextFS interface {
-	FS
-	OpenContext(ctx context.Context, name string) (File, error)
+// FollowSymlinks returns true if symlinks should be followed and is intended
+// to be used on contexts passed to OpenContext, et al.
+func FollowSymlinks(ctx context.Context) bool {
+	if ctx == nil {
+		return true
+	}
+	return ctx.Value(NoFollowContextKey) == nil
 }
 
-// OpenContext is a helper that opens a file with the given context and name
-// falling back to Open if context is not supported.
-func OpenContext(ctx context.Context, fsys FS, name string) (File, error) {
-	if o, ok := fsys.(OpenContextFS); ok {
-		return o.OpenContext(ctx, name)
+// WithNoFollow returns a new context with the NoFollowContextKey set to true.
+func WithNoFollow(ctx context.Context) context.Context {
+	if ctx == nil {
+		return nil
 	}
-	return fsys.Open(name)
+	return context.WithValue(ctx, NoFollowContextKey, true)
 }
 
-type ReadDirContextFS interface {
-	FS
-	ReadDirContext(ctx context.Context, name string) ([]DirEntry, error)
-}
-
-func ReadDirContext(ctx context.Context, fsys FS, name string) ([]DirEntry, error) {
-	if fsys, ok := fsys.(ReadDirContextFS); ok {
-		return fsys.ReadDirContext(ctx, name)
+// Origin returns the origin filesystem and filepath for the given context. The
+// filepath may be empty but as long as there is an origin it will return true.
+func Origin(ctx context.Context) (FS, string, bool) {
+	if ctx == nil {
+		return nil, "", false
 	}
-
-	file, err := OpenContext(ctx, fsys, name)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	dir, ok := file.(ReadDirFile)
+	fsys, ok := ctx.Value(OriginContextKey).(FS)
 	if !ok {
-		return nil, &PathError{Op: "readdir", Path: name, Err: errors.New("not implemented")}
+		return nil, "", false
 	}
-
-	list, err := dir.ReadDir(-1)
-	slices.SortFunc(list, func(a, b DirEntry) int {
-		return strings.Compare(a.Name(), b.Name())
-	})
-	return list, err
+	filepath, ok := ctx.Value(FilepathContextKey).(string)
+	if ok {
+		return fsys, filepath, true
+	}
+	return fsys, "", true
 }
 
-type StatContextFS interface {
-	FS
-	StatContext(ctx context.Context, name string) (FileInfo, error)
+// WithOrigin returns a new context with the OriginContextKey set to the given
+// filesystem unless there is already an origin filesystem in the context.
+func WithOrigin(ctx context.Context, fsys FS) context.Context {
+	if ctx == nil {
+		return nil
+	}
+	if _, _, ok := Origin(ctx); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, OriginContextKey, fsys)
 }
 
-func StatContext(ctx context.Context, fsys FS, name string) (FileInfo, error) {
-	if fsys, ok := fsys.(StatContextFS); ok {
-		return fsys.StatContext(ctx, name)
+// WithFilepath returns a new context with the FilepathContextKey set to the
+// given filepath unless there is already a filepath in the context.
+func WithFilepath(ctx context.Context, filepath string) context.Context {
+	if ctx == nil {
+		return nil
 	}
-
-	file, err := OpenContext(ctx, fsys, name)
-	if err != nil {
-		return nil, err
+	if _, ok := ctx.Value(FilepathContextKey).(string); ok {
+		return ctx
 	}
-	defer file.Close()
-	return file.Stat()
+	return context.WithValue(ctx, FilepathContextKey, filepath)
 }
+
+// contextKey is a value for use with context.WithValue. It's used as
+// a pointer so it fits in an interface{} without allocation. We use this
+// for the context keys that are common to all filesystems.
+type contextKey struct {
+	name string
+}
+
+func (k *contextKey) String() string { return "fs context value " + k.name }

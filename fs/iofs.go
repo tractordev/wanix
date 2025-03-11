@@ -1,7 +1,6 @@
 package fs
 
 import (
-	"errors"
 	iofs "io/fs"
 )
 
@@ -11,10 +10,6 @@ var (
 	ErrExist      = iofs.ErrExist
 	ErrNotExist   = iofs.ErrNotExist
 	ErrClosed     = iofs.ErrClosed
-
-	// new errors
-	ErrNotSupported = errors.New("operation not supported")
-	ErrNotEmpty     = errors.New("directory not empty")
 
 	SkipAll = iofs.SkipAll
 	SkipDir = iofs.SkipDir
@@ -29,7 +24,7 @@ var (
 	WalkDir            = iofs.WalkDir
 	FileInfoToDirEntry = iofs.FileInfoToDirEntry
 	ReadDir            = iofs.ReadDir
-	Stat               = iofs.Stat
+	// Stat               = iofs.Stat
 	// Sub                = iofs.Sub
 
 )

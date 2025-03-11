@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 )
 
 func IsDir(fsys FS, path string) (bool, error) {
@@ -33,6 +34,10 @@ func IsEmpty(fsys FS, path string) (bool, error) {
 		return len(list) == 0, nil
 	}
 	return fi.Size() == 0, nil
+}
+
+func IsSymlink(mode FileMode) bool {
+	return mode&ModeSymlink != 0
 }
 
 func Exists(fsys FS, path string) (bool, error) {
@@ -79,9 +84,14 @@ func WriteFile(fsys FS, filename string, data []byte, perm FileMode) error {
 	// }
 	f, err := Create(fsys, filename)
 	if errors.Is(err, ErrNotSupported) {
-		f, err = fsys.Open(filename)
-		if err != nil {
-			return err
+		var e error
+		f, e = fsys.Open(filename)
+		if errors.Is(e, ErrNotExist) {
+			// ok go back to unsupported error
+			return err //fmt.Errorf("create: %w on %s", ErrNotSupported, reflect.TypeOf(fsys))
+		}
+		if e != nil {
+			return e
 		}
 	} else if err != nil {
 		return err
@@ -95,4 +105,8 @@ func WriteFile(fsys FS, filename string, data []byte, perm FileMode) error {
 	}
 	// TODO: use perm?
 	return err
+}
+
+func Equal(a, b FS) bool {
+	return reflect.DeepEqual(a, b)
 }

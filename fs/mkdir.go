@@ -2,9 +2,7 @@ package fs
 
 import (
 	"errors"
-	"fmt"
 	"path"
-	"reflect"
 )
 
 type MkdirFS interface {
@@ -18,27 +16,11 @@ func Mkdir(fsys FS, name string, perm FileMode) error {
 		return m.Mkdir(name, perm)
 	}
 
-	if path.Dir(name) != "." {
-		parent, err := Sub(fsys, path.Dir(name))
-		if err != nil {
-			return err
-		}
-		if subfs, ok := parent.(*SubdirFS); ok && reflect.DeepEqual(subfs.Fsys, fsys) {
-			// if parent is a SubdirFS of our fsys, we manually
-			// call Mkdir to avoid infinite recursion
-			full, err := subfs.fullName("mkdir", path.Base(name))
-			if err != nil {
-				return err
-			}
-			if m, ok := subfs.Fsys.(MkdirFS); ok {
-				return m.Mkdir(full, perm)
-			}
-			return fmt.Errorf("%w on %T: Mkdir %s", ErrNotSupported, subfs.Fsys, full)
-		}
-		return Mkdir(parent, path.Base(name), perm)
+	rfsys, rname, err := ResolveAs[MkdirFS](fsys, name)
+	if err == nil {
+		return rfsys.Mkdir(rname, perm)
 	}
-
-	return fmt.Errorf("%w on %T: Mkdir %s", ErrNotSupported, fsys, name)
+	return opErr(fsys, name, "mkdir", err)
 }
 
 type MkdirAllFS interface {
@@ -52,21 +34,26 @@ func MkdirAll(fsys FS, name string, perm FileMode) error {
 		return m.MkdirAll(name, perm)
 	}
 
-	err := Mkdir(fsys, name, perm)
-	if errors.Is(err, ErrExist) {
+	rfsys, rname, err := ResolveAs[MkdirAllFS](fsys, name)
+	if err == nil {
+		return rfsys.MkdirAll(rname, perm)
+	}
+	if !errors.Is(err, ErrNotSupported) {
+		return opErr(fsys, name, "mkdirall", err)
+	}
+
+	err = Mkdir(fsys, name, perm)
+	if err == nil || errors.Is(err, ErrExist) {
 		return nil
 	}
-	if !errors.Is(err, ErrNotExist) {
-		return err
+
+	if !errors.Is(err, ErrNotExist) || path.Dir(name) == "." {
+		return opErr(fsys, name, "mkdirall", err)
 	}
 
 	// parent doesn't exist, make parent dirs and try again
-	if path.Dir(name) != "." {
-		if err := MkdirAll(fsys, path.Dir(name), perm); err != nil {
-			return err
-		}
-		return Mkdir(fsys, name, perm)
+	if err := MkdirAll(fsys, path.Dir(name), perm); err != nil {
+		return err
 	}
-
-	return fmt.Errorf("%w on %T: MkdirAll %s", ErrNotSupported, fsys, name)
+	return Mkdir(fsys, name, perm)
 }

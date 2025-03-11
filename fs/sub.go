@@ -85,7 +85,8 @@ func (f *SubdirFS) Create(name string) (File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return Create(f.Fsys, full)
+	file, err := Create(f.Fsys, full)
+	return file, f.fixErr(err)
 }
 
 func (f *SubdirFS) Mkdir(name string, perm FileMode) error {
@@ -93,7 +94,7 @@ func (f *SubdirFS) Mkdir(name string, perm FileMode) error {
 	if err != nil {
 		return err
 	}
-	return Mkdir(f.Fsys, full, perm)
+	return f.fixErr(Mkdir(f.Fsys, full, perm))
 }
 
 func (f *SubdirFS) Truncate(name string, size int64) error {
@@ -101,7 +102,7 @@ func (f *SubdirFS) Truncate(name string, size int64) error {
 	if err != nil {
 		return err
 	}
-	return Truncate(f.Fsys, full, size)
+	return f.fixErr(Truncate(f.Fsys, full, size))
 }
 
 func (f *SubdirFS) Chtimes(name string, atime time.Time, mtime time.Time) error {
@@ -109,7 +110,7 @@ func (f *SubdirFS) Chtimes(name string, atime time.Time, mtime time.Time) error 
 	if err != nil {
 		return err
 	}
-	return Chtimes(f.Fsys, full, atime, mtime)
+	return f.fixErr(Chtimes(f.Fsys, full, atime, mtime))
 }
 
 func (f *SubdirFS) Remove(name string) error {
@@ -117,7 +118,24 @@ func (f *SubdirFS) Remove(name string) error {
 	if err != nil {
 		return err
 	}
-	return Remove(f.Fsys, full)
+	return f.fixErr(Remove(f.Fsys, full))
+}
+
+func (f *SubdirFS) Symlink(oldname string, newname string) error {
+	full, err := f.fullName("symlink", newname)
+	if err != nil {
+		return err
+	}
+	return f.fixErr(Symlink(f.Fsys, oldname, full))
+}
+
+func (f *SubdirFS) Readlink(name string) (string, error) {
+	full, err := f.fullName("readlink", name)
+	if err != nil {
+		return "", err
+	}
+	link, err := Readlink(f.Fsys, full)
+	return link, f.fixErr(err)
 }
 
 func (f *SubdirFS) Sub(dir string) (FS, error) {
