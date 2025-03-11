@@ -93,7 +93,7 @@ self.onmessage = async (e) => {
     worker.postMessage({
         buffer: shared, 
         args: (new TextDecoder()).decode(cmd).trim().split(" "),
-        env: (new TextDecoder()).decode(env).trim().split("\n"), //["GOPATH=/", "GOROOT=."]
+        env: (new TextDecoder()).decode(env).trim().split("\n"),
         stdin: `task/${pid}/.sys/fd0`,
         stdout: `task/${pid}/.sys/fd1`,
         stderr: `task/${pid}/.sys/fd2`,

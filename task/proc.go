@@ -113,7 +113,7 @@ func (r *Process) Sub(name string) (fs.FS, error) {
 		}),
 		"env": misc.FieldFile(strings.Join(r.env, "\n"), func(in []byte) error {
 			if len(in) > 0 {
-				r.env = strings.Split(strings.TrimSpace(string(in)), " ")
+				r.env = strings.Split(strings.TrimSpace(string(in)), "\n")
 			}
 			return nil
 		}),
@@ -129,7 +129,7 @@ func (r *Process) Sub(name string) (fs.FS, error) {
 			}
 			return nil
 		}),
-		"ns":   r.ns,
+		// "ns":   r.ns,
 		"fd":   fskit.MapFS(r.fds),
 		".sys": fskit.MapFS(r.sys),
 	}, name)

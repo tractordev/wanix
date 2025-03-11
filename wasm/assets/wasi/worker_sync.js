@@ -28,6 +28,20 @@ self.onmessage = async (e) => {
 	// ConsoleStdout.lineBuffered(msg => { console.log(`[WASI stdout] ${msg}`); /*buf.get({sync: "stdout", data: msg+"\n"}) */ }),
 	// ConsoleStdout.lineBuffered(msg => console.warn(`[WASI stderr] ${msg}`)),	
 	
+	// unicode env fix
+	// PR: https://github.com/bjorn3/browser_wasi_shim/pull/89
+	const self = wasi;
+	wasi.wasiImport.environ_sizes_get = (environ_count/*: number*/, environ_size/*: number*/)/*: number*/ => {
+        const buffer = new DataView(self.inst.exports.memory.buffer);
+        buffer.setUint32(environ_count, self.env.length, true);
+        let buf_size = 0;
+        for (const environ of self.env) {
+          buf_size += new TextEncoder().encode(environ).length + 1;
+        }
+        buffer.setUint32(environ_size, buf_size, true);
+        return 0;
+    };
+
 	applyPatchPollOneoff(wasi);
 	const go = new Go(); // set up Go runtime (even for non-Go WASM)
 	const imports = Object.assign(go.importObject, {
