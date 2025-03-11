@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall/js"
+	"time"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix"
@@ -139,7 +140,13 @@ func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, entry := range entries {
 				if entry.Name() == "index.html" {
-					http.ServeFileFS(w, r, d.k.NS, filepath.Join(path, entry.Name()))
+					f, err := d.k.NS.Open(filepath.Join(path, entry.Name()))
+					if err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					defer f.Close()
+					http.ServeContent(w, r, entry.Name(), time.Now(), &nopReadSeeker{File: f})
 					return
 				}
 			}
@@ -162,4 +169,13 @@ func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusContinue)
+}
+
+type nopReadSeeker struct {
+	fs.File
+}
+
+func (n *nopReadSeeker) Seek(offset int64, whence int) (int64, error) {
+	// This is a no-op implementation that doesn't actually seek
+	return 0, nil
 }
