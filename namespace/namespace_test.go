@@ -1,6 +1,7 @@
 package namespace
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"sort"
@@ -497,5 +498,52 @@ func TestMkdirOnLeaf(t *testing.T) {
 	}
 	if len(dir) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(dir))
+	}
+}
+
+func TestWritableRootOverRootBind(t *testing.T) {
+	mfs := fskit.MapFS{
+		"a": fskit.RawNode([]byte("content1")),
+		"b": fskit.RawNode([]byte("content2")),
+	}
+
+	emptyfs := fskit.MemFS{}
+
+	ns := New(context.Background())
+	if err := ns.Bind(mfs, ".", ".", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := ns.Bind(emptyfs, ".", ".", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	e, err := fs.ReadDir(ns, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e) != 2 {
+		// a, b
+		t.Fatalf("unexpected number of entries: %v", len(e))
+	}
+
+	if err := fs.WriteFile(ns, "c", []byte("content3"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	e, err = fs.ReadDir(ns, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(e) != 3 {
+		// a, b, c
+		t.Fatalf("unexpected number of entries: %v", len(e))
+	}
+
+	n, ok := emptyfs["c"]
+	if !ok {
+		t.Fatal("c not found in emptyfs")
+	}
+	if !bytes.Equal(n.Data(), []byte("content3")) {
+		t.Fatalf("unexpected data: %s", string(n.Data()))
 	}
 }

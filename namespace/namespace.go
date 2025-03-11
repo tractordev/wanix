@@ -2,6 +2,8 @@ package namespace
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path"
 	"slices"
 	"sort"
@@ -23,8 +25,10 @@ type FS struct {
 type pathRef struct {
 	fs   fs.FS
 	path string
+	fi   fs.FileInfo
 }
 
+// fileInfo returns the latest file info for the binding with the given name
 func (ref *pathRef) fileInfo(ctx context.Context, fname string) (*fskit.Node, error) {
 	fi, err := fs.StatContext(ctx, ref.fs, ref.path)
 	if err != nil {
@@ -37,12 +41,25 @@ func New(ctx context.Context) *FS {
 	fsys := &FS{
 		bindings: make(map[string][]pathRef),
 	}
-	fsys.ctx = context.WithValue(ctx, NamespaceContextKey, fsys)
+	fsys.ctx = fs.WithOrigin(ctx, fsys)
 	return fsys
 }
 
 func (ns *FS) Context() context.Context {
 	return ns.ctx
+}
+
+func (ns *FS) Resolve(name string) (fs.FS, string, error) {
+	// ResolveFS only used for this case right now
+	if name == "." {
+		if refs, ok := ns.bindings["."]; ok {
+			return refs[0].fs, name, nil
+		}
+		return ns, name, nil
+	}
+
+	// for now otherwise we'll just error
+	return nil, "", fmt.Errorf("not implemented yet")
 }
 
 // Sub returns an [fs.FS] corresponding to the subtree rooted at fsys's dir.
@@ -104,14 +121,18 @@ func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 		return &fs.PathError{Op: "bind", Path: dstPath, Err: fs.ErrNotExist}
 	}
 
-	// Check srcPath
+	// Check srcPath, cache the file info
 	file, err := src.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	fi, err := file.Stat()
 	if err != nil {
 		return err
 	}
 	file.Close()
 
-	ref := pathRef{fs: src, path: srcPath}
+	ref := pathRef{fs: src, path: srcPath, fi: fi}
 	switch mode {
 	case "", "after":
 		ns.bindings[dstPath] = append([]pathRef{ref}, ns.bindings[dstPath]...)
@@ -134,12 +155,8 @@ func (ns *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error)
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 	}
 
-	_, cname, _ := FromContext(ctx)
-	if cname == "" {
-		ctx = context.WithValue(ctx, PathContextKey, name)
-	}
-
-	// TODO: merge ctx with ns.ctx
+	ctx = fs.WithOrigin(ctx, ns)
+	ctx = fs.WithFilepath(ctx, name)
 
 	// we implement Stat to try and avoid using Open for Stat
 	// since it involves calling Stat on all sub filesystem roots
@@ -149,12 +166,42 @@ func (ns *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error)
 		return fskit.Entry(name, fs.ModeDir|0755), nil
 	}
 
-	file, err := fs.OpenContext(ctx, ns, name)
+	// Check direct bindings since they don't get resolved by the resolver
+	if refs, exists := ns.bindings[name]; exists {
+		for _, ref := range refs {
+			fi, err := ref.fileInfo(ctx, path.Base(name))
+			if err != nil {
+				continue
+			}
+			return fi, nil
+		}
+	}
+
+	tfsys, tname, err := fs.ResolveAs[fs.StatContextFS](ns, name)
+	if err != nil && !errors.Is(err, fs.ErrNotSupported) {
+		// log.Println("ns.statcontext: err", name, err)
+		return nil, err
+	}
+	if err == nil && !fs.Equal(tfsys, ns) {
+		// log.Println("ns.statcontext: rfsys", name)
+		return tfsys.StatContext(ctx, tname)
+	}
+
+	rfsys, rname, err := fs.Resolve(ns, name)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-	return file.Stat()
+
+	// log.Println("ns.statcontext: opencontext", rname, reflect.TypeOf(rfsys))
+	f, err := fs.OpenContext(ctx, rfsys, rname)
+	if err != nil {
+		// log.Println("ns.statcontext: opencontext err", err)
+		return nil, err
+	}
+	// log.Println("ns.statcontext: opencontext prestat", err)
+	defer f.Close()
+	// log.Println("ns.statcontext: stat!")
+	return f.Stat()
 }
 
 // Open implements fs.FS interface
@@ -168,12 +215,8 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
 
-	_, cname, _ := FromContext(ctx)
-	if cname == "" {
-		ctx = context.WithValue(ctx, PathContextKey, name)
-	}
-
-	// TODO: merge ctx with ns.ctx
+	ctx = fs.WithOrigin(ctx, ns)
+	ctx = fs.WithFilepath(ctx, name)
 
 	var dir *fskit.Node
 	var dirEntries []fs.DirEntry
@@ -182,14 +225,10 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	// Check direct bindings
 	if refs, exists := ns.bindings[name]; exists {
 		for _, ref := range refs {
-			fi, err := fs.StatContext(ctx, ref.fs, ref.path)
-			if err != nil {
-				return nil, err
-			}
-			if fi.IsDir() {
+			if ref.fi.IsDir() {
 				// directory binding, add entries
 				if dir == nil {
-					dir = fskit.RawNode(fi, name)
+					dir = fskit.RawNode(ref.fi, name)
 					foundDir = true
 				}
 				entries, err := fs.ReadDirContext(ctx, ref.fs, ref.path)
