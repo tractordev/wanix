@@ -5,6 +5,7 @@ package vm
 import (
 	"context"
 	"io"
+	"log"
 	"path"
 	"syscall/js"
 
@@ -12,7 +13,6 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/misc"
-	"tractor.dev/wanix/namespace"
 )
 
 type VM struct {
@@ -38,16 +38,20 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 			Run: func(_ *cli.Context, args []string) {
 				switch args[0] {
 				case "start":
-					fsys, name, ok := namespace.FromContext(ctx)
+					fsys, name, ok := fs.Origin(ctx)
 					if ok {
 						ttyFile := path.Join(path.Dir(name), "ttyS0")
-						if ok, _ := fs.Exists(fsys, ttyFile); ok {
+						if ok, err := fs.Exists(fsys, ttyFile); ok {
 							if tty, err := fsys.Open(ttyFile); err == nil {
 								go io.Copy(r.serial, tty)
 								if w, ok := tty.(io.Writer); ok {
 									go io.Copy(w, r.serial)
 								}
+							} else {
+								log.Println("vm start:", err)
 							}
+						} else {
+							log.Println("vm start: no ttyS0 file", err)
 						}
 					}
 					r.value.Call("run")
