@@ -42,7 +42,7 @@ func main() {
 			if err != nil {
 				log.Fatal("shell: Failed to create gzip reader:", err)
 			}
-			shellfs <- tarfs.New(tar.NewReader(gzReader))
+			shellfs <- tarfs.Load(tar.NewReader(gzReader))
 			gzReader.Close()
 		}()
 		return nil
