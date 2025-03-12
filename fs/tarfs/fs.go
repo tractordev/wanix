@@ -27,7 +27,7 @@ func splitpath(name string) (dir, file string) {
 	return
 }
 
-func New(t *tar.Reader) *FS {
+func Load(t *tar.Reader) *FS {
 	fsys := &FS{files: make(map[string]map[string]*File)}
 	for {
 		hdr, err := t.Next()
