@@ -13,9 +13,9 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/tarfs"
-	"tractor.dev/wanix/internal/virtio9p"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
+	"tractor.dev/wanix/web/virtio9p"
 )
 
 func main() {
