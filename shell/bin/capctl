@@ -1,0 +1,22 @@
+#!/bin/sh
+case "$1" in
+    "new")
+        if [ -n "$2" ]; then
+            id=$(cat /cap/new/$2)
+            if [ $# -gt 2 ]; then
+                shift 2  # Remove first two arguments
+                echo "$*" >> /cap/$id/ctl
+            fi
+            echo "$id"
+        else
+            ls -1 /cap/new
+        fi
+        ;;
+    *)
+        id=$1
+        shift  # Remove first argument
+        if [ $# -gt 0 ]; then
+            echo "$*" >> /cap/$id/ctl
+        fi
+        ;;
+esac
