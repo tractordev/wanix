@@ -67,6 +67,6 @@ func main() {
 	}
 	root.Namespace().Bind(rw, ".", "#shell", "")
 
-	virtio9p.StartFor(root.Namespace(), ctx, false)
+	go virtio9p.Serve(root.Namespace(), ctx, false)
 	api.PortResponder(ctx.Get("sys"), root)
 }
