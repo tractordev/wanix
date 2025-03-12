@@ -3,18 +3,50 @@
 		<meta charset="utf-8"/>
         <script src="./v86/libv86.js"></script>
         <script src="./l2wfs.js"></script>
+        <script src="./wio.js"></script>
         <link rel="stylesheet" href="./xterm/xterm-5.3.0.min.css" />
         <script src="./xterm/xterm-5.3.0.min.js"></script>
         <script src="./xterm/xterm-fit-0.8.0.min.js"></script>
+        <style>
+            html, body {
+                height: 100%;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+            }
+            
+            .wanix-terminal {
+                width: 100%;
+                height: 100%;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+            
+            iframe {
+                border: 8px solid #b0eced;
+                position: absolute;
+            }
+
+            /* Make sure the xterm canvas elements fill the container */
+            .xterm {
+                height: 100%;
+                width: 100%;
+            }
+            
+            .xterm-viewport,
+            .xterm-screen {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
 	</head>
 	<body>
-        <div id="screen_container" style="display: none;">
+        <div id="screen_container" style="display: none; z-index: 1; position: absolute; bottom: 0; right: 0;">
             <div style="white-space: pre; font: 14px monospace; line-height: 14px"></div>
             <canvas style="display: none"></canvas>
         </div>
         <script type="module">
-            // const downloader = async () => await downloadChunks(generateRange(9).map(suffix => `./v86/image/state/initial.state.${suffix}`));
-            // const buffer = await downloader();
             window.makeVM = () => {
                 return new V86({
                     wasm_path: "./v86/v86.wasm",
@@ -24,18 +56,8 @@
                     bios: { url: "./v86/seabios.bin" },
                     vga_bios: { url: "./v86/vgabios.bin" },
                     net_device_type: "virtio",
-                    // autostart: true,
-                    // bzimage_initrd_from_filesystem: true,
-                    // cmdline: "rw root=host9p rootfstype=9p rootflags=trans=virtio,cache=loose modules=virtio_pci console=ttyS0 console=tty1",
-                    // filesystem: {
-                    //     baseurl: `./v86/image/fs/`,
-                    //     basefs: `./v86/image/fs.json`,
-                    // },
-
-                    // cmdline: "rw root=host9p rootfstype=9p rootflags=trans=virtio,version=9p2000.L,aname=opfs/root,cache=none,msize=8192,access=client tsc=reliable mitigations=off random.trust_cpu=on modules=virtio_pci wmode=wanix init=/init",
-                    cmdline: "tsc=reliable mitigations=off random.trust_cpu=on modules=virtio_pci wmode=wanix",
                     bzimage: { url: "./linux/bzImage" },
-                    initrd: { url: "./linux/initramfs.gz" },
+                    cmdline: "init=/bin/init rw root=host9p rootfstype=9p rootflags=trans=virtio,version=9p2000.L,aname=web/vm/1/fsys,cache=none,msize=8192,access=client tsc=reliable mitigations=off random.trust_cpu=on", //debug loglevel=7
                 });
             };
         </script>
@@ -100,6 +122,12 @@
                     write("web/dom/body/ctl", "append-child 1")
                     read("web/vm/new")
                     write("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
+                    
+                    write("task/1/ctl", "bind #shell web/vm/1/fsys")
+                    write("task/1/ctl", "bind cap web/vm/1/fsys/cap")
+                    write("task/1/ctl", "bind task web/vm/1/fsys/task")
+                    write("task/1/ctl", "bind web web/vm/1/fsys/web")
+
                     if (debug) {
                         document.querySelector("#screen_container").style.display = "block";
                     }
