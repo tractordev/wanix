@@ -1,0 +1,17 @@
+#!/bin/sh
+case "$1" in
+    "new")
+        if [ -n "$2" ]; then
+            cat /web/dom/new/$2
+        else
+            ls -1 /web/dom/new
+        fi
+        ;;
+    *)
+        id=$1
+        shift  # Remove first argument
+        if [ $# -gt 0 ]; then
+            echo "$*" >> /web/dom/$id/ctl
+        fi
+        ;;
+esac
