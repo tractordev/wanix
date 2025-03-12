@@ -2,7 +2,7 @@
 
 all: linux v86 wasi wasm-tinygo wanix shell
 
-build: wasm-tinygo wanix shell
+build: wasm-tinygo wanix
 
 wanix:
 	go build -o wanix ./cmd/wanix
@@ -21,8 +21,9 @@ v86:
 linux:
 	cd external/linux && make build
 
-wasi:
-	cd external/wasi && make bundle
-
 shell:
 	cd shell && make build
+
+wasi: 
+	cd external/wasi && make build
+	cp external/wasi/wasi.js wasm/assets/wasi/wasi.js
