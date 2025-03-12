@@ -1,4 +1,5 @@
-.PHONY: bundle
+.PHONY: build
 
-bundle:
-	npm install && esbuild index.ts --bundle --outfile=../../wasm/assets/wasi/wasi.js --format=esm
+build:
+	docker build -t wanix-wasi-builder .
+	docker run --rm -v "$(PWD):/output" wanix-wasi-builder
