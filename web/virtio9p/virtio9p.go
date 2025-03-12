@@ -13,7 +13,7 @@ import (
 	"tractor.dev/wanix/fs/p9kit"
 )
 
-func StartFor(fsys fs.FS, ctx js.Value, debug bool) {
+func Serve(fsys fs.FS, ctx js.Value, debug bool) {
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 
@@ -73,9 +73,7 @@ func StartFor(fsys fs.FS, ctx js.Value, debug bool) {
 		o = append(o, p9.WithServerLogger(ulog.Log))
 	}
 	srv := p9.NewServer(p9kit.Attacher(fsys), o...)
-	go func() {
-		if err := srv.Handle(inR, outW); err != nil {
-			log.Fatal(err)
-		}
-	}()
+	if err := srv.Handle(inR, outW); err != nil {
+		log.Fatal(err)
+	}
 }
