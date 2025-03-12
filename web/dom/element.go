@@ -5,6 +5,7 @@ package dom
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"syscall/js"
 
@@ -23,6 +24,10 @@ type Element struct {
 	dom     *Service
 
 	termData *termDataFile
+}
+
+func (r *Element) ID() string {
+	return strconv.Itoa(r.id)
 }
 
 func (r *Element) Value() js.Value {
@@ -53,6 +58,9 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 					if el.typ == "xterm" {
 						el.Value().Get("term").Call("open", el.Value())
 					}
+				case "remove": // remove
+					delete(r.dom.resources, r.ID())
+					r.value.Call("remove")
 				}
 			},
 		}),
