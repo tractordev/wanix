@@ -1,8 +1,8 @@
-package linux
+package shell
 
 import (
 	"embed"
 )
 
-//go:embed bzImage
+//go:embed shell.tgz
 var Dir embed.FS

@@ -1,8 +1,8 @@
-.PHONY: all wanix wasm-tinygo wasm-go v86 linux wasi
+.PHONY: all wanix wasm-tinygo wasm-go v86 linux wasi shell
 
-all: linux v86 wasi wasm-tinygo wanix 
+all: linux v86 wasi wasm-tinygo wanix shell
 
-build: wasm-tinygo wanix
+build: wasm-tinygo wanix shell
 
 wanix:
 	go build -o wanix ./cmd/wanix
@@ -23,3 +23,6 @@ linux:
 
 wasi:
 	cd external/wasi && make bundle
+
+shell:
+	cd shell && make build
