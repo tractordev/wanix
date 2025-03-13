@@ -1,4 +1,5 @@
 FROM debian:bullseye
+ARG KERNEL_VERSION=6.12.18
 WORKDIR /build
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -10,11 +11,11 @@ RUN apt-get update && apt-get install -y \
     gcc-i686-linux-gnu \
     binutils-i686-linux-gnu \
     && rm -rf /var/lib/apt/lists/*
-RUN wget https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.15.137.tar.xz && \
-    tar xf linux-5.15.137.tar.xz && \
-    rm linux-5.15.137.tar.xz
-COPY kernel.config /build/linux-5.15.137/.config
-RUN cd /build/linux-5.15.137 && \
+RUN wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KERNEL_VERSION}.tar.xz && \
+    tar xf linux-${KERNEL_VERSION}.tar.xz && \
+    rm linux-${KERNEL_VERSION}.tar.xz
+COPY kernel.config /build/linux-${KERNEL_VERSION}/.config
+RUN cd /build/linux-${KERNEL_VERSION} && \
     make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- oldconfig < /dev/null && \
     make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- bzImage -j$(nproc) && \
     cp arch/x86/boot/bzImage /build/
