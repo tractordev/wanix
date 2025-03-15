@@ -22,21 +22,15 @@ func mountCmd() *cli.Command {
 			k := wanix.New()
 
 			root, err := k.NewRoot()
-			if err != nil {
-				log.Fatal(err)
-			}
+			fatal(err)
 
-			root.Bind("#fsys", "fsys")
-			root.Bind("#proc", "proc")
+			root.Bind("#cap", "cap")
+			root.Bind("#task", "task")
 
 			mount, err := fusekit.Mount(root.Namespace(), "/tmp/wanix", root.Context())
-			if err != nil {
-				log.Fatalf("Mount fail: %v\n", err)
-			}
+			fatal(err)
 			defer func() {
-				if err := mount.Close(); err != nil {
-					log.Fatalf("Failed to unmount: %v\n", err)
-				}
+				fatal(mount.Close())
 			}()
 
 			log.Println("Mounted at /tmp/wanix ...")
