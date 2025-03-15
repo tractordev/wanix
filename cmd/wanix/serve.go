@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"tractor.dev/toolkit-go/engine/cli"
@@ -22,6 +23,8 @@ func serveCmd() *cli.Command {
 		Usage: "serve",
 		Short: "serve wanix",
 		Run: func(ctx *cli.Context, args []string) {
+			log.SetFlags(log.Ltime | log.Lmicroseconds | log.Lshortfile)
+
 			fmt.Printf("serving on http://localhost:%s ...\n", port)
 
 			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
