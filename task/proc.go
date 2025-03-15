@@ -136,7 +136,7 @@ func (r *Process) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 }
 
 func (r *Process) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := r.ResolveFS(ctx, ".")
+	fsys, rname, err := r.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
 	}
