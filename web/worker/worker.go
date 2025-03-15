@@ -105,7 +105,7 @@ func (r *Resource) Open(name string) (fs.File, error) {
 }
 
 func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := r.ResolveFS(ctx, ".")
+	fsys, rname, err := r.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
 	}
