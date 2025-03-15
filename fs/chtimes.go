@@ -15,7 +15,7 @@ func Chtimes(fsys FS, name string, atime time.Time, mtime time.Time) error {
 		return c.Chtimes(name, atime, mtime)
 	}
 
-	rfsys, rname, err := ResolveAs[ChtimesFS](fsys, name)
+	rfsys, rname, err := ResolveTo[ChtimesFS](fsys, ContextFor(fsys), name)
 	if err == nil {
 		return rfsys.Chtimes(rname, atime, mtime)
 	}

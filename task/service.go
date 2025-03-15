@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"log"
 	"strconv"
 
 	"tractor.dev/wanix/fs"
@@ -64,7 +65,7 @@ func (d *Service) Alloc(kind string) (*Process, error) {
 	return p, nil
 }
 
-func (d *Service) fsys() (fs.FS, fskit.MapFS) {
+func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	m := fskit.MapFS{
 		"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			if name == "." {
@@ -87,23 +88,35 @@ func (d *Service) fsys() (fs.FS, fskit.MapFS) {
 			}, nil
 		}),
 	}
-	return fskit.UnionFS{m, fskit.MapFS(d.resources)}, m
+	pid, ok := PIDFromContext(ctx)
+	if ok {
+		m["self"] = internal.FieldFile(pid, nil)
+	}
+	return fs.Resolve(fskit.UnionFS{m, fskit.MapFS(d.resources)}, ctx, name)
 }
 
-func (d *Service) Sub(name string) (fs.FS, error) {
-	fsys, _ := d.fsys()
-	return fs.Sub(fsys, name)
+func (d *Service) Stat(name string) (fs.FileInfo, error) {
+	log.Println("bare stat:", name)
+	return d.StatContext(context.Background(), name)
+}
+
+func (d *Service) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+	fsys, rname, err := d.ResolveFS(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return fs.StatContext(ctx, fsys, rname)
 }
 
 func (d *Service) Open(name string) (fs.File, error) {
+	log.Println("bare open:", name)
 	return d.OpenContext(context.Background(), name)
 }
 
 func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, dir := d.fsys()
-	pid, ok := PIDFromContext(ctx)
-	if ok {
-		dir["self"] = internal.FieldFile(pid, nil)
+	fsys, rname, err := d.ResolveFS(ctx, name)
+	if err != nil {
+		return nil, err
 	}
-	return fs.OpenContext(ctx, fsys, name)
+	return fs.OpenContext(ctx, fsys, rname)
 }

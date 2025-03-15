@@ -16,7 +16,7 @@ func Remove(fsys FS, name string) error {
 		return r.Remove(name)
 	}
 
-	rfsys, rname, err := ResolveAs[RemoveFS](fsys, name)
+	rfsys, rname, err := ResolveTo[RemoveFS](fsys, ContextFor(fsys), name)
 	if err == nil {
 		return rfsys.Remove(rname)
 	}
@@ -34,7 +34,7 @@ func RemoveAll(fsys FS, name string) error {
 		return r.RemoveAll(name)
 	}
 
-	rfsys, rname, err := ResolveAs[RemoveAllFS](fsys, name)
+	rfsys, rname, err := ResolveTo[RemoveAllFS](fsys, ContextFor(fsys), name)
 	if err == nil {
 		return rfsys.RemoveAll(rname)
 	}

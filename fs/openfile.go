@@ -1,6 +1,8 @@
 package fs
 
-import "os"
+import (
+	"os"
+)
 
 type OpenFileFS interface {
 	FS
@@ -13,7 +15,12 @@ func OpenFile(fsys FS, name string, flag int, perm FileMode) (File, error) {
 		return o.OpenFile(name, flag, perm)
 	}
 
-	rfsys, rname, err := ResolveAs[OpenFileFS](fsys, name)
+	ctx := ContextFor(fsys)
+	if flag&os.O_RDONLY != 0 {
+		ctx = WithReadOnly(ctx)
+	}
+
+	rfsys, rname, err := ResolveTo[OpenFileFS](fsys, ctx, name)
 	if err == nil {
 		return rfsys.OpenFile(rname, flag, perm)
 	}

@@ -1,22 +1,33 @@
 package fs
 
 import (
+	"context"
 	"fmt"
-	"log"
 	"path"
 )
 
 type ResolveFS interface {
 	FS
-	Resolve(name string) (FS, string, error)
+	ResolveFS(ctx context.Context, name string) (FS, string, error)
 }
 
-func ResolveAs[T FS](fsys FS, name string) (T, string, error) {
+// ResolveTo resolves the name to an FS extension type if possible. It uses
+// ResolveFS if available, otherwise it falls back to SubFS.
+func ResolveTo[T FS](fsys FS, ctx context.Context, name string) (T, string, error) {
 	var tfsys T
 
-	rfsys, rname, err := Resolve(fsys, name)
+	rfsys, rname, err := Resolve(fsys, ctx, name)
 	if err != nil {
 		return tfsys, "", err
+	}
+
+	// try to resolve again from here
+	if res, ok := rfsys.(ResolveFS); ok {
+		rrfsys, rrname, err := res.ResolveFS(ctx, rname)
+		if err == nil && (!Equal(rrfsys, rfsys) || rrname != rname) {
+			rfsys = rrfsys
+			rname = rrname
+		}
 	}
 
 	if v, ok := rfsys.(T); ok {
@@ -28,21 +39,36 @@ func ResolveAs[T FS](fsys FS, name string) (T, string, error) {
 	return tfsys, rname, nil
 }
 
-func Resolve(fsys FS, name string) (rfsys FS, rname string, err error) {
-	if name == "." {
-		// for now we'll limit using ResolveFS to roots
-		if rfsys, ok := fsys.(ResolveFS); ok {
-			log.Println("resolve:", name)
-			return rfsys.Resolve(name)
-		}
+// Resolve resolves to the FS directly containing the name returning that
+// resolved FS and the relative name for that FS. It uses ResolveFS if
+// available, otherwise it falls back to SubFS. If unable to resolve,
+// it returns the original FS and the original name, but it can also
+// return a PathError if .
+func Resolve(fsys FS, ctx context.Context, name string) (rfsys FS, rname string, err error) {
+	// defer func() {
+	// 	if rname != name {
+	// 		pc2, _, _, _ := runtime.Caller(2)
+	// 		pc3, _, _, _ := runtime.Caller(3)
+	// 		pc4, _, _, _ := runtime.Caller(4)
+	// 		callers := []string{
+	// 			path.Base(runtime.FuncForPC(pc2).Name()),
+	// 			path.Base(runtime.FuncForPC(pc3).Name()),
+	// 			path.Base(runtime.FuncForPC(pc4).Name()),
+	// 		}
+	// 		line := fmt.Sprintf("  [%T] %s => [%T] %s %v %v", fsys, name, rfsys, rname, err, callers)
+	// 		log.Println(strings.ReplaceAll(line, "fskit.", ""))
+	// 	}
+	// }()
+	if rfsys, ok := fsys.(ResolveFS); ok {
+		return rfsys.ResolveFS(ctx, name)
+	}
 
-		// otherwise root files resolve to the same fs
+	if name == "." {
 		rfsys = fsys
 		rname = name
 		return
 	}
 
-	// TODO: make and use a ResolveFS interface, falling back to Sub if not supported
 	dirfs, e := Sub(fsys, path.Dir(name))
 	if e != nil {
 		err = e

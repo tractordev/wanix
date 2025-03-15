@@ -44,14 +44,14 @@ func (d *Service) Open(name string) (fs.File, error) {
 }
 
 func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, err := d.Sub(".")
+	fsys, rname, err := d.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	return fs.OpenContext(ctx, fsys, name)
+	return fs.OpenContext(ctx, fsys, rname)
 }
 
-func (d *Service) Sub(name string) (fs.FS, error) {
+func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	fsys := fskit.MapFS{
 		"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			if name == "." {
@@ -149,5 +149,5 @@ func (d *Service) Sub(name string) (fs.FS, error) {
 			}, nil
 		}),
 	}
-	return fs.Sub(fskit.UnionFS{fsys, fskit.MapFS(d.resources)}, name)
+	return fs.Resolve(fskit.UnionFS{fsys, fskit.MapFS(d.resources)}, ctx, name)
 }

@@ -1,7 +1,6 @@
 package fs
 
 import (
-	"context"
 	"errors"
 	"io"
 	"path"
@@ -18,7 +17,8 @@ func Readlink(fsys FS, name string) (string, error) {
 		return c.Readlink(name)
 	}
 
-	rfsys, rname, err := ResolveAs[ReadlinkFS](fsys, name)
+	ctx := WithReadOnly(ContextFor(fsys))
+	rfsys, rname, err := ResolveTo[ReadlinkFS](fsys, ctx, name)
 	if err == nil {
 		return rfsys.Readlink(rname)
 	}
@@ -26,7 +26,7 @@ func Readlink(fsys FS, name string) (string, error) {
 		return "", opErr(fsys, name, "readlink", err)
 	}
 
-	f, err := OpenContext(WithNoFollow(context.Background()), fsys, name)
+	f, err := OpenContext(WithNoFollow(ctx), fsys, name)
 	if err != nil {
 		return "", err
 	}

@@ -1,2 +1,2 @@
 #!/bin/sh
-echo "bind $1 web/vm/1/fsys/$2" >> task/1/ctl
+echo "bind $1 web/vm/1/fsys/$2" >> /task/$(cat /task/self)/ctl

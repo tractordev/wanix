@@ -6,7 +6,7 @@ import (
 )
 
 func Stat(fsys FS, name string) (FileInfo, error) {
-	return StatContext(context.Background(), fsys, name)
+	return StatContext(ContextFor(fsys), fsys, name)
 }
 
 type StatContextFS interface {
@@ -15,29 +15,25 @@ type StatContextFS interface {
 }
 
 func StatContext(ctx context.Context, fsys FS, name string) (FileInfo, error) {
-	ctx = WithOrigin(ctx, fsys)
-	ctx = WithFilepath(ctx, name)
+	ctx = WithOrigin(ctx, fsys, name, "stat")
+	ctx = WithReadOnly(ctx)
 
 	// _, fullname, _ := Origin(ctx)
 	// log.Println("fs.statcontext:", name, reflect.TypeOf(fsys), fullname)
 	// fmt.Println(string(debug.Stack()))
 
 	if fsys, ok := fsys.(StatContextFS); ok {
-		// log.Println("fs.statcontext: fsys", name)
 		return fsys.StatContext(ctx, name)
 	}
 
-	rfsys, rname, err := ResolveAs[StatContextFS](fsys, name)
+	rfsys, rname, err := ResolveTo[StatContextFS](fsys, ctx, name)
 	if err == nil {
-		// log.Println("fs.statcontext: rfsys", name)
 		return rfsys.StatContext(ctx, rname)
 	}
 	if !errors.Is(err, ErrNotSupported) {
-		// log.Println("fs.statcontext: err", name, err)
 		return nil, opErr(fsys, name, "stat", err)
 	}
 
-	// log.Println("fs.statcontext: opencontext", name, err)
 	file, err := OpenContext(ctx, fsys, name)
 	if err != nil {
 		return nil, opErr(fsys, name, "stat", err)

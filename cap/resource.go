@@ -18,7 +18,7 @@ type Resource struct {
 	Extra   map[string]fs.FS
 }
 
-func (r *Resource) Sub(name string) (fs.FS, error) {
+func (r *Resource) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	fsys := fskit.MapFS{
 		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
@@ -41,7 +41,7 @@ func (r *Resource) Sub(name string) (fs.FS, error) {
 	for k, v := range r.Extra {
 		fsys[k] = v
 	}
-	return fs.Sub(fsys, name)
+	return fs.Resolve(fsys, ctx, name)
 }
 
 func (r *Resource) Open(name string) (fs.File, error) {
@@ -49,9 +49,9 @@ func (r *Resource) Open(name string) (fs.File, error) {
 }
 
 func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, err := r.Sub(".")
+	fsys, rname, err := r.ResolveFS(ctx, ".")
 	if err != nil {
 		return nil, err
 	}
-	return fs.OpenContext(ctx, fsys, name)
+	return fs.OpenContext(ctx, fsys, rname)
 }

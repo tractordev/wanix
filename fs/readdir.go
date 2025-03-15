@@ -13,14 +13,14 @@ type ReadDirContextFS interface {
 }
 
 func ReadDirContext(ctx context.Context, fsys FS, name string) ([]DirEntry, error) {
-	ctx = WithOrigin(ctx, fsys)
-	ctx = WithFilepath(ctx, name)
+	ctx = WithOrigin(ctx, fsys, name, "readdir")
+	ctx = WithReadOnly(ctx)
 
 	if fsys, ok := fsys.(ReadDirContextFS); ok {
 		return fsys.ReadDirContext(ctx, name)
 	}
 
-	rfsys, rname, err := ResolveAs[ReadDirContextFS](fsys, name)
+	rfsys, rname, err := ResolveTo[ReadDirContextFS](fsys, ctx, name)
 	if err == nil {
 		return rfsys.ReadDirContext(ctx, rname)
 	}

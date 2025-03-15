@@ -11,7 +11,7 @@ func Chmod(fsys FS, name string, mode FileMode) error {
 		return c.Chmod(name, mode)
 	}
 
-	rfsys, rname, err := ResolveAs[ChmodFS](fsys, name)
+	rfsys, rname, err := ResolveTo[ChmodFS](fsys, ContextFor(fsys), name)
 	if err == nil {
 		return rfsys.Chmod(rname, mode)
 	}
