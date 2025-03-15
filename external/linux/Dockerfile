@@ -1,4 +1,4 @@
-FROM debian:bullseye
+FROM ubuntu:noble
 ARG KERNEL_VERSION=6.12.18
 WORKDIR /build
 RUN apt-get update && apt-get install -y \
