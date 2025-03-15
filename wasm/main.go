@@ -19,8 +19,10 @@ import (
 )
 
 func main() {
-	ctx := js.Global().Get("wanix")
-	if ctx.IsUndefined() {
+	log.SetFlags(log.Lshortfile)
+
+	inst := js.Global().Get("wanix")
+	if inst.IsUndefined() {
 		log.Fatal("Wanix not initialized on this page")
 	}
 
@@ -49,7 +51,7 @@ func main() {
 	}))
 
 	k := wanix.New()
-	k.AddModule("#web", web.New(k, ctx))
+	k.AddModule("#web", web.New(k, inst))
 
 	root, err := k.NewRoot()
 	if err != nil {
@@ -67,6 +69,6 @@ func main() {
 	}
 	root.Namespace().Bind(rw, ".", "#shell", "")
 
-	go virtio9p.Serve(root.Namespace(), ctx, false)
-	api.PortResponder(ctx.Get("sys"), root)
+	go virtio9p.Serve(root.Namespace(), inst, false)
+	api.PortResponder(inst.Get("sys"), root)
 }

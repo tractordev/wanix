@@ -13,13 +13,13 @@ import (
 	"tractor.dev/wanix/fs/p9kit"
 )
 
-func Serve(fsys fs.FS, ctx js.Value, debug bool) {
+func Serve(fsys fs.FS, inst js.Value, debug bool) {
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 
 	var virtioSend js.Value
 
-	ctx.Set("virtioHandle", js.FuncOf(func(this js.Value, args []js.Value) any {
+	inst.Set("virtioHandle", js.FuncOf(func(this js.Value, args []js.Value) any {
 		virtioSend = args[1]
 		go func() {
 			buf := make([]byte, args[0].Get("byteLength").Int())

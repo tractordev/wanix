@@ -123,7 +123,10 @@
                     read("web/vm/new")
                     write("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0")
                     
+                    
                     write("task/1/ctl", "bind #shell web/vm/1/fsys")
+                    // write("task/1/ctl", "bind . web/vm/1/fsys")
+                    
                     write("task/1/ctl", "bind cap web/vm/1/fsys/cap")
                     write("task/1/ctl", "bind task web/vm/1/fsys/task")
                     write("task/1/ctl", "bind web web/vm/1/fsys/web")
