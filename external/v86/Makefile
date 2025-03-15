@@ -1,4 +1,4 @@
 
 build:
-	docker build -t v86-build .
-	docker run --rm -v $(PWD):/dst v86-build
+	docker build --load -t wanix-v86-build .
+	docker run --rm -v $(PWD):/dst wanix-v86-build
