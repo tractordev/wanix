@@ -246,7 +246,7 @@ func (l *p9file) Mkdir(name string, permissions p9.FileMode, _ p9.UID, _ p9.GID)
 // Symlink implements p9.File.Symlink.
 func (l *p9file) Symlink(oldname string, newname string, _ p9.UID, _ p9.GID) (p9.QID, error) {
 	if err := fs.Symlink(l.fsys, oldname, path.Join(l.path, newname)); err != nil {
-		log.Println("p9kit: symlink:", err, oldname, path.Join(l.path, newname))
+		log.Println("p9kit:", err, oldname, path.Join(l.path, newname))
 		return p9.QID{}, err
 	}
 
