@@ -1,4 +1,4 @@
-//go:build !js && !wasm
+//go:build !js && !wasm && !noconsole
 
 package main
 
@@ -22,96 +22,98 @@ import (
 	"tractor.dev/wanix/wasm/assets"
 )
 
-func consoleCmd() *cli.Command {
+func (m *Main) addConsole(root *cli.Command) {
 	cmd := &cli.Command{
 		Usage: "console",
 		Short: "enter wanix console",
 		Run: func(ctx *cli.Context, args []string) {
-			l, err := net.Listen("tcp", "localhost:0")
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer l.Close()
+			desktop.Start(func() {
+				defer desktop.Stop()
 
-			launched := make(chan bool)
-			app.Run(app.Options{
-				Accessory: true,
-				Agent:     true,
-			}, func() {
-				launched <- true
-			})
-			<-launched
+				l, err := net.Listen("tcp", "localhost:0")
+				fatal(err)
 
-			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
-				"v86":   v86.Dir,
-				"linux": linux.Dir,
-			}}
+				defer l.Close()
 
-			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
-				w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
-				http.FileServerFS(fsys).ServeHTTP(w, r)
-			}))
-			http.Handle("/.tty", websocket.Handler(func(conn *websocket.Conn) {
-				conn.PayloadType = websocket.BinaryFrame
+				launched := make(chan bool)
+				app.Run(app.Options{
+					Accessory: true,
+					Agent:     true,
+				}, func() {
+					launched <- true
+				})
+				<-launched
 
-				oldstate, err := term.MakeRaw(int(os.Stdin.Fd()))
-				if err != nil {
-					log.Fatal(err)
-				}
-				defer term.Restore(int(os.Stdin.Fd()), oldstate)
+				fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
+					"v86":   v86.Dir,
+					"linux": linux.Dir,
+				}}
 
-				go func() {
-					if _, err := io.Copy(os.Stdout, conn); err != nil {
-						log.Println(err)
-					}
-				}()
+				http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
+					w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
+					http.FileServerFS(fsys).ServeHTTP(w, r)
+				}))
+				http.Handle("/.tty", websocket.Handler(func(conn *websocket.Conn) {
+					conn.PayloadType = websocket.BinaryFrame
 
-				buffer := make([]byte, 1024)
-				for {
-					n, err := os.Stdin.Read(buffer)
-					if err != nil {
-						term.Restore(int(os.Stdin.Fd()), oldstate)
-						log.Fatal("Error reading from stdin:", err)
-					}
+					oldstate, err := term.MakeRaw(int(os.Stdin.Fd()))
+					fatal(err)
 
-					for i := 0; i < n; i++ {
-						// Check for Ctrl-D (ASCII 4)
-						if buffer[i] == 4 {
+					defer term.Restore(int(os.Stdin.Fd()), oldstate)
+
+					go func() {
+						if _, err := io.Copy(os.Stdout, conn); err != nil {
+							log.Println(err)
+						}
+					}()
+
+					buffer := make([]byte, 1024)
+					for {
+						n, err := os.Stdin.Read(buffer)
+						if err != nil {
 							term.Restore(int(os.Stdin.Fd()), oldstate)
-							conn.Close()
-							fmt.Println("Ctrl-D detected")
-							return
+							log.Fatal("Error reading from stdin:", err)
+						}
+
+						for i := 0; i < n; i++ {
+							// Check for Ctrl-D (ASCII 4)
+							if buffer[i] == 4 {
+								term.Restore(int(os.Stdin.Fd()), oldstate)
+								conn.Close()
+								fmt.Println("Ctrl-D detected")
+								return
+							}
+						}
+
+						//processed := bytes.ReplaceAll(buffer[:n], []byte{'\n'}, []byte{'\r', '\n'})
+						_, err = conn.Write(buffer[:n])
+						if err != nil {
+							log.Println(err)
 						}
 					}
 
-					//processed := bytes.ReplaceAll(buffer[:n], []byte{'\n'}, []byte{'\r', '\n'})
-					_, err = conn.Write(buffer[:n])
-					if err != nil {
-						log.Println(err)
-					}
-				}
+				}))
 
-			}))
-
-			hostname := fmt.Sprintf("localhost:%d", l.Addr().(*net.TCPAddr).Port)
-			url := fmt.Sprintf("http://%s/?tty=ws://%s/.tty", hostname, hostname)
-			desktop.Dispatch(func() {
-				win := window.New(window.Options{
-					Center: true,
-					Hidden: true,
-					Size: window.Size{
-						Width:  1004,
-						Height: 785,
-					},
-					Resizable: true,
-					URL:       url,
+				hostname := fmt.Sprintf("localhost:%d", l.Addr().(*net.TCPAddr).Port)
+				url := fmt.Sprintf("http://%s/?tty=ws://%s/.tty", hostname, hostname)
+				desktop.Dispatch(func() {
+					win := window.New(window.Options{
+						Center: true,
+						Hidden: true,
+						Size: window.Size{
+							Width:  1004,
+							Height: 785,
+						},
+						Resizable: true,
+						URL:       url,
+					})
+					win.Reload()
 				})
-				win.Reload()
-			})
 
-			http.Serve(l, nil)
+				fatal(http.Serve(l, nil))
+			})
 		},
 	}
-	return cmd
+	root.AddCommand(cmd)
 }

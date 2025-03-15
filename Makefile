@@ -1,11 +1,21 @@
-.PHONY: all wanix wasm-tinygo wasm-go v86 linux wasi shell
+.PHONY: all deps build clobber docker wanix wasm-tinygo wasm-go v86 linux wasi shell
 
-all: linux v86 wasi wasm-tinygo wanix shell
+GOOS=$(shell go env GOOS)
+GOARCH=$(shell go env GOARCH)
+GOARGS?=
+
+all: deps build
+
+deps: linux v86 wasi shell
 
 build: wasm-tinygo wanix
 
+docker: deps
+	docker build --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) --load -t wanix .
+	docker run --rm -v "$(PWD):/output" wanix sh -c "cp ./wanix /output"
+
 wanix:
-	go build -o wanix ./cmd/wanix
+	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o wanix $(GOARGS) ./cmd/wanix
 
 wasm-tinygo:
 	tinygo build -target wasm -o wasm/assets/wanix.wasm ./wasm
@@ -27,3 +37,13 @@ shell:
 wasi: 
 	cd external/wasi && make build
 	cp external/wasi/wasi.js wasm/assets/wasi/wasi.js
+
+clobber:
+	rm -f wanix
+	rm -f wasm/assets/wasi/wasi.js
+	rm -f wasm/assets/wasm_exec.js
+	rm -f wasm/assets/wanix.wasm
+	make -C external/linux clobber
+	make -C external/v86 clobber
+	make -C external/wasi clobber
+	make -C shell clobber

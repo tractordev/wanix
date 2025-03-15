@@ -5,7 +5,6 @@ package main
 import (
 	"log"
 
-	"tractor.dev/toolkit-go/desktop"
 	"tractor.dev/toolkit-go/engine"
 	"tractor.dev/toolkit-go/engine/cli"
 )
@@ -13,10 +12,7 @@ import (
 var Version string
 
 func main() {
-	desktop.Start(func() {
-		engine.Run(Main{})
-		desktop.Stop()
-	})
+	engine.Run(Main{})
 }
 
 type Main struct{}
@@ -26,7 +22,11 @@ func (m *Main) InitializeCLI(root *cli.Command) {
 	root.Version = Version
 	root.AddCommand(serveCmd())
 	root.AddCommand(mountCmd())
-	root.AddCommand(consoleCmd())
+
+	var v any = m
+	if mm, ok := v.(interface{ addConsole(root *cli.Command) }); ok {
+		mm.addConsole(root)
+	}
 }
 
 func fatal(err error) {
