@@ -12,5 +12,5 @@ var (
 )
 
 func opErr(fsys FS, name string, op string, err error) error {
-	return &PathError{Op: op, Path: name, Err: fmt.Errorf("%w on %T", err, fsys)}
+	return &PathError{Op: op, Path: name, Err: fmt.Errorf("%w from %T", err, fsys)}
 }

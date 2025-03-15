@@ -11,12 +11,12 @@ func Create(fsys FS, name string) (File, error) {
 		return c.Create(name)
 	}
 
-	rfsys, rname, err := ResolveAs[CreateFS](fsys, name)
+	rfsys, rname, err := ResolveTo[CreateFS](fsys, ContextFor(fsys), name) //path.Dir(name))
 	if err == nil {
-		return rfsys.Create(rname) //path.Join(rdir, path.Base(name))
+		return rfsys.Create(rname) //path.Join(rdir, path.Base(name)))
 	}
 
-	// TODO: implement derived Create using OpenFile
+	// TODO: implement derived Create using OpenFile?
 
 	return nil, opErr(fsys, name, "create", err)
 }

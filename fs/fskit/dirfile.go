@@ -3,6 +3,7 @@ package fskit
 import (
 	"io"
 	"slices"
+	"sort"
 	"strings"
 
 	"tractor.dev/wanix/fs"
@@ -25,7 +26,7 @@ func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
 	entries = slices.DeleteFunc(entries, func(e fs.DirEntry) bool {
 		return strings.HasPrefix(e.Name(), "#")
 	})
-	return &dirFile{FileInfo: info, path: info.name, entries: removeDuplicates(entries)}
+	return &dirFile{FileInfo: info, path: info.name, entries: removeDuplicatesAndSort(entries)}
 }
 
 func (d *dirFile) Stat() (fs.FileInfo, error) { return d, nil }
@@ -36,6 +37,7 @@ func (d *dirFile) Read(b []byte) (int, error) {
 
 func (d *dirFile) ReadDir(count int) ([]fs.DirEntry, error) {
 	if count == -1 {
+		defer func() { d.entries = nil }()
 		return d.entries, nil
 	}
 	n := len(d.entries) - d.offset
@@ -53,7 +55,7 @@ func (d *dirFile) ReadDir(count int) ([]fs.DirEntry, error) {
 	return list, nil
 }
 
-func removeDuplicates(entries []fs.DirEntry) []fs.DirEntry {
+func removeDuplicatesAndSort(entries []fs.DirEntry) []fs.DirEntry {
 	lastIndex := make(map[string]int)
 	for i, item := range entries {
 		lastIndex[item.Name()] = i
@@ -68,5 +70,8 @@ func removeDuplicates(entries []fs.DirEntry) []fs.DirEntry {
 			seen[item.Name()] = true
 		}
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name() < result[j].Name()
+	})
 	return result
 }

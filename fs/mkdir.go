@@ -16,9 +16,9 @@ func Mkdir(fsys FS, name string, perm FileMode) error {
 		return m.Mkdir(name, perm)
 	}
 
-	rfsys, rname, err := ResolveAs[MkdirFS](fsys, name)
+	rfsys, rname, err := ResolveTo[MkdirFS](fsys, ContextFor(fsys), name) // path.Dir(name))
 	if err == nil {
-		return rfsys.Mkdir(rname, perm)
+		return rfsys.Mkdir(rname, perm) //path.Join(rdir, path.Base(name)), perm)
 	}
 	return opErr(fsys, name, "mkdir", err)
 }
@@ -34,9 +34,9 @@ func MkdirAll(fsys FS, name string, perm FileMode) error {
 		return m.MkdirAll(name, perm)
 	}
 
-	rfsys, rname, err := ResolveAs[MkdirAllFS](fsys, name)
+	rfsys, rname, err := ResolveTo[MkdirAllFS](fsys, ContextFor(fsys), name) // path.Dir(name))
 	if err == nil {
-		return rfsys.MkdirAll(rname, perm)
+		return rfsys.MkdirAll(rname, perm) //path.Join(rdir, path.Base(name)), perm)
 	}
 	if !errors.Is(err, ErrNotSupported) {
 		return opErr(fsys, name, "mkdirall", err)

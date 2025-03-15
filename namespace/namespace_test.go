@@ -61,7 +61,7 @@ func TestNamespace(t *testing.T) {
 	}
 }
 
-func TestSubFS(t *testing.T) {
+func TestResolveFS(t *testing.T) {
 	ns := New(context.Background())
 
 	subFS := fskit.MapFS{
@@ -82,41 +82,38 @@ func TestSubFS(t *testing.T) {
 	ns.Bind(rootFS, ".", ".", "")
 	ns.Bind(bindsubFS, ".", "bind", "")
 
-	subfs, err := ns.Sub(".")
+	subfs, _, err := ns.ResolveFS(context.Background(), ".")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, rootFS) {
-		t.Fatal("Sub(.) is not rootFS")
+		t.Fatal("ResolveFS(.) is not rootFS")
 	}
 
-	subfs, err = ns.Sub("bind")
+	subfs, _, err = ns.ResolveFS(context.Background(), "bind")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, bindsubFS) {
-		t.Fatal("Sub(bind) is not bindsubFS")
+		t.Fatal("ResolveFS(bind) is not bindsubFS")
 	}
 
-	// requires fskit.MapFS to have proper Sub() implementation
-	subfs, err = ns.Sub("bind/bindsub")
+	// requires fskit.MapFS to have proper ResolveFS() implementation
+	var rname string
+	subfs, rname, err = ns.ResolveFS(context.Background(), "bind/bindsub/subfile")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, subFS) {
-		t.Fatalf("Sub(bind/bindsub) is not subFS: %T", subfs)
+		t.Fatalf("ResolveFS(bind/bindsub/subfile) is not subFS: %T %s", subfs, rname)
 	}
 
-	subfs, err = ns.Sub("rootsub/subdir")
+	subfs, rname, err = ns.ResolveFS(context.Background(), "rootsub/subdir")
 	if err != nil {
 		t.Fatal(err)
 	}
-	subdirfs, ok := subfs.(*fs.SubdirFS)
-	if !ok {
-		t.Fatalf("Sub(rootsub/subdir) is not a SubdirFS: %T", subfs)
-	}
-	if !reflect.DeepEqual(subdirfs.Fsys, subFS) {
-		t.Fatalf("Sub(rootsub/subdir) is not a SubdirFS of subFS: %s %T", subdirfs.Dir, subdirfs.Fsys)
+	if !reflect.DeepEqual(subfs, subFS) {
+		t.Fatalf("ResolveFS(rootsub/subdir) is not subFS: %s %T", rname, subfs)
 	}
 }
 
@@ -447,14 +444,14 @@ func TestMkdirOnLeaf(t *testing.T) {
 
 	ns.Bind(middlefs, ".", "sub", "")
 
-	// first we'll use Sub manually to get the memfs
+	// first we'll use ResolveFS manually to get the memfs
 
-	subfs, err := ns.Sub("sub/dir")
+	subfs, _, err := ns.ResolveFS(context.Background(), "sub/dir/file")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, memfs) {
-		t.Fatalf("Sub(sub/dir) is not memfs: %T", subfs)
+		t.Fatalf("ResolveFS(sub/dir/file) is not memfs: %T", subfs)
 	}
 
 	err = fs.Mkdir(subfs, "newdir1", 0755)

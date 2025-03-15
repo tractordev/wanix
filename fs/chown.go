@@ -11,7 +11,7 @@ func Chown(fsys FS, name string, uid, gid int) error {
 		return c.Chown(name, uid, gid)
 	}
 
-	rfsys, rname, err := ResolveAs[ChownFS](fsys, name)
+	rfsys, rname, err := ResolveTo[ChownFS](fsys, ContextFor(fsys), name)
 	if err == nil {
 		return rfsys.Chown(rname, uid, gid)
 	}

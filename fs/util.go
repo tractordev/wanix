@@ -63,25 +63,6 @@ func DirExists(fsys FS, path string) (bool, error) {
 }
 
 func WriteFile(fsys FS, filename string, data []byte, perm FileMode) error {
-	// var f File
-	// var err error
-	// if c, ok := fsys.(CreateFS); ok {
-	// 	f, err = c.Create(filename)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// } else if of, ok := fsys.(OpenFileFS); ok {
-	// 	f, err = of.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// } else {
-	// 	// for now, we'll fallback to a regular open and try to write to the file
-	// 	f, err = fsys.Open(filename)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
 	f, err := Create(fsys, filename)
 	if errors.Is(err, ErrNotSupported) {
 		var e error

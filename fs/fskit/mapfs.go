@@ -2,9 +2,9 @@ package fskit
 
 import (
 	"context"
+	"log"
 	"path"
 	"slices"
-	"sort"
 	"strings"
 
 	"tractor.dev/wanix/fs"
@@ -14,42 +14,35 @@ type MapFS map[string]fs.FS
 
 var _ fs.FS = MapFS(nil)
 
-// Sub returns an [fs.FS] corresponding to the subtree rooted at fsys's dir.
-//
-// This operates the same as [fs.Sub] with some additional handling:
-// - if dir is a direct path to a [fs.FS], it will return that FS
-// - if dir is a subpath of a key in the map, it will return a [fs.SubdirFS]
-func (fsys MapFS) Sub(dir string) (fs.FS, error) {
-	if dir == "." {
-		return fsys, nil
-	}
-	// check if dir is directly in map
-	subfs, found := fsys[dir]
+func (fsys MapFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+	subfs, found := fsys[name]
 	if found {
-		return subfs, nil
+		if rfsys, ok := subfs.(fs.ResolveFS); ok {
+			return rfsys.ResolveFS(ctx, ".")
+		}
+		return fsys, name, nil
 	}
+
 	// check subpaths of map dirs
-	var sortedKeys []string
+	var keys []string
 	for p := range fsys {
-		sortedKeys = append(sortedKeys, p)
+		keys = append(keys, p)
 	}
-	sort.Slice(sortedKeys, func(i, j int) bool {
-		// sort by length, longest first
-		return len(sortedKeys[i]) > len(sortedKeys[j])
-	})
-	for _, key := range sortedKeys {
-		if strings.HasPrefix(dir, key) {
-			relativePath := strings.TrimPrefix(dir, key)
-			relativePath = strings.TrimPrefix(relativePath, "/")
-			return &fs.SubdirFS{Fsys: fsys[key], Dir: relativePath}, nil
+	for _, key := range MatchPaths(keys, name) {
+		relativePath := strings.Trim(strings.TrimPrefix(name, key), "/")
+		if rfsys, ok := fsys[key].(fs.ResolveFS); ok {
+			return rfsys.ResolveFS(ctx, relativePath)
+		} else {
+			// otherwise, we just resolve to first match
+			return fsys[key], relativePath, nil
 		}
 	}
-	// if we get here, dir is not in map
-	// TODO: or should this return a [fs.SubdirFS] to error when used?
-	return nil, &fs.PathError{Op: "sub", Path: dir, Err: fs.ErrNotExist}
+
+	return fsys, name, nil
 }
 
 func (fsys MapFS) Stat(name string) (fs.FileInfo, error) {
+	log.Println("bare stat:", name)
 	return fsys.StatContext(context.Background(), name)
 }
 
@@ -80,7 +73,9 @@ func (fsys MapFS) StatContext(ctx context.Context, name string) (fs.FileInfo, er
 }
 
 func (fsys MapFS) Open(name string) (fs.File, error) {
-	return fsys.OpenContext(context.Background(), name)
+	log.Println("bare open:", name)
+	ctx := fs.WithOrigin(context.Background(), fsys, name, "open")
+	return fsys.OpenContext(ctx, name)
 }
 
 func (fsys MapFS) OpenContext(ctx context.Context, name string) (fs.File, error) {

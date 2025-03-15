@@ -51,8 +51,8 @@ func (d *Service) Register(kind string, alloc Allocator) {
 	d.allocators[kind] = alloc
 }
 
-func (d *Service) Sub(name string) (fs.FS, error) {
-	return fs.Sub(fskit.UnionFS{fskit.MapFS{
+func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+	return fs.Resolve(fskit.UnionFS{fskit.MapFS{
 		"ctl": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			return fskit.Entry(name, 0555, []byte("ctl\n")).Open(".")
 		}),
@@ -90,7 +90,7 @@ func (d *Service) Sub(name string) (fs.FS, error) {
 				},
 			}, nil
 		}),
-	}, fskit.MapFS(d.resources)}, name)
+	}, fskit.MapFS(d.resources)}, ctx, name)
 }
 
 func (d *Service) Open(name string) (fs.File, error) {
@@ -98,9 +98,9 @@ func (d *Service) Open(name string) (fs.File, error) {
 }
 
 func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, err := d.Sub(".")
+	fsys, rname, err := d.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	return fs.OpenContext(ctx, fsys, name)
+	return fs.OpenContext(ctx, fsys, rname)
 }

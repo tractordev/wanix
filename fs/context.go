@@ -1,6 +1,9 @@
 package fs
 
-import "context"
+import (
+	"context"
+	"slices"
+)
 
 var (
 	// NoFollowContextKey is the context key for the no-follow flag.
@@ -9,7 +12,20 @@ var (
 	OriginContextKey = &contextKey{"origin"}
 	// FilepathContextKey is the context key for the fully qualified path relative to the origin.
 	FilepathContextKey = &contextKey{"filepath"}
+	// ReadOnlyContextKey is the context key for the read-only flag.
+	ReadOnlyContextKey = &contextKey{"read-only"}
 )
+
+type contextFS interface {
+	Context() context.Context
+}
+
+func ContextFor(fsys FS) context.Context {
+	if cfs, ok := fsys.(contextFS); ok {
+		return cfs.Context()
+	}
+	return context.Background()
+}
 
 // FollowSymlinks returns true if symlinks should be followed and is intended
 // to be used on contexts passed to OpenContext, et al.
@@ -18,6 +34,25 @@ func FollowSymlinks(ctx context.Context) bool {
 		return true
 	}
 	return ctx.Value(NoFollowContextKey) == nil
+}
+
+// IsReadOnly returns true if the context is read-only.
+func IsReadOnly(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	return ctx.Value(ReadOnlyContextKey) != nil
+}
+
+// WithReadOnly returns a new context with the ReadOnlyContextKey set to true.
+func WithReadOnly(ctx context.Context) context.Context {
+	if ctx == nil {
+		return nil
+	}
+	if IsReadOnly(ctx) {
+		return ctx
+	}
+	return context.WithValue(ctx, ReadOnlyContextKey, true)
 }
 
 // WithNoFollow returns a new context with the NoFollowContextKey set to true.
@@ -47,13 +82,18 @@ func Origin(ctx context.Context) (FS, string, bool) {
 
 // WithOrigin returns a new context with the OriginContextKey set to the given
 // filesystem unless there is already an origin filesystem in the context.
-func WithOrigin(ctx context.Context, fsys FS) context.Context {
+func WithOrigin(ctx context.Context, fsys FS, name string, op string) context.Context {
 	if ctx == nil {
 		return nil
 	}
 	if _, _, ok := Origin(ctx); ok {
 		return ctx
 	}
+	ctx = WithFilepath(ctx, name)
+	if slices.Contains([]string{"open", "stat", "readdir", "readlink"}, op) {
+		ctx = WithReadOnly(ctx)
+	}
+	//log.Printf("%s %s [%T]\n", op, name, fsys)
 	return context.WithValue(ctx, OriginContextKey, fsys)
 }
 

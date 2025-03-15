@@ -2,6 +2,8 @@ package fskit
 
 import (
 	"context"
+	"errors"
+	"log"
 
 	"tractor.dev/wanix/fs"
 )
@@ -10,7 +12,8 @@ import (
 type UnionFS []fs.FS
 
 func (f UnionFS) Open(name string) (fs.File, error) {
-	return f.OpenContext(context.Background(), name)
+	ctx := fs.WithOrigin(context.Background(), f, name, "open")
+	return f.OpenContext(ctx, name)
 }
 
 func (f UnionFS) OpenContext(ctx context.Context, name string) (fs.File, error) {
@@ -18,100 +21,80 @@ func (f UnionFS) OpenContext(ctx context.Context, name string) (fs.File, error) 
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 
-	var files []fs.File
-	var isDir bool
-	var foundAny bool
-
-	// First check if it exists as a file/dir in any filesystem
-	for _, fsys := range f {
-		file, err := fs.OpenContext(ctx, fsys, name)
-		if err != nil {
-			continue
-		}
-		info, err := file.Stat()
-		if err != nil {
-			file.Close()
-			continue
-		}
-		if foundAny && info.IsDir() != isDir {
-			file.Close()
-			continue
-		}
-		foundAny = true
-		isDir = info.IsDir()
-		files = append(files, file)
-	}
-
-	// If not found directly, check if it might be an implicit directory
-	if !foundAny && name != "." {
-		// Check if any filesystem has files under this path
-		for _, fsys := range f {
-			entries, err := fs.ReadDirContext(ctx, fsys, name)
-			if err == nil && len(entries) > 0 {
-				// It's an implicit directory
-				isDir = true
-				foundAny = true
-				// Create a directory entry for each filesystem that has content under this path
-				if file, err := fs.OpenContext(ctx, fsys, name); err == nil {
-					files = append(files, file)
-				}
-			}
-		}
-	}
-
-	if !foundAny {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
-	}
-
-	if isDir {
-		return UnionDir(name, 0555, files...), nil
-	}
-	return files[0], nil
-}
-
-func (f UnionFS) ReadDir(name string) ([]fs.DirEntry, error) {
-	file, err := f.Open(name)
+	rfsys, rname, err := f.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-
-	if dir, ok := file.(fs.ReadDirFile); ok {
-		return dir.ReadDir(0)
+	if rname != name || !fs.Equal(rfsys, f) {
+		return fs.OpenContext(ctx, rfsys, rname)
 	}
-	return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrInvalid}
+
+	if name != "." {
+		log.Printf("non-root open: %s (=> %T %s)", name, rfsys, rname)
+		// if non-root open and not resolved, it does not exist
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
+
+	var entries []fs.DirEntry
+	for _, fsys := range f {
+		e, err := fs.ReadDirContext(ctx, fsys, name)
+		if err != nil {
+			log.Printf("readdir: %v %T %s\n", err, fsys, name)
+			continue
+		}
+		entries = append(entries, e...)
+	}
+
+	return DirFile(Entry(name, 0555), entries...), nil
 }
 
-// Sub returns an [fs.FS] corresponding to the subtree rooted at fsys's dir.
-//
-// If dir is ".", Sub returns fsys unchanged.
-// If only one filesystem in the union contains dir, Sub returns that filesystem's subtree directly.
-// Otherwise, Sub returns a new UnionFS containing all valid subtrees.
-func (f UnionFS) Sub(dir string) (fs.FS, error) {
-	if !fs.ValidPath(dir) {
-		return nil, &fs.PathError{Op: "sub", Path: dir, Err: fs.ErrInvalid}
+func (f UnionFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+	if len(f) == 0 {
+		return nil, "", &fs.PathError{Op: "resolve", Path: name, Err: fs.ErrNotExist}
 	}
-	if dir == "." {
-		return f, nil
+	if len(f) == 1 {
+		return f[0], name, nil
+	}
+	if name == "." && fs.IsReadOnly(ctx) {
+		return f, name, nil
 	}
 
-	// Collect all valid sub-filesystems
-	var subFs []fs.FS
+	var toStat []fs.FS
 	for _, fsys := range f {
-		if sub, err := fs.Sub(fsys, dir); err == nil {
-			subFs = append(subFs, sub)
+		if resolver, ok := fsys.(fs.ResolveFS); ok {
+			rfsys, rname, err := resolver.ResolveFS(ctx, name)
+			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					// certainly does not have name
+					continue
+				}
+				return rfsys, rname, err
+			}
+			if !fs.IsReadOnly(ctx) {
+				if _, ok := rfsys.(fs.CreateFS); ok {
+					return rfsys, rname, nil
+				}
+			}
+			if rname != name || !fs.Equal(rfsys, fsys) {
+				// certainly does have name
+				return rfsys, rname, nil
+			}
+		}
+		toStat = append(toStat, fsys)
+	}
+
+	for _, fsys := range toStat {
+		_, err := fs.StatContext(ctx, fsys, name)
+		if err != nil {
+			continue
+		}
+		if fs.IsReadOnly(ctx) {
+			return fsys, name, nil
+		}
+		if _, ok := fsys.(fs.CreateFS); ok {
+			return fsys, name, nil
 		}
 	}
 
-	if len(subFs) == 0 {
-		return nil, &fs.PathError{Op: "sub", Path: dir, Err: fs.ErrNotExist}
-	}
-
-	// If only one filesystem has this directory, return it directly
-	if len(subFs) == 1 {
-		return subFs[0], nil
-	}
-
-	// Otherwise return a union of all sub-filesystems
-	return UnionFS(subFs), nil
+	return f, name, nil
 }

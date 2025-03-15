@@ -38,8 +38,8 @@ func (d *Service) Alloc() (*Resource, error) {
 	return r, nil
 }
 
-func (d *Service) Sub(name string) (fs.FS, error) {
-	return fs.Sub(fskit.UnionFS{fskit.MapFS{
+func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+	return fs.Resolve(fskit.UnionFS{fskit.MapFS{
 		"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			if name == "." {
 				return &fskit.FuncFile{
@@ -56,7 +56,7 @@ func (d *Service) Sub(name string) (fs.FS, error) {
 			}
 			return nil, fs.ErrNotExist
 		}),
-	}, fskit.MapFS(d.resources)}, name)
+	}, fskit.MapFS(d.resources)}, ctx, name)
 }
 
 func (d *Service) Open(name string) (fs.File, error) {
@@ -64,9 +64,9 @@ func (d *Service) Open(name string) (fs.File, error) {
 }
 
 func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, err := d.Sub(".")
+	fsys, rname, err := d.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	return fs.OpenContext(ctx, fsys, name)
+	return fs.OpenContext(ctx, fsys, rname)
 }

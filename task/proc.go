@@ -84,8 +84,8 @@ func (r *Process) Open(name string) (fs.File, error) {
 	return r.OpenContext(context.Background(), name)
 }
 
-func (r *Process) Sub(name string) (fs.FS, error) {
-	return fs.Sub(fskit.MapFS{
+func (r *Process) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+	return fs.Resolve(fskit.MapFS{
 		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
@@ -132,15 +132,15 @@ func (r *Process) Sub(name string) (fs.FS, error) {
 		// "ns":   r.ns,
 		"fd":   fskit.MapFS(r.fds),
 		".sys": fskit.MapFS(r.sys),
-	}, name)
+	}, ctx, name)
 }
 
 func (r *Process) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, err := r.Sub(".")
+	fsys, rname, err := r.ResolveFS(ctx, ".")
 	if err != nil {
 		return nil, err
 	}
-	return fs.OpenContext(ctx, fsys, name)
+	return fs.OpenContext(ctx, fsys, rname)
 }
 
 type ConnFile struct {

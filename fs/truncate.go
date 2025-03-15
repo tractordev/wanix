@@ -1,6 +1,8 @@
 package fs
 
-import "errors"
+import (
+	"errors"
+)
 
 type TruncateFS interface {
 	FS
@@ -12,7 +14,7 @@ func Truncate(fsys FS, name string, size int64) error {
 		return t.Truncate(name, size)
 	}
 
-	rfsys, rname, err := ResolveAs[TruncateFS](fsys, name)
+	rfsys, rname, err := ResolveTo[TruncateFS](fsys, ContextFor(fsys), name)
 	if err == nil {
 		return rfsys.Truncate(rname, size)
 	}

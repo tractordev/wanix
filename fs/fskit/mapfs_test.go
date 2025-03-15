@@ -1,12 +1,14 @@
 package fskit
 
 import (
+	"context"
 	"fmt"
-	"io/fs"
 	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
+
+	"tractor.dev/wanix/fs"
 )
 
 func TestMapFS(t *testing.T) {
@@ -69,18 +71,18 @@ func TestMapFSFileInfoName(t *testing.T) {
 	}
 }
 
-func TestMapFSSub(t *testing.T) {
+func TestMapFSResolveFS(t *testing.T) {
 	subdirFS := MapFS{
 		"hello": RawNode([]byte("hello, world\n")),
 	}
 	m := MapFS{
 		"dir": subdirFS,
 	}
-	sub, err := m.Sub("dir")
+	subfs, _, err := fs.Resolve(m, context.Background(), "dir/hello")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(sub, subdirFS) {
+	if !reflect.DeepEqual(subfs, subdirFS) {
 		t.Fatal("Sub(dir) is not subdirFS")
 	}
 }

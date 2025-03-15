@@ -44,7 +44,7 @@ func Activate(ch js.Value, k *wanix.K) *Service {
 	return d
 }
 
-func (d *Service) Sub(name string) (fs.FS, error) {
+func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	fsys := fskit.MapFS{
 		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
@@ -66,7 +66,7 @@ func (d *Service) Sub(name string) (fs.FS, error) {
 		// "err": internal.FieldFile(r.state, nil),
 		// "fsys": internal.FieldFile(r.fs, nil),
 	}
-	return fs.Sub(fsys, name)
+	return fs.Resolve(fsys, ctx, name)
 }
 
 func (d *Service) Open(name string) (fs.File, error) {
@@ -74,11 +74,11 @@ func (d *Service) Open(name string) (fs.File, error) {
 }
 
 func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, err := d.Sub(".")
+	fsys, rname, err := d.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	return fs.OpenContext(ctx, fsys, name)
+	return fs.OpenContext(ctx, fsys, rname)
 }
 
 func (d *Service) handleMessage(this js.Value, args []js.Value) interface{} {
