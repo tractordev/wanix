@@ -11,7 +11,7 @@ RUN GOOS=linux GOARCH=386 tinygo build -o wexec main.go
 
 ##
 # Build preload.so with gcc for i386
-FROM --platform=$X86_64 debian:bullseye AS preload
+FROM --platform=$X86_64 ubuntu:noble AS preload
 RUN apt-get update && apt-get install -y \
     gcc-10-multilib \
     g++-10-multilib \
@@ -54,7 +54,7 @@ FROM --platform=$X86_32 i386/debian:12-slim AS lib32
 
 ##
 # Build shell rootfs tarball
-FROM debian:bullseye
+FROM alpine:latest
 WORKDIR /build
 RUN mkdir -p \
     /build/rootfs/bin \
