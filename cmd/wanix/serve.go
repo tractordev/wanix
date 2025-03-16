@@ -41,6 +41,6 @@ func serveCmd() *cli.Command {
 			http.ListenAndServe(":"+port, nil)
 		},
 	}
-	cmd.Flags().StringVar(&port, "port", "8080", "port to serve on")
+	cmd.Flags().StringVar(&port, "port", "7654", "port to serve on")
 	return cmd
 }
