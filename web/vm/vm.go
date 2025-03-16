@@ -54,7 +54,10 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 							log.Println("vm start: no ttyS0 file", err)
 						}
 					}
-					r.value.Call("run")
+					r.value.Get("ready").Call("then", js.FuncOf(func(this js.Value, args []js.Value) any {
+						r.value.Call("run")
+						return nil
+					}))
 				}
 			},
 		}),
