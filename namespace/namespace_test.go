@@ -3,6 +3,7 @@ package namespace
 import (
 	"bytes"
 	"context"
+	"path"
 	"reflect"
 	"sort"
 	"testing"
@@ -271,6 +272,16 @@ func TestUnionBinding(t *testing.T) {
 	}
 	if len(entries) != 3 { // file2.txt, fs2.txt, and subdir
 		t.Errorf("Expected 3 entries, got %d", len(entries))
+	}
+
+	for _, e := range entries {
+		fi, err := fs.Stat(ns, path.Join("dir", e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if fi.Name() != e.Name() {
+			t.Fatalf("expected name %q, got %q", e.Name(), fi.Name())
+		}
 	}
 }
 
