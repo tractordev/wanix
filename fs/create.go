@@ -11,7 +11,8 @@ func Create(fsys FS, name string) (File, error) {
 		return c.Create(name)
 	}
 
-	rfsys, rname, err := ResolveTo[CreateFS](fsys, ContextFor(fsys), name) //path.Dir(name))
+	ctx := WithOrigin(ContextFor(fsys), fsys, name, "create")
+	rfsys, rname, err := ResolveTo[CreateFS](fsys, ctx, name) //path.Dir(name))
 	if err == nil {
 		return rfsys.Create(rname) //path.Join(rdir, path.Base(name)))
 	}
