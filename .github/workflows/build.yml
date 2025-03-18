@@ -1,0 +1,92 @@
+name: Build
+on: [push]
+
+jobs:
+  build:
+    concurrency: ci-${{ github.ref }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      # Build v86
+      - name: Build v86
+        uses: docker/build-push-action@v5
+        with:
+          context: external/v86
+          push: false
+          load: true
+          tags: wanix-v86-build:latest
+          cache-from: type=local,src=/tmp/.buildx-cache/v86
+          cache-to: type=local,dest=/tmp/.buildx-cache/v86-new,mode=max
+          no-cache: ${{ hashFiles('external/v86/**') != hashFiles('external/v86/**', '.git/refs/remotes/origin/main') }}
+
+      # Build Linux kernel
+      - name: Build Linux
+        uses: docker/build-push-action@v5
+        with:
+          context: external/linux
+          push: false
+          load: true
+          tags: wanix-linux-builder:latest
+          cache-from: type=local,src=/tmp/.buildx-cache/linux
+          cache-to: type=local,dest=/tmp/.buildx-cache/linux-new,mode=max
+          no-cache: ${{ hashFiles('external/linux/**') != hashFiles('external/linux/**', '.git/refs/remotes/origin/main') }}
+
+      # Build WASI
+      - name: Build WASI
+        uses: docker/build-push-action@v5
+        with:
+          context: external/wasi
+          push: false
+          load: true
+          tags: wanix-wasi-builder:latest
+          cache-from: type=local,src=/tmp/.buildx-cache/wasi
+          cache-to: type=local,dest=/tmp/.buildx-cache/wasi-new,mode=max
+          no-cache: ${{ hashFiles('external/wasi/**') != hashFiles('external/wasi/**', '.git/refs/remotes/origin/main') }}
+
+      # Build Shell
+      - name: Build Shell
+        uses: docker/build-push-action@v5
+        with:
+          context: shell
+          push: false
+          load: true
+          tags: wanix-shell-builder:latest
+          cache-from: type=local,src=/tmp/.buildx-cache/shell
+          cache-to: type=local,dest=/tmp/.buildx-cache/shell-new,mode=max
+          no-cache: ${{ hashFiles('shell/**') != hashFiles('shell/**', '.git/refs/remotes/origin/main') }}
+
+      # Move cache
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+          check-latest: true
+
+      - name: Set up TinyGo
+        run: |
+          wget https://github.com/tinygo-org/tinygo/releases/download/v0.36.0/tinygo_0.36.0_amd64.deb
+          sudo dpkg -i tinygo_0.36.0_amd64.deb
+
+      - name: Build dependencies
+        run: make deps
+
+      - name: Build project
+        run: make build
