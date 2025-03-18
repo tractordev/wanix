@@ -31,6 +31,7 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           no-cache: ${{ hashFiles('external/v86/**') != hashFiles('external/v86/**', '.git/refs/remotes/origin/main') }}
+      - run: cd external/v86 && docker run --rm -v "$(pwd):/dst" wanix-v86-build
 
       # Build Linux kernel
       - name: Build Linux
@@ -43,6 +44,7 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           no-cache: ${{ hashFiles('external/linux/**') != hashFiles('external/linux/**', '.git/refs/remotes/origin/main') }}
+      - run: cd external/linux && docker run --rm -v "$(pwd):/output" wanix-linux-builder
 
       # Build WASI
       - name: Build WASI
@@ -55,6 +57,7 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           no-cache: ${{ hashFiles('external/wasi/**') != hashFiles('external/wasi/**', '.git/refs/remotes/origin/main') }}
+      - run: cd external/wasi && docker run --rm -v "$(pwd):/output" wanix-wasi-builder
 
       # Build Shell
       - name: Build Shell
@@ -67,6 +70,7 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           no-cache: ${{ hashFiles('shell/**') != hashFiles('shell/**', '.git/refs/remotes/origin/main') }}
+      - run: cd shell && docker run --rm -v "$(pwd):/output" wanix-shell-builder
 
       # Move cache
       - name: Move cache
@@ -84,9 +88,6 @@ jobs:
         run: |
           wget https://github.com/tinygo-org/tinygo/releases/download/v0.36.0/tinygo_0.36.0_amd64.deb
           sudo dpkg -i tinygo_0.36.0_amd64.deb
-
-      - name: Build dependencies
-        run: make deps
 
       - name: Build project
         run: make build
