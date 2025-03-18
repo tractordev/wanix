@@ -14,6 +14,8 @@ var (
 	FilepathContextKey = &contextKey{"filepath"}
 	// ReadOnlyContextKey is the context key for the read-only flag.
 	ReadOnlyContextKey = &contextKey{"read-only"}
+
+	OpContextKey = &contextKey{"op"}
 )
 
 type contextFS interface {
@@ -80,6 +82,15 @@ func Origin(ctx context.Context) (FS, string, bool) {
 	return fsys, "", true
 }
 
+// Op returns the operation for the given context.
+// TODO: this and other origin stuff should be a struct in a single context value.
+func Op(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	return ctx.Value(OpContextKey).(string)
+}
+
 // WithOrigin returns a new context with the OriginContextKey set to the given
 // filesystem unless there is already an origin filesystem in the context.
 func WithOrigin(ctx context.Context, fsys FS, name string, op string) context.Context {
@@ -90,10 +101,11 @@ func WithOrigin(ctx context.Context, fsys FS, name string, op string) context.Co
 		return ctx
 	}
 	ctx = WithFilepath(ctx, name)
+	ctx = WithOp(ctx, op)
 	if slices.Contains([]string{"open", "stat", "readdir", "readlink"}, op) {
 		ctx = WithReadOnly(ctx)
 	}
-	//log.Printf("%s %s [%T]\n", op, name, fsys)
+	// log.Printf("%s %s [%T]\n", op, name, fsys)
 	return context.WithValue(ctx, OriginContextKey, fsys)
 }
 
@@ -107,6 +119,16 @@ func WithFilepath(ctx context.Context, filepath string) context.Context {
 		return ctx
 	}
 	return context.WithValue(ctx, FilepathContextKey, filepath)
+}
+
+func WithOp(ctx context.Context, op string) context.Context {
+	if ctx == nil {
+		return nil
+	}
+	if _, ok := ctx.Value(OpContextKey).(string); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, OpContextKey, op)
 }
 
 // contextKey is a value for use with context.WithValue. It's used as

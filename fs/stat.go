@@ -16,7 +16,6 @@ type StatContextFS interface {
 
 func StatContext(ctx context.Context, fsys FS, name string) (FileInfo, error) {
 	ctx = WithOrigin(ctx, fsys, name, "stat")
-	ctx = WithReadOnly(ctx)
 
 	// _, fullname, _ := Origin(ctx)
 	// log.Println("fs.statcontext:", name, reflect.TypeOf(fsys), fullname)

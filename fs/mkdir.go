@@ -16,7 +16,8 @@ func Mkdir(fsys FS, name string, perm FileMode) error {
 		return m.Mkdir(name, perm)
 	}
 
-	rfsys, rname, err := ResolveTo[MkdirFS](fsys, ContextFor(fsys), name) // path.Dir(name))
+	ctx := WithOrigin(ContextFor(fsys), fsys, name, "mkdir")
+	rfsys, rname, err := ResolveTo[MkdirFS](fsys, ctx, name) // path.Dir(name))
 	if err == nil {
 		return rfsys.Mkdir(rname, perm) //path.Join(rdir, path.Base(name)), perm)
 	}
