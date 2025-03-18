@@ -28,8 +28,8 @@ jobs:
           push: false
           load: true
           tags: wanix-v86-build:latest
-          cache-from: type=local,src=/tmp/.buildx-cache/v86
-          cache-to: type=local,dest=/tmp/.buildx-cache/v86-new,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           no-cache: ${{ hashFiles('external/v86/**') != hashFiles('external/v86/**', '.git/refs/remotes/origin/main') }}
 
       # Build Linux kernel
@@ -40,8 +40,8 @@ jobs:
           push: false
           load: true
           tags: wanix-linux-builder:latest
-          cache-from: type=local,src=/tmp/.buildx-cache/linux
-          cache-to: type=local,dest=/tmp/.buildx-cache/linux-new,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           no-cache: ${{ hashFiles('external/linux/**') != hashFiles('external/linux/**', '.git/refs/remotes/origin/main') }}
 
       # Build WASI
@@ -52,8 +52,8 @@ jobs:
           push: false
           load: true
           tags: wanix-wasi-builder:latest
-          cache-from: type=local,src=/tmp/.buildx-cache/wasi
-          cache-to: type=local,dest=/tmp/.buildx-cache/wasi-new,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           no-cache: ${{ hashFiles('external/wasi/**') != hashFiles('external/wasi/**', '.git/refs/remotes/origin/main') }}
 
       # Build Shell
@@ -64,8 +64,8 @@ jobs:
           push: false
           load: true
           tags: wanix-shell-builder:latest
-          cache-from: type=local,src=/tmp/.buildx-cache/shell
-          cache-to: type=local,dest=/tmp/.buildx-cache/shell-new,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
           no-cache: ${{ hashFiles('shell/**') != hashFiles('shell/**', '.git/refs/remotes/origin/main') }}
 
       # Move cache
