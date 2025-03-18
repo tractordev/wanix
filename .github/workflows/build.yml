@@ -20,6 +20,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
+      - name: Initialize cache directories
+        run: |
+          mkdir -p /tmp/.buildx-cache/v86
+          mkdir -p /tmp/.buildx-cache/linux
+          mkdir -p /tmp/.buildx-cache/wasi
+          mkdir -p /tmp/.buildx-cache/shell
+          mkdir -p /tmp/.buildx-cache-new/v86
+          mkdir -p /tmp/.buildx-cache-new/linux
+          mkdir -p /tmp/.buildx-cache-new/wasi
+          mkdir -p /tmp/.buildx-cache-new/shell
+
       # Build v86
       - name: Build v86
         uses: docker/build-push-action@v5
