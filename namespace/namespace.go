@@ -6,7 +6,6 @@ import (
 	"log"
 	"path"
 	"slices"
-	"sort"
 	"strings"
 
 	"tractor.dev/wanix/fs"
@@ -57,6 +56,8 @@ func (ns *FS) Context() context.Context {
 }
 
 func (ns *FS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+	// todo: if there is a direct binding by this name, it might also
+	// exist as a subpath of another binding. so this is not correct.
 	if refs, ok := ns.bindings[name]; ok {
 		if len(refs) == 1 {
 			// if there is a single binding, return it
@@ -85,6 +86,8 @@ func (ns *FS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error)
 		relativeName := strings.Trim(strings.TrimPrefix(name, bindPath), "/")
 		var toStat []pathRef
 
+		// log.Println("resolve:", bindPath, relativeName, name)
+
 		// first try to resolve the name with ResolveFS
 		for _, ref := range refs {
 			fullName := path.Join(ref.path, relativeName)
@@ -108,20 +111,27 @@ func (ns *FS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error)
 
 		for _, ref := range toStat {
 			fullName := path.Join(ref.path, relativeName)
+			// log.Println("resolve stat:", reflect.TypeOf(ref.fs), fullName)
 			_, err := fs.StatContext(ctx, ref.fs, fullName)
 			if err != nil {
-				if errors.Is(err, fs.ErrNotExist) {
-					// could be a new file, so check the directory
-					_, err := fs.StatContext(ctx, ref.fs, path.Dir(fullName))
-					if err != nil {
-						continue
-					}
-					return ref.fs, fullName, nil
+				if !errors.Is(err, fs.ErrNotExist) {
+					log.Println("resolve stat:", err)
 				}
-				log.Println("resolve stat:", err)
 				continue
 			}
 			return ref.fs, fullName, nil
+		}
+
+		if slices.Contains([]string{"create", "mkdir", "symlink"}, fs.Op(ctx)) {
+			// could be a new file (create, mkdir, etc), so check the directory
+			for _, ref := range toStat {
+				fullName := path.Join(ref.path, relativeName)
+				_, err := fs.StatContext(ctx, ref.fs, path.Dir(fullName))
+				if err != nil {
+					continue
+				}
+				return ref.fs, fullName, nil
+			}
 		}
 	}
 
@@ -139,8 +149,11 @@ func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 	}
 
 	// Check srcPath, cache the file info
-	// TODO: resolve src
-	file, err := src.Open(srcPath)
+	rfsys, rname, err := fs.Resolve(src, fs.ContextFor(ns), srcPath)
+	if err != nil {
+		return err
+	}
+	file, err := rfsys.Open(rname)
 	if err != nil {
 		return err
 	}
@@ -150,7 +163,7 @@ func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 	}
 	file.Close()
 
-	ref := pathRef{fs: src, path: srcPath, fi: fi}
+	ref := pathRef{fs: rfsys, path: rname, fi: fi}
 	switch mode {
 	case "", "after":
 		ns.bindings[dstPath] = append([]pathRef{ref}, ns.bindings[dstPath]...)
@@ -184,7 +197,9 @@ func (ns *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error)
 		return fskit.Entry(name, fs.ModeDir|0755), nil
 	}
 
-	// Check direct bindings since they don't get resolved by the resolver
+	// Check direct bindings since they don't get resolved by the resolver.
+	// todo: again, if there is a direct binding by this name, it might also
+	// exist as a subpath of another binding. so this is not correct.
 	if refs, exists := ns.bindings[name]; exists {
 		for _, ref := range refs {
 			fi, err := ref.fileInfo(ctx, path.Base(name))
@@ -267,49 +282,39 @@ func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	}
 
 	// Check subpaths of bindings
-	var sortedPaths []string
+	var bindPaths []string
 	for p := range ns.bindings {
-		sortedPaths = append(sortedPaths, p)
+		bindPaths = append(bindPaths, p)
 	}
-	sort.Slice(sortedPaths, func(i, j int) bool {
-		return len(sortedPaths[i]) < len(sortedPaths[j])
-	})
-	for _, bindPath := range sortedPaths {
-		refs := ns.bindings[bindPath]
-		if strings.HasPrefix(name, bindPath) || bindPath == "." {
-			relativePath := strings.TrimPrefix(name, bindPath)
-			relativePath = strings.TrimPrefix(relativePath, "/")
-			for _, ref := range refs {
-				if ref.path != "." {
-					relativePath = path.Join(ref.path, relativePath)
+	for _, bindPath := range fskit.MatchPaths(bindPaths, name) {
+		for _, ref := range ns.bindings[bindPath] {
+			relativePath := path.Join(ref.path, strings.Trim(strings.TrimPrefix(name, bindPath), "/"))
+			fi, err := fs.StatContext(ctx, ref.fs, relativePath)
+			if err != nil {
+				continue
+			}
+			if fi.IsDir() {
+				// directory found in under dir binding
+				if dir == nil {
+					dir = fskit.RawNode(fi, name)
+					foundDir = true
 				}
-				fi, err := fs.StatContext(ctx, ref.fs, relativePath)
+				entries, err := fs.ReadDirContext(ctx, ref.fs, relativePath)
 				if err != nil {
-					continue
+					log.Println("readdir error:", err)
+					return nil, err
 				}
-				if fi.IsDir() {
-					// directory found in under dir binding
-					if dir == nil {
-						dir = fskit.RawNode(fi, name)
-						foundDir = true
-					}
-					entries, err := fs.ReadDirContext(ctx, ref.fs, relativePath)
+				for _, entry := range entries {
+					ei, err := entry.Info()
 					if err != nil {
-						log.Println("readdir error:", err)
 						return nil, err
 					}
-					for _, entry := range entries {
-						ei, err := entry.Info()
-						if err != nil {
-							return nil, err
-						}
-						dirEntries = append(dirEntries, fskit.RawNode(ei))
-					}
-				} else {
-					// file found in under dir binding
-					if file, err := fs.OpenContext(ctx, ref.fs, relativePath); err == nil {
-						return file, nil
-					}
+					dirEntries = append(dirEntries, fskit.RawNode(ei))
+				}
+			} else {
+				// file found in under dir binding
+				if file, err := fs.OpenContext(ctx, ref.fs, relativePath); err == nil {
+					return file, nil
 				}
 			}
 		}
