@@ -13,7 +13,6 @@ type OpenContextFS interface {
 // falling back to Open if context is not supported.
 func OpenContext(ctx context.Context, fsys FS, name string) (File, error) {
 	ctx = WithOrigin(ctx, fsys, name, "open")
-	ctx = WithReadOnly(ctx)
 
 	// _, fullname, _ := Origin(ctx)
 	// log.Println("fs.open:", fullname, reflect.TypeOf(fsys), name)
