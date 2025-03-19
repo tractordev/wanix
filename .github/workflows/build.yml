@@ -96,6 +96,7 @@ jobs:
       
       - uses: actions/upload-artifact@v4
         with:
+          name: wanix-build.zip
           path: |
             wanix
             wasm/assets/wanix.wasm
