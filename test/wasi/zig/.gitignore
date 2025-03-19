@@ -1,0 +1,3 @@
+zig.wasm
+zig-cache/ 
+zig.wasm.o
