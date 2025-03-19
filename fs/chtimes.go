@@ -19,5 +19,6 @@ func Chtimes(fsys FS, name string, atime time.Time, mtime time.Time) error {
 	if err == nil {
 		return rfsys.Chtimes(rname, atime, mtime)
 	}
+
 	return opErr(fsys, name, "chtimes", err)
 }
