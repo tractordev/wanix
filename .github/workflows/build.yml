@@ -20,17 +20,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Initialize cache directories
-        run: |
-          mkdir -p /tmp/.buildx-cache/v86
-          mkdir -p /tmp/.buildx-cache/linux
-          mkdir -p /tmp/.buildx-cache/wasi
-          mkdir -p /tmp/.buildx-cache/shell
-          mkdir -p /tmp/.buildx-cache-new/v86
-          mkdir -p /tmp/.buildx-cache-new/linux
-          mkdir -p /tmp/.buildx-cache-new/wasi
-          mkdir -p /tmp/.buildx-cache-new/shell
-
       # Build v86
       - name: Build v86
         uses: docker/build-push-action@v5
@@ -104,3 +93,16 @@ jobs:
 
       - name: Build project
         run: make build
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          path: |
+            wanix
+            wasm/assets/wanix.wasm
+            external/linux/bzImage
+            external/v86/libv86.js
+            external/v86/seabios.bin
+            external/v86/v86.wasm
+            external/v86/vgabios.bin
+            external/wasi/wasi.js
+            shell/shell.tgz
