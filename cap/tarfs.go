@@ -29,6 +29,7 @@ func tarfsAllocator() Allocator {
 				if err != nil {
 					return nil, fmt.Errorf("tarfs: failed to download %s: %w", u.String(), err)
 				}
+				defer resp.Body.Close()
 				var reader io.ReadCloser
 				if isGzipped(resp) {
 					reader, err = gzip.NewReader(resp.Body)
@@ -38,7 +39,6 @@ func tarfsAllocator() Allocator {
 				} else {
 					reader = resp.Body
 				}
-				defer resp.Body.Close()
 				return tarfs.Load(tar.NewReader(reader)), nil
 			case "file":
 				return nil, fmt.Errorf("tarfs: TODO: %s scheme", u.Scheme)
