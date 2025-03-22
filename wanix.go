@@ -4,8 +4,8 @@ import (
 	"io/fs"
 
 	"tractor.dev/wanix/cap"
-	"tractor.dev/wanix/namespace"
 	"tractor.dev/wanix/task"
+	"tractor.dev/wanix/vfs"
 )
 
 type K struct {
@@ -13,13 +13,13 @@ type K struct {
 	Task *task.Service
 	Mod  map[string]fs.FS
 
-	nsch chan *namespace.FS
-	NS   *namespace.FS
+	nsch chan *vfs.NS
+	NS   *vfs.NS
 	Root *task.Process
 }
 
 func New() *K {
-	nsch := make(chan *namespace.FS, 1)
+	nsch := make(chan *vfs.NS, 1)
 	return &K{
 		Cap:  cap.New(nsch),
 		Task: task.New(),

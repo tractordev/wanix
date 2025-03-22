@@ -1,4 +1,4 @@
-package namespace
+package vfs
 
 import (
 	"bytes"

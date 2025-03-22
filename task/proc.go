@@ -12,7 +12,7 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/namespace"
+	"tractor.dev/wanix/vfs"
 )
 
 // contextKey is a value for use with context.WithValue. It's used as
@@ -34,7 +34,7 @@ func PIDFromContext(ctx context.Context) (string, bool) {
 
 type Process struct {
 	starter func(*Process) error
-	ns      *namespace.FS
+	ns      *vfs.NS
 	id      int
 	typ     string
 	cmd     string
@@ -60,7 +60,7 @@ func (r *Process) Context() context.Context {
 	return r.Namespace().Context()
 }
 
-func (r *Process) Namespace() *namespace.FS {
+func (r *Process) Namespace() *vfs.NS {
 	return r.ns
 }
 

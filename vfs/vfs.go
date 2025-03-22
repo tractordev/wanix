@@ -1,4 +1,4 @@
-package namespace
+package vfs
 
 import (
 	"context"
@@ -20,10 +20,10 @@ const (
 	ModeBefore  BindMode = -1
 )
 
-// FS represents a namespace with Plan9-style file and directory bindings.
+// NS represents a namespace with Plan9-style file and directory bindings.
 // Todo: figure out how to make this thread safe. Tricky because ResolveFS
 // can call back into the namespace.
-type FS struct {
+type NS struct {
 	bindings map[string][]bindTarget
 	ctx      context.Context
 }
@@ -45,19 +45,19 @@ func (ref *bindTarget) fileInfo(ctx context.Context, fname string) (*fskit.Node,
 	return fskit.RawNode(fi, fname), nil
 }
 
-func New(ctx context.Context) *FS {
-	fsys := &FS{
+func New(ctx context.Context) *NS {
+	fsys := &NS{
 		bindings: make(map[string][]bindTarget),
 	}
 	fsys.ctx = ctx //fs.WithOrigin(ctx, fsys, "", "new")
 	return fsys
 }
 
-func (ns *FS) Context() context.Context {
+func (ns *NS) Context() context.Context {
 	return ns.ctx
 }
 
-func (ns *FS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (ns *NS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	// todo: if there is a direct binding by this name, it might also
 	// exist as a subpath of another binding. so this is not correct.
 	if refs, ok := ns.bindings[name]; ok {
@@ -140,7 +140,7 @@ func (ns *FS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error)
 	return ns, name, nil
 }
 
-func (ns *FS) Unbind(src fs.FS, srcPath, dstPath string) error {
+func (ns *NS) Unbind(src fs.FS, srcPath, dstPath string) error {
 	if !fs.ValidPath(srcPath) {
 		return &fs.PathError{Op: "unbind", Path: srcPath, Err: fs.ErrNotExist}
 	}
@@ -167,7 +167,7 @@ func (ns *FS) Unbind(src fs.FS, srcPath, dstPath string) error {
 // Bind adds a file or directory to the namespace. If specified, mode is "after" (default), "before", or "replace",
 // which controls the order of the bindings.
 // TODO: replace mode arg with BindMode enum
-func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
+func (ns *NS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 	if !fs.ValidPath(srcPath) {
 		return &fs.PathError{Op: "bind", Path: srcPath, Err: fs.ErrNotExist}
 	}
@@ -204,12 +204,12 @@ func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 	return nil
 }
 
-func (ns *FS) Stat(name string) (fs.FileInfo, error) {
+func (ns *NS) Stat(name string) (fs.FileInfo, error) {
 	ctx := fs.WithOrigin(ns.ctx, ns, name, "stat")
 	return ns.StatContext(ctx, name)
 }
 
-func (ns *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+func (ns *NS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 	}
@@ -259,13 +259,13 @@ func (ns *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error)
 }
 
 // Open implements fs.FS interface
-func (ns *FS) Open(name string) (fs.File, error) {
+func (ns *NS) Open(name string) (fs.File, error) {
 	ctx := fs.WithOrigin(ns.ctx, ns, name, "open")
 	return ns.OpenContext(ctx, name)
 }
 
 // OpenContext ...
-func (ns *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
