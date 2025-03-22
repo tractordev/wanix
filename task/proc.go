@@ -80,6 +80,10 @@ func (r *Process) Bind(srcPath, dstPath string) error {
 	return r.ns.Bind(r.ns, srcPath, dstPath, "")
 }
 
+func (r *Process) Unbind(srcPath, dstPath string) error {
+	return r.ns.Unbind(r.ns, srcPath, dstPath)
+}
+
 func (r *Process) Open(name string) (fs.File, error) {
 	return r.OpenContext(context.Background(), name)
 }
@@ -92,6 +96,12 @@ func (r *Process) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 			Run: func(ctx *cli.Context, args []string) {
 				if len(args) == 3 && args[0] == "bind" {
 					if err := r.Bind(args[1], args[2]); err != nil {
+						log.Println(err)
+					}
+					return
+				}
+				if len(args) == 3 && args[0] == "unbind" {
+					if err := r.Unbind(args[1], args[2]); err != nil {
 						log.Println(err)
 					}
 					return

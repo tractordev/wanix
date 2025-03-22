@@ -20,22 +20,24 @@ const (
 	ModeBefore  BindMode = -1
 )
 
-// FS represents a namespace with Plan9-style file and directory bindings
+// FS represents a namespace with Plan9-style file and directory bindings.
+// Todo: figure out how to make this thread safe. Tricky because ResolveFS
+// can call back into the namespace.
 type FS struct {
-	bindings map[string][]pathRef
+	bindings map[string][]bindTarget
 	ctx      context.Context
 }
 
-// pathRef represents a reference to a name in a specific filesystem,
+// bindTarget represents a reference to a name in a specific filesystem,
 // possibly the root of the filesystem.
-type pathRef struct {
+type bindTarget struct {
 	fs   fs.FS
 	path string
 	fi   fs.FileInfo
 }
 
 // fileInfo returns the latest file info for the binding with the given name
-func (ref *pathRef) fileInfo(ctx context.Context, fname string) (*fskit.Node, error) {
+func (ref *bindTarget) fileInfo(ctx context.Context, fname string) (*fskit.Node, error) {
 	fi, err := fs.StatContext(ctx, ref.fs, ref.path)
 	if err != nil {
 		return nil, err
@@ -45,7 +47,7 @@ func (ref *pathRef) fileInfo(ctx context.Context, fname string) (*fskit.Node, er
 
 func New(ctx context.Context) *FS {
 	fsys := &FS{
-		bindings: make(map[string][]pathRef),
+		bindings: make(map[string][]bindTarget),
 	}
 	fsys.ctx = ctx //fs.WithOrigin(ctx, fsys, "", "new")
 	return fsys
@@ -84,7 +86,7 @@ func (ns *FS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error)
 	for _, bindPath := range fskit.MatchPaths(bindPaths, name) {
 		refs := ns.bindings[bindPath]
 		relativeName := strings.Trim(strings.TrimPrefix(name, bindPath), "/")
-		var toStat []pathRef
+		var toStat []bindTarget
 
 		// log.Println("resolve:", bindPath, relativeName, name)
 
@@ -138,8 +140,33 @@ func (ns *FS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error)
 	return ns, name, nil
 }
 
+func (ns *FS) Unbind(src fs.FS, srcPath, dstPath string) error {
+	if !fs.ValidPath(srcPath) {
+		return &fs.PathError{Op: "unbind", Path: srcPath, Err: fs.ErrNotExist}
+	}
+	if !fs.ValidPath(dstPath) {
+		return &fs.PathError{Op: "unbind", Path: dstPath, Err: fs.ErrNotExist}
+	}
+
+	// Resolve the source path first, just like in Bind
+	rfsys, rname, err := fs.Resolve(src, fs.ContextFor(ns), srcPath)
+	if err != nil {
+		return err
+	}
+
+	ns.bindings[dstPath] = slices.DeleteFunc(ns.bindings[dstPath], func(ref bindTarget) bool {
+		return fs.Equal(ref.fs, rfsys) && ref.path == rname
+	})
+	if len(ns.bindings[dstPath]) == 0 {
+		delete(ns.bindings, dstPath)
+	}
+
+	return nil
+}
+
 // Bind adds a file or directory to the namespace. If specified, mode is "after" (default), "before", or "replace",
 // which controls the order of the bindings.
+// TODO: replace mode arg with BindMode enum
 func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 	if !fs.ValidPath(srcPath) {
 		return &fs.PathError{Op: "bind", Path: srcPath, Err: fs.ErrNotExist}
@@ -163,14 +190,14 @@ func (ns *FS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 	}
 	file.Close()
 
-	ref := pathRef{fs: rfsys, path: rname, fi: fi}
+	ref := bindTarget{fs: rfsys, path: rname, fi: fi}
 	switch mode {
 	case "", "after":
-		ns.bindings[dstPath] = append([]pathRef{ref}, ns.bindings[dstPath]...)
+		ns.bindings[dstPath] = append([]bindTarget{ref}, ns.bindings[dstPath]...)
 	case "before":
 		ns.bindings[dstPath] = append(ns.bindings[dstPath], ref)
 	case "replace":
-		ns.bindings[dstPath] = []pathRef{ref}
+		ns.bindings[dstPath] = []bindTarget{ref}
 	default:
 		return &fs.PathError{Op: "bind", Path: mode, Err: fs.ErrInvalid}
 	}
