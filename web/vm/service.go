@@ -5,7 +5,6 @@ package vm
 import (
 	"context"
 	"strconv"
-	"syscall/js"
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
@@ -37,7 +36,7 @@ func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error)
 					ReadFunc: func(n *fskit.Node) error {
 						d.nextID++
 						rid := strconv.Itoa(d.nextID)
-						vm := js.Global().Call("makeVM")
+						vm := makeVM()
 						d.resources[rid] = &VM{
 							id:     d.nextID,
 							typ:    name,

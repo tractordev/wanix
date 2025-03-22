@@ -178,10 +178,6 @@ FS.prototype.load_from_json = function(fs)
     for(var i = 0; i < fsroot.length; i++) {
         this.LoadRecursive(fsroot[i], 0);
     }
-
-    if (window && window.LinuxToWanixFS) {
-        this.Mount("/wanix", new window.LinuxToWanixFS(this.storage, this.qidcounter))
-    }
     
 
     //if(DEBUG)
@@ -1666,7 +1662,7 @@ FS.prototype.follow_fs = function(inode)
 /**
  * Mount another filesystem to given path.
  * @param {string} path
- * @param {FS|LinuxToWanixFS} fs
+ * @param {FS} fs
  * @return {number} inode id of mount point if successful, or -errno if mounting failed.
  */
 FS.prototype.Mount = function(path, fs)
@@ -2032,22 +2028,6 @@ FS.prototype.SearchAsync = async function(parentid, name)
 if (window) {
     window.FS = FS;
 }
-
-
-// LinuxToWanixFS not actually implemented here, just here to make "compiler" happy
-
-/**
- * @constructor
- * @extends {FS}
- * @param {!FileStorageInterface} storage
- * @param {{ last_qidnumber: number }=} qidcounter Another fs's qidcounter to synchronise with.
- */
-function LinuxToWanixFS(storage, qidcounter) {
-    FS.call(this, storage, qidcounter);
-}
-
-LinuxToWanixFS.prototype = Object.create(FS.prototype);
-LinuxToWanixFS.prototype.constructor = FS;
 
 // TestFS is a filesystem that just has a few file statically defined files
 
