@@ -2,7 +2,6 @@ package fskit
 
 import (
 	"context"
-	"log"
 	"path"
 	"slices"
 	"strings"
@@ -42,7 +41,7 @@ func (fsys MapFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 }
 
 func (fsys MapFS) Stat(name string) (fs.FileInfo, error) {
-	log.Println("bare stat:", name)
+	// log.Println("bare stat:", name)
 	return fsys.StatContext(context.Background(), name)
 }
 
@@ -73,7 +72,7 @@ func (fsys MapFS) StatContext(ctx context.Context, name string) (fs.FileInfo, er
 }
 
 func (fsys MapFS) Open(name string) (fs.File, error) {
-	log.Println("bare open:", name)
+	// log.Println("bare open:", name)
 	ctx := fs.WithOrigin(context.Background(), fsys, name, "open")
 	return fsys.OpenContext(ctx, name)
 }
