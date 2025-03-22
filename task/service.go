@@ -8,7 +8,7 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/namespace"
+	"tractor.dev/wanix/vfs"
 )
 
 type Service struct {
@@ -49,7 +49,7 @@ func (d *Service) Alloc(kind string) (*Process, error) {
 		starter: starter,
 		id:      d.nextID,
 		typ:     kind,
-		ns:      namespace.New(ctx),
+		ns:      vfs.New(ctx),
 		fds: map[string]fs.FS{
 			"0": newFdFile(a0, "0"),
 			"1": newFdFile(a1, "1"),

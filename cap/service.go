@@ -6,7 +6,7 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/namespace"
+	"tractor.dev/wanix/vfs"
 )
 
 type Allocator func(*Resource) (Mounter, error)
@@ -18,7 +18,7 @@ type Service struct {
 	nextID     int
 }
 
-func New(nsch <-chan *namespace.FS) *Service {
+func New(nsch <-chan *vfs.NS) *Service {
 	return &Service{
 		allocators: map[string]Allocator{
 			"loopback": loopbackAllocator(),
