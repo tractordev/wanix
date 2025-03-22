@@ -7,7 +7,7 @@ let listener = undefined;
 self.addEventListener("message", (event) => {
     if (event.data.listen) {
         listener = event.data.listen;
-        console.log("SW: listener installed");
+        console.log("ServiceWorker: backend registered");
         return;
     }
 });
@@ -41,7 +41,7 @@ self.addEventListener("fetch", async (event) => {
             responder: ch.port2
         }, [ch.port2]);
         try {
-            const reply = await Promise.race([response, timeout(2000)]);
+            const reply = await Promise.race([response, timeout(1000)]);
 
             if (reply.error) {
                 throw new Error(reply.error);
@@ -55,9 +55,10 @@ self.addEventListener("fetch", async (event) => {
             resolve(new Response(reply.body, reply));
             
         } catch (error) {
-            console.warn("SW:", error);
             if (error.message === 'Timeout') {
                 listener = undefined;
+            } else {
+                console.warn("ServiceWorker:", error);
             }
             resolve(fetchBypass(req));
         }

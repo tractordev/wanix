@@ -1,6 +1,5 @@
 import * as duplex from "./duplex.min.js";
 
-
 export class WanixFS {
     constructor(port) {
         const sess = new duplex.Session(new duplex.PortConn(port));
@@ -76,13 +75,84 @@ export class Wanix extends WanixFS {
             sys: new duplex.PortConn(sys.port2),
             sw: new MessageChannel(),
             _toport: (port) => new duplex.PortConn(port), // kludge: for worker
-            // virtioRecv: (buf) => console.log("virtioRecv", buf),
         };
+
+        if (config.helpers) {
+            setupConsoleHelpers();
+        }
 
         const go = new window.Go(); 
         WebAssembly.instantiateStreaming(fetch("./wanix.wasm"), go.importObject).then(obj => {
             go.run(obj.instance);
         }); 
         
+    }
+}
+
+function setupConsoleHelpers() {
+    window.list = (name) => { 
+        window.wanix.instance.readDir(name).then(console.log); 
+    };
+    window.read = (name) => { 
+        window.wanix.instance.readFile(name).then(d => (new TextDecoder()).decode(d)).then(console.log); 
+    };
+    window.readBytes = (name) => { 
+        window.wanix.instance.readFile(name).then(console.log); 
+    };
+    window.write = (name, content) => { 
+        window.wanix.instance.writeFile(name, content); 
+    };
+    window.mkdir = (name) => { 
+        window.wanix.instance.makeDir(name); 
+    };
+    window.rm = (name) => { 
+        window.wanix.instance.remove(name); 
+    };
+    window.stat = (name) => { 
+        window.wanix.instance.stat(name).then(console.log); 
+    };
+    window.tail = async (name) => {
+        const fd = await window.wanix.instance.open(name);
+        while (true) {
+            const data = await window.wanix.instance.read(fd, 1024);
+            if (!data) {
+                break;
+            }
+            console.log((new TextDecoder()).decode(data));
+        }
+        window.wanix.instance.close(fd);
+    };
+
+    window.bootShell = (screen=false) => {
+        if (screen) {
+            const screen = document.createElement('div');
+            const div = document.createElement('div');
+            const canvas = document.createElement('canvas');
+            screen.appendChild(div);
+            screen.appendChild(canvas);
+            screen.id = 'screen';
+            document.body.appendChild(screen);
+        }
+        const w = window.wanix.instance;
+
+        const query = new URLSearchParams(window.location.search);
+        const url = query.get("tty");
+        if (url) {
+            // websocket tty mode 
+            w.readFile("cap/new/ws");
+            w.writeFile("cap/1/ctl", `mount ${url}`);
+            w.readFile("web/vm/new");
+            w.writeFile("task/1/ctl", "bind cap/1/data web/vm/1/ttyS0");
+        } else {
+            // xterm.js mode 
+            w.readFile("web/dom/new/xterm");
+            w.writeFile("web/dom/body/ctl", "append-child 1");
+            w.readFile("web/vm/new");
+            w.writeFile("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0");
+        }
+        
+        w.writeFile("task/1/ctl", "bind . web/vm/1/fsys");
+        w.writeFile("task/1/ctl", "bind #shell web/vm/1/fsys");
+        w.writeFile("web/vm/1/ctl", "start");
     }
 }

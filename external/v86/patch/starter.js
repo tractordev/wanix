@@ -493,13 +493,13 @@ V86.prototype.continue_init = async function(emulator, options)
     add_file("initrd", options.initrd);
 
 
-    if(options.testfs) {
-        settings.fs9p = this.fs9p = new TestFS();
-    }
+    // if(options.testfs) {
+    //     settings.fs9p = this.fs9p = new TestFS();
+    // }
 
-    if (window && window.LinuxToWanixFS) {
-        settings.fs9p = this.fs9p = new window.LinuxToWanixFS(new MemoryFileStorage());
-    }
+    // always use TestFS to make sure Virtio9p is used.
+    // our Virtio9p will ignore the TestFS and use Wanix.
+    settings.fs9p = this.fs9p = new TestFS();
 
     if(options.filesystem)
     {
