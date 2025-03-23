@@ -8,5 +8,7 @@ if [ -f /web/opfs/etc/profile ]; then
     . /web/opfs/etc/profile
 fi
 
+cd /web/opfs
+
 # start shell on ttyS0 with job control
 setsid /bin/busybox sh -c "PS1='\w ➜ ' LD_PRELOAD=/lib/preload.so exec /bin/busybox sh </dev/ttyS0 >/dev/ttyS0 2>&1"
