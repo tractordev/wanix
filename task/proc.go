@@ -139,7 +139,7 @@ func (r *Process) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 			}
 			return nil
 		}),
-		// "ns":   r.ns,
+		"ns":   r.ns,
 		"fd":   fskit.MapFS(r.fds),
 		".sys": fskit.MapFS(r.sys),
 	}, ctx, name)
