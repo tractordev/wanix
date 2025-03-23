@@ -7,16 +7,12 @@
         <script src="./xterm/xterm-fit-0.8.0.min.js"></script>
         <script src="./wasm_exec.js"></script>
         <script src="./wio.js"></script>
-	</head>
-	<body>
         <script type="module">
             import { Wanix } from "./wanix.js";
-            
-            new Wanix({ helpers: true });
-
-            if (!window.location.search.includes('shell=false')) {
-                window.bootShell(window.location.search.includes('console=true'));
-            }
+            window.Wanix = Wanix;
         </script>
+	</head>
+	<body>
+        
 	</body>
 </html>
