@@ -1,3 +1,13 @@
+// TODO: maybe bundle/minify all these together
+function loadScript(url) {
+    const script = document.createElement('script');
+    script.src = url;
+    script.type = 'text/javascript'; // This is the default and can be omitted
+    document.head.appendChild(script);
+}
+loadScript("/v86/libv86.js");
+loadScript("/wio.js");
+
 import * as duplex from "./duplex.min.js";
 
 export class WanixFS {
@@ -14,6 +24,14 @@ export class WanixFS {
         await this.peer.call("Mkdir", [name]);
     }
 
+    async bind(name, newname) {
+        await this.peer.call("Bind", [name, newname]);
+    }
+
+    async unbind(name, newname) {
+        await this.peer.call("Unbind", [name, newname]);
+    }
+    
     async readFile(name) {
         return (await this.peer.call("ReadFile", [name])).value;
     }
@@ -105,6 +123,12 @@ function setupConsoleHelpers() {
     window.mkdir = (name) => { 
         window.wanix.instance.makeDir(name); 
     };
+    window.bind = (name, newname) => { 
+        window.wanix.instance.bind(name, newname); 
+    };
+    window.unbind = (name, newname) => { 
+        window.wanix.instance.unbind(name, newname); 
+    };
     window.rm = (name) => { 
         window.wanix.instance.remove(name); 
     };
@@ -123,7 +147,7 @@ function setupConsoleHelpers() {
         window.wanix.instance.close(fd);
     };
 
-    window.bootShell = (screen=false) => {
+    window.bootShell = async (screen=false) => {
         if (screen) {
             const screen = document.createElement('div');
             const div = document.createElement('div');
@@ -139,20 +163,20 @@ function setupConsoleHelpers() {
         const url = query.get("tty");
         if (url) {
             // websocket tty mode 
-            w.readFile("cap/new/ws");
-            w.writeFile("cap/1/ctl", `mount ${url}`);
-            w.readFile("web/vm/new");
-            w.writeFile("task/1/ctl", "bind cap/1/data web/vm/1/ttyS0");
+            await w.readFile("cap/new/ws");
+            await w.writeFile("cap/1/ctl", `mount ${url}`);
+            await w.readFile("web/vm/new");
+            await w.writeFile("task/1/ctl", "bind cap/1/data web/vm/1/ttyS0");
         } else {
             // xterm.js mode 
-            w.readFile("web/dom/new/xterm");
-            w.writeFile("web/dom/body/ctl", "append-child 1");
-            w.readFile("web/vm/new");
-            w.writeFile("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0");
+            await w.readFile("web/dom/new/xterm");
+            await w.writeFile("web/dom/body/ctl", "append-child 1");
+            await w.readFile("web/vm/new");
+            await w.writeFile("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0");
         }
         
-        w.writeFile("task/1/ctl", "bind . web/vm/1/fsys");
-        w.writeFile("task/1/ctl", "bind #shell web/vm/1/fsys");
-        w.writeFile("web/vm/1/ctl", "start");
+        await w.writeFile("task/1/ctl", "bind . web/vm/1/fsys");
+        await w.writeFile("task/1/ctl", "bind #shell web/vm/1/fsys");
+        await w.writeFile("web/vm/1/ctl", "start");
     }
 }
