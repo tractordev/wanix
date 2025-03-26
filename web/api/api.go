@@ -189,6 +189,28 @@ func setupAPI(peer *talk.Peer, root *task.Process) {
 		}
 
 	}))
+	peer.Handle("Bind", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+		var args []string
+		c.Receive(&args)
+
+		ns := root.Namespace()
+		err := ns.Bind(ns, args[0], args[1], "")
+		if err != nil {
+			r.Return(err)
+			return
+		}
+	}))
+	peer.Handle("Unbind", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+		var args []string
+		c.Receive(&args)
+
+		ns := root.Namespace()
+		err := ns.Unbind(ns, args[0], args[1])
+		if err != nil {
+			r.Return(err)
+			return
+		}
+	}))
 	peer.Handle("Stat", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
 		var args []string
 		c.Receive(&args)
