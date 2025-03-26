@@ -1,0 +1,15 @@
+#!/bin/sh
+case "$1" in
+    "start")
+        id=$(cat /web/worker/new)
+        echo "start /:$(realpath $2)" >> /web/worker/$id/ctl
+        echo "$id"
+        ;;
+    *)
+        id=$1
+        shift  # Remove first argument
+        if [ $# -gt 0 ]; then
+            echo "$*" >> /web/worker/$id/ctl
+        fi
+        ;;
+esac
