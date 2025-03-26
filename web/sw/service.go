@@ -29,7 +29,7 @@ type Service struct {
 func Activate(ch js.Value, k *wanix.K) *Service {
 	reg := jsutil.Await(jsutil.Get("navigator.serviceWorker").Call("getRegistration"))
 	if reg.IsUndefined() {
-		swPath := "./sw.js"
+		swPath := "./wanix-sw.js"
 		jsutil.Await(jsutil.Get("navigator.serviceWorker").Call("register", swPath, map[string]any{"type": "module"}))
 		reg = jsutil.Await(jsutil.Get("navigator.serviceWorker.ready"))
 	}

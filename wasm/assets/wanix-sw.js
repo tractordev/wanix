@@ -31,14 +31,14 @@ let listener = undefined;
 self.addEventListener("message", (event) => {
     if (event.data.listen) {
         listener = event.data.listen;
-        console.log("ServiceWorker: backend registered");
+        console.log("ServiceWorker: handler registered");
         return;
     }
 });
 
 self.addEventListener("fetch", async (event) => {
     if (!listener) {
-        console.warn("ServiceWorker: no backend registered");
+        console.warn("ServiceWorker: no handler registered");
         return;
     }
 
@@ -46,14 +46,14 @@ self.addEventListener("fetch", async (event) => {
     
     event.respondWith(cache.match(req).then(async (resp) => {
         if (resp) {
-            console.log("ServiceWorker: cache hit", req.url);
+            // console.log("ServiceWorker: cached", req.url);
             return resp;
         }
 
-        resp = await backendReponse(req);
+        resp = await handleRequest(req);
         if (resp) {
             cache.put(req, resp.clone());
-            console.log("ServiceWorker: cached", req.url);
+            // console.log("ServiceWorker: cache-put", req.url);
         }
 
         return resp;
@@ -76,7 +76,7 @@ function fetchBypass(request) {
     return fetch(newRequest);
 }
 
-async function backendReponse(req) {
+async function handleRequest(req) {
     const url = new URL(req.url);
     const headers = {};
     for (var p of req.headers) {
