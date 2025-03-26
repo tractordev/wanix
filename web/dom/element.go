@@ -57,10 +57,16 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 					r.value.Call("appendChild", el.Value())
 					if el.typ == "xterm" {
 						el.Value().Get("term").Call("open", el.Value())
+						el.Value().Get("term").Get("fitAddon").Call("fit")
 					}
 				case "remove": // remove
 					delete(r.dom.resources, r.ID())
 					r.value.Call("remove")
+				case "reset": // reset
+					// kludge: specific to xterm
+					if r.typ == "xterm" {
+						r.value.Get("term").Call("reset")
+					}
 				}
 			},
 		}),
