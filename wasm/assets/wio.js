@@ -53,6 +53,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.clientX >= rect.left && e.clientX <= rect.right && 
             e.clientY >= rect.top && e.clientY <= rect.bottom) {
           
+          // Prevent event from reaching background elements
+          e.preventDefault();
+          e.stopPropagation();
+          
           // Calculate position relative to iframe
           const x = e.clientX - rect.left;
           const y = e.clientY - rect.top;
@@ -85,22 +89,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     document.addEventListener('mousemove', (e) => {
-      if (isResizing && activeIframe) {
-        // Resize
-        const width = startWidth + (e.clientX - startX);
-        const height = startHeight + (e.clientY - startY);
-        activeIframe.style.width = `${width}px`;
-        activeIframe.style.height = `${height}px`;
-      } else if (isMoving && activeIframe) {
-        // Move
-        const left = startLeft + (e.clientX - startX);
-        const top = startTop + (e.clientY - startY);
-        activeIframe.style.left = `${left}px`;
-        activeIframe.style.top = `${top}px`;
+      if (isResizing && activeIframe || isMoving && activeIframe) {
+        // Prevent event from reaching background elements
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (isResizing) {
+          // Resize
+          const width = startWidth + (e.clientX - startX);
+          const height = startHeight + (e.clientY - startY);
+          activeIframe.style.width = `${width}px`;
+          activeIframe.style.height = `${height}px`;
+        } else if (isMoving) {
+          // Move
+          const left = startLeft + (e.clientX - startX);
+          const top = startTop + (e.clientY - startY);
+          activeIframe.style.left = `${left}px`;
+          activeIframe.style.top = `${top}px`;
+        }
       }
     });
     
-    document.addEventListener('mouseup', () => {
+    document.addEventListener('mouseup', (e) => {
+      if (isResizing || isMoving) {
+        // Prevent event from reaching background elements
+        e.preventDefault();
+        e.stopPropagation();
+      }
       isResizing = false;
       isMoving = false;
       activeIframe = null;
