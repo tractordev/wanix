@@ -85,8 +85,6 @@ func (d *Service) handleMessage(this js.Value, args []js.Value) interface{} {
 	if args[0].Get("data").Get("request").IsUndefined() {
 		return nil
 	}
-
-	// Create a goroutine to handle the request asynchronously
 	go func() {
 		jsReq := args[0].Get("data").Get("request")
 		jsResp := args[0].Get("data").Get("responder")
@@ -100,6 +98,11 @@ func (d *Service) handleMessage(this js.Value, args []js.Value) interface{} {
 			}))
 			return
 		}
+		headerKeys := js.Global().Get("Object").Call("keys", jsReq.Get("headers"))
+		headerKeys.Call("forEach", js.FuncOf(func(this js.Value, args []js.Value) any {
+			req.Header.Add(args[0].String(), jsReq.Get("headers").Get(args[0].String()).String())
+			return nil
+		}))
 		rw := httprecorder.NewRecorder()
 
 		d.ServeHTTP(rw, req)
@@ -126,7 +129,7 @@ func (d *Service) handleMessage(this js.Value, args []js.Value) interface{} {
 }
 
 func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("X-ServiceWorker", r.Header.Get("X-ServiceWorker"))
+	w.Header().Add("X-Service-Worker", r.Header.Get("X-Service-Worker"))
 	w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
 	w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
 	if strings.HasPrefix(r.URL.Path, "/:/") {
