@@ -11,6 +11,7 @@ import (
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/web/dom/xterm"
 )
 
 type Service struct {
@@ -73,6 +74,7 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 					var el js.Value
 					var termData *termDataFile
 					if name == "xterm" {
+						xterm.Load()
 						el = js.Global().Get("document").Call("createElement", "div")
 						el.Set("className", "wanix-terminal")
 						term := js.Global().Get("Terminal").New(map[string]any{
@@ -110,6 +112,9 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 							},
 						})
 						el.Set("term", term)
+						fitAddon := js.Global().Get("FitAddon").Get("FitAddon").New()
+						term.Call("loadAddon", fitAddon)
+						term.Set("fitAddon", fitAddon)
 						termData = newTermData(term)
 						setupFileDrop(el, d.k.NS)
 					} else {
