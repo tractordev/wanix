@@ -1,2 +1,6 @@
 #!/bin/sh
-echo "bind $1 web/vm/1/fsys/$2" >> /task/$(cat /task/self)/ctl
+oldname=$(realpath $1)
+newbase=$(basename $2)
+newdir=$(realpath $(dirname $2))
+pid=$(cat /task/self)
+echo "bind ${oldname#/} web/vm/1/fsys/${newdir#/}/${newbase}" >> /task/${pid}/ctl
