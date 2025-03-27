@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 
 	"tractor.dev/toolkit-go/engine/cli"
@@ -17,7 +18,7 @@ import (
 
 func serveCmd() *cli.Command {
 	var (
-		port string
+		listenAddr string
 	)
 	cmd := &cli.Command{
 		Usage: "serve",
@@ -25,7 +26,11 @@ func serveCmd() *cli.Command {
 		Run: func(ctx *cli.Context, args []string) {
 			log.SetFlags(log.Ltime | log.Lmicroseconds | log.Lshortfile)
 
-			fmt.Printf("serving on http://localhost:%s ...\n", port)
+			h, p, _ := net.SplitHostPort(listenAddr)
+			if h == "" {
+				h = "localhost"
+			}
+			fmt.Printf("serving on http://%s:%s ...\n", h, p)
 
 			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
 				"v86":   v86.Dir,
@@ -45,9 +50,9 @@ func serveCmd() *cli.Command {
 
 				http.FileServerFS(fsys).ServeHTTP(w, r)
 			}))
-			http.ListenAndServe(":"+port, nil)
+			http.ListenAndServe(listenAddr, nil)
 		},
 	}
-	cmd.Flags().StringVar(&port, "port", "7654", "port to serve on")
+	cmd.Flags().StringVar(&listenAddr, "listen", ":7654", "addr to serve on")
 	return cmd
 }
