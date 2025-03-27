@@ -1,12 +1,3 @@
-// TODO: maybe bundle/minify all these together
-function loadScript(url) {
-    const script = document.createElement('script');
-    script.src = url;
-    script.type = 'text/javascript'; // This is the default and can be omitted
-    document.head.appendChild(script);
-}
-loadScript("/v86/libv86.js");
-loadScript("/wio.js");
 
 import * as duplex from "./duplex.min.js";
 
@@ -106,6 +97,7 @@ export class Wanix extends WanixFS {
         
     }
 }
+window.Wanix = Wanix;
 
 function setupConsoleHelpers() {
     window.list = (name) => { 

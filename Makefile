@@ -1,4 +1,4 @@
-.PHONY: all deps build clobber docker wanix wasm-tinygo wasm-go v86 linux wasi shell
+.PHONY: all deps build clobber docker wanix wasm-tinygo wasm-go v86 linux wasi shell esbuild
 
 GOOS=$(shell go env GOOS)
 GOARCH=$(shell go env GOARCH)
@@ -6,7 +6,7 @@ GOARGS?=
 
 all: deps build
 
-deps: linux v86 wasi shell
+deps: linux v86 wasi shell esbuild
 
 build: wasm-tinygo wanix
 
@@ -14,7 +14,7 @@ docker: deps
 	docker build --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) --load -t wanix .
 	docker run --rm -v "$(PWD):/output" wanix sh -c "cp ./wanix /output"
 
-wanix:
+wanix: wasm/assets/wanix.prebundle.js
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o wanix $(GOARGS) ./cmd/wanix
 
 wasm-tinygo:
@@ -31,6 +31,9 @@ v86:
 linux:
 	cd external/linux && make build
 
+esbuild:
+	cd external/esbuild && docker build --load -t esbuild .
+
 shell:
 	cd shell && make build
 
@@ -43,7 +46,11 @@ clobber:
 	rm -f wasm/assets/wasi/wasi.js
 	rm -f wasm/assets/wasm_exec.js
 	rm -f wasm/assets/wanix.wasm
+	rm -f wasm/assets/wanix.prebundle.js
 	make -C external/linux clobber
 	make -C external/v86 clobber
 	make -C external/wasi clobber
 	make -C shell clobber
+
+wasm/assets/wanix.prebundle.js: wasm/assets/wanix.js
+	docker run --rm -v $(PWD)/wasm/assets:/build esbuild wanix.js --bundle > wasm/assets/wanix.prebundle.js
