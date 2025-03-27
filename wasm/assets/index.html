@@ -2,12 +2,10 @@
 	<head>
 		<meta charset="utf-8"/>
         <link rel="stylesheet" href="./wanix.css" />
-        <script src="./wasm_exec.js"></script>
+        <script src="./wanix.bundle.js"></script>
 	</head>
 	<body>
-        <script type="module">
-            import { Wanix } from "./wanix.js";
-            
+        <script>
             new Wanix({ helpers: true });
 
             if (!window.location.search.includes('shell=false')) {

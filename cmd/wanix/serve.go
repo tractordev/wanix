@@ -36,6 +36,13 @@ func serveCmd() *cli.Command {
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
 				w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
+
+				if r.URL.Path == "/wanix.bundle.js" {
+					w.Header().Add("Content-Type", "text/javascript")
+					w.Write(assets.WanixBundle())
+					return
+				}
+
 				http.FileServerFS(fsys).ServeHTTP(w, r)
 			}))
 			http.ListenAndServe(":"+port, nil)
