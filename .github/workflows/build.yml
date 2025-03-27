@@ -20,6 +20,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
+      # Build esbuild tool
+      - name: Build esbuild
+        uses: docker/build-push-action@v5
+        with:
+          context: external/esbuild
+          push: false
+          load: true
+          tags: esbuild:latest
+          cache-from: type=local,src=/tmp/.buildx-cache/esbuild
+          cache-to: type=local,dest=/tmp/.buildx-cache-new/esbuild,mode=max
+          no-cache: ${{ github.event_name == 'push' && hashFiles('external/esbuild/**') != hashFiles('external/esbuild/**', 'HEAD^') }}
+
       # Build v86
       - name: Build v86
         uses: docker/build-push-action@v5
