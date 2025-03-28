@@ -22,6 +22,7 @@ func (m *Main) InitializeCLI(root *cli.Command) {
 	root.Version = Version
 	root.AddCommand(serveCmd())
 	root.AddCommand(mountCmd())
+	root.AddCommand(exportCmd())
 
 	var v any = m
 	if mm, ok := v.(interface{ addConsole(root *cli.Command) }); ok {
