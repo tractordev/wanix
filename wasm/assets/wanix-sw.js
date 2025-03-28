@@ -41,6 +41,9 @@ self.addEventListener("fetch", async (event) => {
         console.warn("ServiceWorker: no handler registered");
         return;
     }
+    if (!cache) {
+        cache = await caches.open("v0");
+    }
 
     const req = event.request;
     
