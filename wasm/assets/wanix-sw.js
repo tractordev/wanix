@@ -15,14 +15,8 @@ self.addEventListener("activate", event => {
             // "/wanix-0.3.wasm",
 
             "/wanix.css",
-            "/wanix.js",
+            "/wanix.bundle.js",
             "/wanix.wasm",
-            
-            "/v86/libv86.js",
-            "/wasm_exec.js",
-            "/wio.js",
-            
-            "/duplex.min.js",
         ]);
     });
 });
