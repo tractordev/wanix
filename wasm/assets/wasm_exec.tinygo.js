@@ -97,6 +97,7 @@
 			umask() { throw enosys(); },
 			cwd() { throw enosys(); },
 			chdir() { throw enosys(); },
+			exit() {},
 		}
 	}
 
