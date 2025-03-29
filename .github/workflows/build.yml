@@ -104,12 +104,16 @@ jobs:
           sudo dpkg -i tinygo_0.36.0_amd64.deb
 
       - name: Build project
-        run: make build
+        run: |
+          make wasm-tinygo wanix
+          mv wanix wanix-tinygo
+          make wasm-go wanix
       
       - uses: actions/upload-artifact@v4
         with:
           name: wanix-build
           path: |
+            wanix-tinygo
             wanix
             wasm/assets/wanix.wasm
             external/linux/bzImage
