@@ -22,7 +22,7 @@ import (
 )
 
 func New(k *wanix.K, ctx js.Value) fskit.MapFS {
-	workerfs := worker.New(k)
+	workerfs := worker.New(k.Root)
 	opfs, _ := fsa.OPFS()
 	webfs := fskit.MapFS{
 		"dom":    dom.New(k),
@@ -67,8 +67,8 @@ func New(k *wanix.K, ctx js.Value) fskit.MapFS {
 		}, nil
 	})
 
-	k.Task.Register("wasi", func(p *task.Process) error {
-		w, err := workerfs.Alloc()
+	k.Task.Register("wasi", func(p *task.Resource) error {
+		w, err := workerfs.Alloc(p)
 		if err != nil {
 			return err
 		}

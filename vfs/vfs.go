@@ -53,6 +53,17 @@ func New(ctx context.Context) *NS {
 	return fsys
 }
 
+func (ns *NS) Clone(ctx context.Context) *NS {
+	b := make(map[string][]bindTarget)
+	for k, v := range ns.bindings {
+		b[k] = slices.Clone(v)
+	}
+	return &NS{
+		bindings: b,
+		ctx:      ctx,
+	}
+}
+
 func (ns *NS) Context() context.Context {
 	return ns.ctx
 }

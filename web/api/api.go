@@ -14,11 +14,10 @@ import (
 	"tractor.dev/toolkit-go/duplex/talk"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/task"
-	proc "tractor.dev/wanix/task"
 	"tractor.dev/wanix/web/jsutil"
 )
 
-func PortResponder(port js.Value, root *proc.Process) {
+func PortResponder(port js.Value, root *task.Resource) {
 	wr := &jsutil.Writer{Value: port}
 	rd := &jsutil.Reader{Value: port}
 	sess, err := mux.DialIO(wr, rd)
@@ -41,7 +40,7 @@ type openInode struct {
 	Error   string
 }
 
-func setupAPI(peer *talk.Peer, root *task.Process) {
+func setupAPI(peer *talk.Peer, root *task.Resource) {
 	fds := make(map[int]fs.File)
 	fdCounter := 0
 

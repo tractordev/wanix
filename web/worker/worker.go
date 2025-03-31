@@ -9,10 +9,10 @@ import (
 	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
-	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
+	"tractor.dev/wanix/task"
 	"tractor.dev/wanix/web/api"
 )
 
@@ -21,7 +21,7 @@ type Resource struct {
 	state  string
 	src    string
 	worker js.Value
-	k      *wanix.K
+	task   *task.Resource
 }
 
 func (r *Resource) ID() string {
@@ -59,7 +59,7 @@ func (r *Resource) Start(args ...string) error {
 
 	ch := js.Global().Get("MessageChannel").New()
 	connPort := js.Global().Get("wanix").Call("_toport", ch.Get("port1"))
-	go api.PortResponder(connPort, r.k.Root)
+	go api.PortResponder(connPort, r.task)
 
 	r.worker.Call("postMessage", map[string]any{"worker": map[string]any{
 		"id":      r.id,
