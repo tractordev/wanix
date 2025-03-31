@@ -1,5 +1,8 @@
 #!/bin/sh
 case "$1" in
+    "root")
+        echo "/web/worker"
+        ;;
     "start")
         id=$(cat /web/worker/new)
         echo "start /:$(realpath $2)" >> /web/worker/$id/ctl
