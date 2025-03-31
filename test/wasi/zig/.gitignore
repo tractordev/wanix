@@ -1,3 +1,3 @@
-zig.wasm
+zigcheck.wasm
 zig-cache/ 
-zig.wasm.o
+zigcheck.wasm.o
