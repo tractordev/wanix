@@ -271,15 +271,15 @@
 					fd_close: () => 0,      // dummy
 					fd_fdstat_get: () => 0, // dummy
 					fd_seek: () => 0,       // dummy
-					"proc_exit": (code) => {
-						if (global.process) {
-							// Node.js
-							process.exit(code);
-						} else {
-							// Can't exit in a browser.
-							throw 'trying to exit with code ' + code;
-						}
-					},
+					// "proc_exit": (code) => {
+					// 	if (global.process) {
+					// 		// Node.js
+					// 		process.exit(code);
+					// 	} else {
+					// 		// Can't exit in a browser.
+					// 		throw 'trying to exit with code ' + code;
+					// 	}
+					// },
 					random_get: (bufPtr, bufLen) => {
 						crypto.getRandomValues(loadSlice(bufPtr, bufLen));
 						return 0;
