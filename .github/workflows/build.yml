@@ -59,6 +59,7 @@ jobs:
       - run: cd external/linux && docker run --rm -v "$(pwd):/output" wanix-linux-builder
 
       # Build WASI
+      - run: cd external/wasi && make wanixjs
       - name: Build WASI
         uses: docker/build-push-action@v5
         with:
@@ -70,6 +71,7 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache-new/wasi,mode=max
           no-cache: ${{ github.event_name == 'push' && hashFiles('external/wasi/**') != hashFiles('external/wasi/**', 'HEAD^') }}
       - run: cd external/wasi && docker run --rm -v "$(pwd):/output" wanix-wasi-builder
+      - run: cp external/wasi/wasi.bundle.js wasm/assets/wasi/wasi.bundle.js
 
       # Build Shell
       - name: Build Shell
