@@ -5,6 +5,7 @@ html, body {
     padding: 0;
     overflow: hidden;
     position: relative;
+    box-sizing: border-box;
 }
 
 .wanix-terminal {
@@ -18,7 +19,7 @@ html, body {
 iframe {
     border: 8px solid #b0eced;
     position: absolute;
-    background-color: rgba(63, 63, 63, 0.8);
+    background-color: rgba(190, 190, 190, 0.8);
     z-index: 1000;
 }
 
