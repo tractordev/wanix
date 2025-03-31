@@ -11,7 +11,7 @@ import {
 	PreopenDirectory,
 	ConsoleStdout,
 	applyPatchPollOneoff
-} from "./wasi.js";
+} from "./wasi.bundle.js";
 
 self.onmessage = async (e) => {
     if (!e.data.buffer) {
@@ -48,6 +48,7 @@ self.onmessage = async (e) => {
 		"wasi_snapshot_preview1": wasi.wasiImport,
 	});
 
+	
 	const wasm = await WebAssembly.compileStreaming(fetch("/:/"+e.data.args[0]));
 	const inst = await WebAssembly.instantiate(wasm, imports);
 	go.run(inst);
