@@ -97,7 +97,9 @@ export class Wanix extends WanixFS {
         
     }
 }
-window.Wanix = Wanix;
+if (globalThis.window) {
+    window.Wanix = Wanix;
+}
 
 function setupConsoleHelpers() {
     window.list = (name) => { 
