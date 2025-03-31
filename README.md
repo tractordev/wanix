@@ -1,7 +1,7 @@
 # WANIX
 [![Discord](https://img.shields.io/discord/415940907729420288?label=Discord)](https://discord.gg/nQbgRjEBU4) ![GitHub Sponsors](https://img.shields.io/github/sponsors/progrium?label=Sponsors)
 
-A virtual operating system kit for the local-first web, inspired by Plan 9.
+A virtual environment toolchain for the local-first web, inspired by Plan 9.
 
 ### Features
 
@@ -10,7 +10,7 @@ A virtual operating system kit for the local-first web, inspired by Plan 9.
 * Per-process namespaces for security, isolation, and custom environments
 * Built-in emulator for x86 support, Linux compatibility, and Docker-like functionality
 * Runs in the browser as well as natively on Mac, Windows, and Linux
-* Web: Filesystem interfaces for OPFS, DOM, web workers, and service workers
+* Web: File interfaces for OPFS, DOM, web workers, and service workers
 * Web: Runs WASI WebAssembly *and* x86 executables
 
 ### Example Uses
@@ -38,7 +38,10 @@ If you want to build from source, see the [CONTRIBUTING.md](CONTRIBUTING.md) doc
 
 ## Usage
 
-TODO
+* serve
+* console
+* export
+
 
 ## Old Demos
 

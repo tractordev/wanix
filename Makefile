@@ -39,7 +39,7 @@ shell:
 
 wasi: 
 	cd external/wasi && make build
-	cp external/wasi/wasi.js wasm/assets/wasi/wasi.js
+	cp external/wasi/wasi.bundle.js wasm/assets/wasi/wasi.bundle.js
 
 clobber:
 	rm -f wanix
