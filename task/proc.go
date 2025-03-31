@@ -27,13 +27,14 @@ var (
 	TaskContextKey = &contextKey{"task"}
 )
 
-func PIDFromContext(ctx context.Context) (string, bool) {
-	p, ok := ctx.Value(TaskContextKey).(string)
+func FromContext(ctx context.Context) (*Resource, bool) {
+	p, ok := ctx.Value(TaskContextKey).(*Resource)
 	return p, ok
 }
 
-type Process struct {
-	starter func(*Process) error
+type Resource struct {
+	starter func(*Resource) error
+	parent  *Resource
 	ns      *vfs.NS
 	id      int
 	typ     string
@@ -45,50 +46,50 @@ type Process struct {
 	sys     map[string]fs.FS
 }
 
-func (r *Process) Start() error {
+func (r *Resource) Start() error {
 	if r.starter != nil {
 		return r.starter(r)
 	}
 	return nil
 }
 
-func (r *Process) ID() string {
+func (r *Resource) ID() string {
 	return strconv.Itoa(r.id)
 }
 
-func (r *Process) Context() context.Context {
+func (r *Resource) Context() context.Context {
 	return r.Namespace().Context()
 }
 
-func (r *Process) Namespace() *vfs.NS {
+func (r *Resource) Namespace() *vfs.NS {
 	return r.ns
 }
 
-func (r *Process) Cmd() string {
+func (r *Resource) Cmd() string {
 	return r.cmd
 }
 
-func (r *Process) Env() []string {
+func (r *Resource) Env() []string {
 	return r.env
 }
 
-func (r *Process) Dir() string {
+func (r *Resource) Dir() string {
 	return r.dir
 }
 
-func (r *Process) Bind(srcPath, dstPath string) error {
+func (r *Resource) Bind(srcPath, dstPath string) error {
 	return r.ns.Bind(r.ns, srcPath, dstPath, "")
 }
 
-func (r *Process) Unbind(srcPath, dstPath string) error {
+func (r *Resource) Unbind(srcPath, dstPath string) error {
 	return r.ns.Unbind(r.ns, srcPath, dstPath)
 }
 
-func (r *Process) Open(name string) (fs.File, error) {
+func (r *Resource) Open(name string) (fs.File, error) {
 	return r.OpenContext(context.Background(), name)
 }
 
-func (r *Process) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (r *Resource) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	return fs.Resolve(fskit.MapFS{
 		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
@@ -145,7 +146,7 @@ func (r *Process) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 	}, ctx, name)
 }
 
-func (r *Process) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	fsys, rname, err := r.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err

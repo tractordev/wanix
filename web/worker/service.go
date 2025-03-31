@@ -6,33 +6,36 @@ import (
 	"context"
 	"strconv"
 
-	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/task"
 )
 
 type Service struct {
 	resources map[string]fs.FS
 	nextID    int
-	k         *wanix.K
+	task      *task.Resource
 }
 
-func New(k *wanix.K) *Service {
+func New(task *task.Resource) *Service {
 	return &Service{
 		resources: make(map[string]fs.FS),
 		nextID:    0,
-		k:         k,
+		task:      task,
 	}
 }
 
-func (d *Service) Alloc() (*Resource, error) {
+func (d *Service) Alloc(t *task.Resource) (*Resource, error) {
+	if t == nil {
+		t = d.task
+	}
 	d.nextID++
 	rid := strconv.Itoa(d.nextID)
 	r := &Resource{
 		id:    d.nextID,
 		state: "allocated",
 		src:   "",
-		k:     d.k,
+		task:  t,
 	}
 	d.resources[rid] = r
 	return r, nil
@@ -45,7 +48,7 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 				return &fskit.FuncFile{
 					Node: fskit.Entry(name, 0555),
 					ReadFunc: func(n *fskit.Node) error {
-						r, err := d.Alloc()
+						r, err := d.Alloc(d.task)
 						if err != nil {
 							return err
 						}

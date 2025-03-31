@@ -15,7 +15,7 @@ type K struct {
 
 	nsch chan *vfs.NS
 	NS   *vfs.NS
-	Root *task.Process
+	Root *task.Resource
 }
 
 func New() *K {
@@ -32,8 +32,8 @@ func (k *K) AddModule(name string, mod fs.FS) {
 	k.Mod[name] = mod
 }
 
-func (k *K) NewRoot() (*task.Process, error) {
-	p, err := k.Task.Alloc("ns")
+func (k *K) NewRoot() (*task.Resource, error) {
+	p, err := k.Task.Alloc("ns", nil)
 	if err != nil {
 		return nil, err
 	}

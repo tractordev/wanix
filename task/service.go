@@ -12,44 +12,44 @@ import (
 )
 
 type Service struct {
-	types     map[string]func(*Process) error
+	types     map[string]func(*Resource) error
 	resources map[string]fs.FS
 	nextID    int
 }
 
 func New() *Service {
 	d := &Service{
-		types:     make(map[string]func(*Process) error),
+		types:     make(map[string]func(*Resource) error),
 		resources: make(map[string]fs.FS),
 		nextID:    0,
 	}
 	// empty namespace process
-	d.Register("ns", func(_ *Process) error {
+	d.Register("ns", func(_ *Resource) error {
 		return nil
 	})
 	return d
 }
 
-func (d *Service) Register(kind string, starter func(*Process) error) {
+func (d *Service) Register(kind string, starter func(*Resource) error) {
 	d.types[kind] = starter
 }
 
-func (d *Service) Alloc(kind string) (*Process, error) {
+func (d *Service) Alloc(kind string, parent *Resource) (*Resource, error) {
 	starter, ok := d.types[kind]
 	if !ok {
 		return nil, fs.ErrNotExist
 	}
 	d.nextID++
 	rid := strconv.Itoa(d.nextID)
-	ctx := context.WithValue(context.Background(), TaskContextKey, rid)
+
 	a0, b0 := internal.BufferedConnPipe(false)
 	a1, b1 := internal.BufferedConnPipe(false)
 	a2, b2 := internal.BufferedConnPipe(false)
-	p := &Process{
+
+	p := &Resource{
 		starter: starter,
 		id:      d.nextID,
 		typ:     kind,
-		ns:      vfs.New(ctx),
 		fds: map[string]fs.FS{
 			"0": newFdFile(a0, "0"),
 			"1": newFdFile(a1, "1"),
@@ -60,6 +60,13 @@ func (d *Service) Alloc(kind string) (*Process, error) {
 			"fd1": newFdFile(b1, "fd1"),
 			"fd2": newFdFile(b2, "fd2"),
 		},
+	}
+	ctx := context.WithValue(context.Background(), TaskContextKey, p)
+	if parent != nil {
+		p.parent = parent
+		p.ns = parent.ns.Clone(ctx)
+	} else {
+		p.ns = vfs.New(ctx)
 	}
 	d.resources[rid] = p
 	return p, nil
@@ -78,7 +85,8 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 			return &fskit.FuncFile{
 				Node: fskit.Entry(name, 0555),
 				ReadFunc: func(n *fskit.Node) error {
-					p, err := d.Alloc(name)
+					t, _ := FromContext(ctx)
+					p, err := d.Alloc(name, t)
 					if err != nil {
 						return err
 					}
@@ -88,9 +96,9 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 			}, nil
 		}),
 	}
-	pid, ok := PIDFromContext(ctx)
+	t, ok := FromContext(ctx)
 	if ok {
-		m["self"] = internal.FieldFile(pid, nil)
+		m["self"] = internal.FieldFile(t.ID(), nil)
 	}
 	return fs.Resolve(fskit.UnionFS{m, fskit.MapFS(d.resources)}, ctx, name)
 }
