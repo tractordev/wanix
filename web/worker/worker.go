@@ -72,6 +72,18 @@ func (r *Resource) Start(args ...string) error {
 	return nil
 }
 
+func (r *Resource) Open(name string) (fs.File, error) {
+	return r.OpenContext(context.Background(), name)
+}
+
+func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error) {
+	fsys, rname, err := r.ResolveFS(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return fs.OpenContext(ctx, fsys, rname)
+}
+
 func (r *Resource) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	fsys := fskit.MapFS{
 		"ctl": internal.ControlFile(&cli.Command{
@@ -94,20 +106,6 @@ func (r *Resource) ResolveFS(ctx context.Context, name string) (fs.FS, string, e
 			r.src = string(data)
 			return nil
 		}),
-		// "err": internal.FieldFile(r.state, nil),
-		// "fsys": internal.FieldFile(r.fs, nil),
 	}
 	return fs.Resolve(fsys, ctx, name)
-}
-
-func (r *Resource) Open(name string) (fs.File, error) {
-	return r.OpenContext(context.Background(), name)
-}
-
-func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := r.ResolveFS(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return fs.OpenContext(ctx, fsys, rname)
 }
