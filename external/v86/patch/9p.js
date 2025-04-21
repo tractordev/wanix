@@ -4,7 +4,23 @@
 // Implementation of the 9p filesystem device following the
 // 9P2000.L protocol ( https://code.google.com/p/diod/wiki/protocol )
 
-"use strict";
+import { LOG_9P } from "./../src/const.js";
+import { VirtIO, VIRTIO_F_VERSION_1, VIRTIO_F_RING_EVENT_IDX, VIRTIO_F_RING_INDIRECT_DESC } from "../src/virtio.js";
+import { S_IFREG, S_IFDIR, STATUS_UNLINKED } from "./filesystem.js";
+import * as marshall from "../lib/marshall.js";
+import { dbg_log, dbg_assert } from "../src/log.js";
+import { h } from "../src/lib.js";
+
+// For Types Only
+import { CPU } from "../src/cpu.js";
+import { BusConnector } from "../src/bus.js";
+import { FS } from "./filesystem.js";
+
+/**
+ * @const
+ * More accurate filenames in 9p debug messages at the cost of performance.
+ */
+const TRACK_FILENAMES = false;
 
 // Feature bit (bit position) for mount tag.
 const VIRTIO_9P_F_MOUNT_TAG = 0;
@@ -16,13 +32,13 @@ const MAX_REPLYBUFFER_SIZE = 16 * 1024 * 1024;
 // TODO
 // flush
 
-var EPERM = 1;       /* Operation not permitted */
-var ENOENT = 2;      /* No such file or directory */
-var EEXIST = 17;      /* File exists */
-var EINVAL = 22;     /* Invalid argument */
-var EOPNOTSUPP = 95;  /* Operation is not supported */
-var ENOTEMPTY = 39;  /* Directory not empty */
-var EPROTO    = 71;  /* Protocol error */
+export const EPERM = 1;       /* Operation not permitted */
+export const ENOENT = 2;      /* No such file or directory */
+export const EEXIST = 17;      /* File exists */
+export const EINVAL = 22;     /* Invalid argument */
+export const EOPNOTSUPP = 95;  /* Operation is not supported */
+export const ENOTEMPTY = 39;  /* Directory not empty */
+export const EPROTO    = 71;  /* Protocol error */
 
 var P9_SETATTR_MODE = 0x00000001;
 var P9_SETATTR_UID = 0x00000002;
@@ -49,22 +65,27 @@ var P9_STAT_MODE_SETUID = 0x00080000;
 var P9_STAT_MODE_SETGID = 0x00040000;
 var P9_STAT_MODE_SETVTX = 0x00010000;
 
-const P9_LOCK_TYPE_RDLCK = 0;
-const P9_LOCK_TYPE_WRLCK = 1;
-const P9_LOCK_TYPE_UNLCK = 2;
+export const P9_LOCK_TYPE_RDLCK = 0;
+export const P9_LOCK_TYPE_WRLCK = 1;
+export const P9_LOCK_TYPE_UNLCK = 2;
 const P9_LOCK_TYPES = ["shared", "exclusive", "unlock"];
 
 const P9_LOCK_FLAGS_BLOCK = 1;
 const P9_LOCK_FLAGS_RECLAIM = 2;
 
-const P9_LOCK_SUCCESS = 0;
-const P9_LOCK_BLOCKED = 1;
-const P9_LOCK_ERROR = 2;
-const P9_LOCK_GRACE = 3;
+export const P9_LOCK_SUCCESS = 0;
+export const P9_LOCK_BLOCKED = 1;
+export const P9_LOCK_ERROR = 2;
+export const P9_LOCK_GRACE = 3;
 
 var FID_NONE = -1;
 var FID_INODE = 1;
 var FID_XATTR = 2;
+
+function range(size)
+{
+    return Array.from(Array(size).keys());
+}
 
 /**
  * @constructor
@@ -72,7 +93,9 @@ var FID_XATTR = 2;
  * @param {FS} filesystem
  * @param {CPU} cpu
  */
-function Virtio9p(filesystem, cpu, bus) {
+export function Virtio9p(filesystem, cpu, bus) {
+    this.tagBufchain = new Map();
+    
     /** @type {FS} */
     this.fs = filesystem;
 
@@ -156,7 +179,7 @@ function Virtio9p(filesystem, cpu, bus) {
                     read: () => this.configspace_taglen,
                     write: data => { /* read only */ },
                 },
-            ].concat(v86util.range(VIRTIO_9P_MAX_TAGLEN).map(index =>
+            ].concat(range(VIRTIO_9P_MAX_TAGLEN).map(index =>
                 ({
                     bytes: 1,
                     name: "mount tag name " + index,
@@ -168,8 +191,6 @@ function Virtio9p(filesystem, cpu, bus) {
         },
     });
     this.virtqueue = this.virtio.queues[0];
-
-    this.tagBufchain = new Map();
 }
 
 Virtio9p.prototype.get_state = function()
@@ -211,7 +232,7 @@ Virtio9p.prototype.set_state = function(state)
 // Note: dbg_name is only used for debugging messages and may not be the same as the filename,
 // since it is not synchronised with renames done outside of 9p. Hard-links, linking and unlinking
 // operations also mean that having a single filename no longer makes sense.
-// Set TRACK_FILENAMES = true (in config.js) to sync dbg_name during 9p renames.
+// Set TRACK_FILENAMES = true to sync dbg_name during 9p renames.
 Virtio9p.prototype.Createfid = function(inodeid, type, uid, dbg_name) {
     return {inodeid, type, uid, dbg_name};
 };
@@ -234,7 +255,7 @@ Virtio9p.prototype.BuildReply = function(id, tag, payloadsize) {
     dbg_assert(payloadsize >= 0, "9P: Negative payload size");
     marshall.Marshall(["w", "b", "h"], [payloadsize+7, id+1, tag], this.replybuffer, 0);
     if((payloadsize+7) >= this.replybuffer.length) {
-        message.Debug("Error in 9p: payloadsize exceeds maximum length");
+        dbg_log("Error in 9p: payloadsize exceeds maximum length", LOG_9P);
     }
     //for(var i=0; i<payload.length; i++)
     //    this.replybuffer[7+i] = payload[i];

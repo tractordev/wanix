@@ -9,7 +9,6 @@ RUN git clone --depth=1 https://github.com/copy/v86.git .
 
 
 COPY ./patch/9p.js ./lib/9p.js
-COPY ./patch/filesystem.js ./lib/filesystem.js
 COPY ./patch/starter.js ./src/browser/starter.js
 
 
