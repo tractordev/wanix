@@ -39,7 +39,7 @@ func main() {
 	root.Bind("#cap", "cap")
 	root.Bind("#web", "web")
 
-	shellfs, err := fetchShellFS()
+	shellfs, err := fetchTarballFS("/shell/shell.tgz")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,12 +52,22 @@ func main() {
 	root.Namespace().Bind(rw, ".", "#shell", "")
 	// root.Namespace().Bind(fskit.MemFS{}, ".", "#shell", "")
 
+	// afs, err := fetchTarballFS("/shell/alpine.tgz")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// arw := fskit.MemFS{}
+	// if err := fs.CopyFS(afs, ".", arw, "."); err != nil {
+	// 	log.Fatal(err)
+	// }
+	// root.Namespace().Bind(arw, ".", "#alpine", "")
+
 	go virtio9p.Serve(root.Namespace(), inst, false)
 	api.PortResponder(inst.Get("sys"), root)
 }
 
-func fetchShellFS() (fs.FS, error) {
-	u, err := internal.ParseURL("/shell/shell.tgz")
+func fetchTarballFS(name string) (fs.FS, error) {
+	u, err := internal.ParseURL(name)
 	if err != nil {
 		return nil, err
 	}
