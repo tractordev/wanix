@@ -36,7 +36,7 @@ func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error)
 					ReadFunc: func(n *fskit.Node) error {
 						d.nextID++
 						rid := strconv.Itoa(d.nextID)
-						vm := makeVM()
+						vm := makeVM(rid)
 						d.resources[rid] = &VM{
 							id:     d.nextID,
 							typ:    name,
