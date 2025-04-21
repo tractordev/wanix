@@ -11,8 +11,8 @@ require (
 	github.com/magefile/mage v1.15.0
 	github.com/progrium/go-netstack v0.0.0-20240720002214-37b2b8227b91
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701
-	golang.org/x/net v0.36.0
-	golang.org/x/term v0.30.0
+	golang.org/x/net v0.39.0
+	golang.org/x/term v0.31.0
 	tractor.dev/toolkit-go v0.0.0-20250103001615-9a6753936c19
 	tractor.dev/toolkit-go/desktop v0.0.0-20250103001615-9a6753936c19
 )
@@ -34,7 +34,7 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 )
