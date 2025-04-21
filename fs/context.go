@@ -88,7 +88,11 @@ func Op(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
-	return ctx.Value(OpContextKey).(string)
+	v := ctx.Value(OpContextKey)
+	if v == nil {
+		return ""
+	}
+	return v.(string)
 }
 
 // WithOrigin returns a new context with the OriginContextKey set to the given
