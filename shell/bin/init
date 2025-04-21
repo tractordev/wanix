@@ -2,7 +2,7 @@
 /bin/busybox --install -s /bin
 
 mount -t proc none /proc
-ln -s /web/opfs /opfs
+# ln -s /web/opfs /opfs
 
 if [ -f /web/opfs/etc/profile ]; then
     . /web/opfs/etc/profile

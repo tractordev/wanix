@@ -60,7 +60,8 @@ RUN mkdir -p \
     /build/rootfs/bin \
     /build/rootfs/dev \
     /build/rootfs/proc \
-    /build/rootfs/lib
+    /build/rootfs/lib \
+    /build/rootfs/etc
 COPY --from=lib32 /lib/ld-linux.so.2 /build/rootfs/lib
 COPY --from=lib32 /lib/i386-linux-gnu/libc.so.6 /build/rootfs/lib
 COPY --from=lib32 /lib/i386-linux-gnu/libm.so.6 /build/rootfs/lib
@@ -71,5 +72,6 @@ COPY --from=wexec /home/tinygo/wexec /build/rootfs/bin
 COPY --from=busybox /build/busybox /build/rootfs/bin
 COPY bin/* /build/rootfs/bin
 RUN chmod +x /build/rootfs/bin/*
+COPY etc/* /build/rootfs/etc
 RUN tar -zcf /build/shell.tgz -C rootfs .
 CMD ["/bin/sh", "-c", "cp -f /build/shell.tgz /output/"]
