@@ -200,10 +200,16 @@ func (l *p9file) ReadAt(p []byte, offset int64) (int, error) {
 	return fs.ReadAt(l.file, p, offset)
 }
 
-// // Lock implements p9.File.Lock.
-// func (l *p9file) Lock(pid int, locktype p9.LockType, flags p9.LockFlags, start, length uint64, client string) (p9.LockStatus, error) {
-// 	return l.lock(pid, locktype, flags, start, length, client)
-// }
+// StatFS implements p9.File.StatFS.
+func (l *p9file) StatFS() (p9.FSStat, error) {
+	return p9.FSStat{}, nil
+}
+
+// Lock implements p9.File.Lock.
+func (l *p9file) Lock(pid int, locktype p9.LockType, flags p9.LockFlags, start, length uint64, client string) (p9.LockStatus, error) {
+	// TODO: implement?
+	return p9.LockStatusOK, nil
+}
 
 // WriteAt implements p9.File.WriteAt.
 func (l *p9file) WriteAt(p []byte, offset int64) (int, error) {
@@ -262,12 +268,16 @@ func (l *p9file) Symlink(oldname string, newname string, _ p9.UID, _ p9.GID) (p9
 // }
 
 // RenameAt implements p9.File.RenameAt.
-// func (l *p9file) RenameAt(oldName string, newDir p9.File, newName string) error {
-// 	oldPath := path.Join(l.path, oldName)
-// 	newPath := path.Join(newDir.(*p9file).path, newName)
+func (l *p9file) RenameAt(oldName string, newDir p9.File, newName string) error {
+	oldPath := path.Join(l.path, oldName)
+	newPath := path.Join(newDir.(*p9file).path, newName)
 
-// 	return os.Rename(oldPath, newPath)
-// }
+	err := fs.Rename(l.fsys, oldPath, newPath)
+	if err != nil {
+		log.Println("RENAME:", err, oldPath, newPath)
+	}
+	return err
+}
 
 // Readlink implements p9.File.Readlink.
 func (l *p9file) Readlink() (string, error) {
