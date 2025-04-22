@@ -21,12 +21,14 @@ func (m *Main) InitializeCLI(root *cli.Command) {
 	root.Usage = "wanix"
 	root.Version = Version
 	root.AddCommand(serveCmd())
-	root.AddCommand(mountCmd())
 	root.AddCommand(exportCmd())
 
 	var v any = m
-	if mm, ok := v.(interface{ addConsole(root *cli.Command) }); ok {
-		mm.addConsole(root)
+	if mm, ok := v.(interface{ addConsoleCmd(root *cli.Command) }); ok {
+		mm.addConsoleCmd(root)
+	}
+	if mm, ok := v.(interface{ addMountCmd(root *cli.Command) }); ok {
+		mm.addMountCmd(root)
 	}
 }
 
