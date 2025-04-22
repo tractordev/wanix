@@ -22,7 +22,7 @@ import (
 	"tractor.dev/wanix/wasm/assets"
 )
 
-func (m *Main) addConsole(root *cli.Command) {
+func (m *Main) addConsoleCmd(root *cli.Command) {
 	cmd := &cli.Command{
 		Usage: "console",
 		Short: "enter wanix console",
