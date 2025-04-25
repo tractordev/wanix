@@ -3,6 +3,8 @@
 
 A virtual environment toolchain for the local-first web, inspired by Plan 9.
 
+**📺 [Wanix: The Spirit of Plan 9 in Wasm](https://www.youtube.com/watch?v=kGBeT8lwbo0)**
+
 ### Features
 
 * Capability-oriented microkernel architecture ("everything is a file")
@@ -118,8 +120,8 @@ echo "html { border: 8px solid lightgreen; }" >> /web/dom/style
 
 ## Old Demos
 
-* [🎬 Wasm I/O 2024 Demo](https://www.youtube.com/watch?v=cj8FvNM14T4)
-* [🎬 Mozilla Rise 25 Demo](https://www.youtube.com/watch?v=KJcd9IckJj8)
+* [📺 Wasm I/O 2024 Demo](https://www.youtube.com/watch?v=cj8FvNM14T4)
+* [📺 Mozilla Rise 25 Demo](https://www.youtube.com/watch?v=KJcd9IckJj8)
 
 ## Contributing
 
