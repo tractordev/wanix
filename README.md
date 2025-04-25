@@ -1,4 +1,4 @@
-# WANIX
+# Wanix
 [![Discord](https://img.shields.io/discord/415940907729420288?label=Discord)](https://discord.gg/nQbgRjEBU4) ![GitHub Sponsors](https://img.shields.io/github/sponsors/progrium?label=Sponsors)
 
 A virtual environment toolchain for the local-first web, inspired by Plan 9.
@@ -19,15 +19,21 @@ A virtual environment toolchain for the local-first web, inspired by Plan 9.
 * Experiment with Plan 9 capabilities in browser or natively
 * Use as foundation for a modern web-native operating system
 
-## Install
 
-The Wanix CLI is available for download from the [latest release](https://github.com/tractordev/wanix/releases/latest) or you can run this installer:
+## Try Now
+
+Play with the stock Wanix distro at [wanix.run](https://wanix.run).
+
+
+## Install Toolchain
+
+The Wanix CLI is available for download from the [latest release](https://github.com/tractordev/wanix/releases/latest). You could also run this to install to `/usr/local/bin`:
 
 ```sh
 bash -c "$(curl -sSL https://raw.githubusercontent.com/tractordev/wanix/main/install.sh)"
 ```
 
-Alternatively you can install using [Homebrew](https://brew.sh/):
+On Mac, you can install using [Homebrew](https://brew.sh/):
 
 ```sh
 brew tap progrium/homebrew-taps
@@ -36,11 +42,78 @@ brew install wanix
 
 If you want to build from source, see the [CONTRIBUTING.md](CONTRIBUTING.md) doc.
 
-## Usage
 
-* serve
-* console
-* export
+## Toolchain Usage
+
+The `wanix` command has a number of subcommands in development, but the primary
+command is `wanix serve`, which will serve Wanix at `http://localhost:7654`.
+
+There is a `--listen` flag to change the port and optionally the address to listen
+on. This will serve on port 6543: `wanix serve --listen :6543`
+
+
+## Using the Wanix Environment
+
+### Add Files
+
+You can easily add files to the Wanix environment by dragging files onto the
+terminal. This will put them in `/web/opfs`.
+
+In Chrome, you can also use the `pickerfs` capability to mount a full directory
+in Wanix for the duration of your session. Run `id=$(capctl new pickerfs mount)`
+to bring up a directory picker. The resulting `id` can be used to get to the
+mount: `cd /cap/$id/mount`.
+
+Lastly, you can mount a tar or gzipped tar from a URL with the `tarfs` 
+capability using the same process as `pickerfs` but with 
+`capctl new tarfs mount <url>`.
+
+### Run WASI
+
+WASI Wasm executables can simply be run like running a normal executable once
+added to the environment. Tested languages that can compile to Wasm
+and run in Wanix include Golang, Rust, and Zig.
+
+### Load Page in Window
+
+Files in the root namespace can be accessed via subpaths on the domain with the
+prefix `/:`, so accessing `/web/opfs/file.html` would work using 
+`/:/web/opfs/file.html`. This works for any HTML elements or JS functions that
+take a URL, including fetch and iframes. 
+
+We use iframes as windows (by styling and JS), which can be created with:
+```sh
+id=$(domctl new iframe)
+domctl body append-child $id
+```
+Then you can load a URL in the iframe by setting its `src` attribute:
+```sh
+echo /:/web/opfs/file.html >> /web/dom/$id/attrs
+```
+You can "close" a window by removing the iframe:
+```sh
+domctl $id remove
+```
+
+### Run JS in a Web Worker
+
+If you have a JavaScript source file you want to run in a Web Worker, you can 
+use `workerctl start <file>`, which returns a resource ID you can use under 
+`/web/worker`.
+
+You can terminate the worker with `workerctl <id> terminate`. 
+
+### Manipulate DOM
+
+You can currently create DOM elements using `domctl`. Run `domctl new` to see
+available element types. For example, you can allocate a div element and get a
+resource ID for it with `domctl new div`. DOM resources are under `/web/dom`,
+including a named resource for the `body`. 
+
+You can also append CSS styles to the page by appending to `/web/dom/style`:
+```sh
+echo "html { border: 8px solid lightgreen; }" >> /web/dom/style
+```
 
 
 ## Old Demos
