@@ -88,7 +88,7 @@ domctl body append-child $id
 ```
 Then you can load a URL in the iframe by setting its `src` attribute:
 ```sh
-echo /:/web/opfs/file.html >> /web/dom/$id/attrs
+echo src=/:/web/opfs/file.html >> /web/dom/$id/attrs
 ```
 You can "close" a window by removing the iframe:
 ```sh
