@@ -52,15 +52,15 @@ func main() {
 	root.Namespace().Bind(rw, ".", "#shell", "")
 	// root.Namespace().Bind(fskit.MemFS{}, ".", "#shell", "")
 
-	// afs, err := fetchTarballFS("/shell/alpine.tgz")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// arw := fskit.MemFS{}
-	// if err := fs.CopyFS(afs, ".", arw, "."); err != nil {
-	// 	log.Fatal(err)
-	// }
-	// root.Namespace().Bind(arw, ".", "#alpine", "")
+	afs, err := fetchTarballFS("/alpine/alpine.tgz")
+	if err != nil {
+		log.Fatal(err)
+	}
+	arw := fskit.MemFS{}
+	if err := fs.CopyFS(afs, ".", arw, "."); err != nil {
+		log.Fatal(err)
+	}
+	root.Namespace().Bind(arw, ".", "#alpine", "")
 
 	go virtio9p.Serve(root.Namespace(), inst, false)
 	api.PortResponder(inst.Get("sys"), root)
