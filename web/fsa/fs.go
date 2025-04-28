@@ -283,3 +283,49 @@ func (fsys FS) Remove(name string) error {
 	statCache.Delete(name)
 	return nil
 }
+
+func (fsys FS) Rename(oldname, newname string) error {
+	if !fs.ValidPath(oldname) || !fs.ValidPath(newname) {
+		return &fs.PathError{Op: "rename", Path: oldname, Err: fs.ErrNotExist}
+	}
+
+	ok, err := fs.Exists(fsys, oldname)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return &fs.PathError{Op: "rename", Path: oldname, Err: fs.ErrNotExist}
+	}
+
+	ok, err = fs.Exists(fsys, newname)
+	if err != nil {
+		return err
+	}
+	if ok {
+		return &fs.PathError{Op: "rename", Path: newname, Err: fs.ErrExist}
+	}
+
+	oldDirHandle, err := fsys.walkDir(path.Dir(oldname))
+	if err != nil {
+		return &fs.PathError{Op: "rename", Path: oldname, Err: fs.ErrNotExist}
+	}
+
+	newDirHandle, err := fsys.walkDir(path.Dir(newname))
+	if err != nil {
+		return &fs.PathError{Op: "rename", Path: newname, Err: fs.ErrNotExist}
+	}
+
+	if err := fs.CopyAll(fsys, oldname, newname); err != nil {
+		return err
+	}
+
+	_, err = jsutil.AwaitErr(oldDirHandle.Call("removeEntry", path.Base(oldname), map[string]any{"recursive": true}))
+	if err != nil {
+		// Try to clean up the copy if delete fails
+		newDirHandle.Call("removeEntry", path.Base(newname), map[string]any{"recursive": true})
+		return err
+	}
+
+	statCache.Delete(oldname)
+	return nil
+}
