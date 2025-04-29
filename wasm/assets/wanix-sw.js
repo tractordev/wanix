@@ -3,22 +3,16 @@ let cache = undefined;
 self.addEventListener("activate", event => {
     event.waitUntil(clients.claim());
     console.log("ServiceWorker: activated:", self.location.href);
-    caches.open("v0").then(c => {
-        cache = c;
-        cache.addAll([
-            "/",
-            "/index.html",
-
-            // goal:
-            // "/wanix-0.3.min.js",
-            // "/wanix-0.3.sw.js",
-            // "/wanix-0.3.wasm",
-
-            "/wanix.css",
-            "/wanix.bundle.js",
-            "/wanix.wasm",
-        ]);
-    });
+    // caches.open("v0").then(c => {
+    //     cache = c;
+    //     cache.addAll([
+    //         "/",
+    //         "/index.html",
+    //         "/wanix.css",
+    //         "/wanix.bundle.js",
+    //         "/wanix.wasm",
+    //     ]);
+    // });
 });
 
 let listener = undefined;
