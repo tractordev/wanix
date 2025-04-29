@@ -191,8 +191,6 @@ function setupConsoleHelpers() {
         await w.readFile("web/vm/new");
         await w.writeFile("task/1/ctl", "bind web/dom/2/data web/vm/2/ttyS0");
         await w.writeFile("task/1/ctl", "bind #alpine web/vm/2/fsys");
-        await w.writeFile("task/1/ctl", "bind web/opfs/init web/vm/2/fsys/bin/init");
-        await w.writeFile("task/1/ctl", "bind web/opfs/bin/post-dhcp web/vm/2/fsys/bin/post-dhcp");
         // await w.writeFile("task/1/ctl", "bind . web/vm/2/fsys");
         await w.writeFile("web/vm/2/ctl", "start");
     }
