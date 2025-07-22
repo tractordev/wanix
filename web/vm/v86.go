@@ -11,7 +11,7 @@ func makeVM(id string) js.Value {
 	options := map[string]any{
 		"wasm_path":        "./v86/v86.wasm",
 		"screen_container": js.Global().Get("document").Call("getElementById", "screen"),
-		"memory_size":      512 * 1024 * 1024,
+		"memory_size":      2 * 1024 * 1024 * 1024,
 		"vga_memory_size":  8 * 1024 * 1024,
 		"net_device": map[string]any{
 			"type":      "ne2k",

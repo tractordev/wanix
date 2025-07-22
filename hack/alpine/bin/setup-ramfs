@@ -1,0 +1,72 @@
+#!/bin/ash
+
+# Alpine Linux RAM Filesystem Chroot Setup Script
+# Usage: ./setup_ramfs.sh [size]
+# Default size is 1G
+
+set -e
+
+#mount -t proc proc /proc
+#mount -t sysfs sysfs /sys
+echo "http://dl-cdn.alpinelinux.org/alpine/v3.21/main" >> /etc/apk/repositories
+
+# Configuration
+RAMFS_SIZE=${1:-1G}
+RAMFS_MOUNT="/mnt/ramfs"
+
+echo "Setting up RAM filesystem with size: $RAMFS_SIZE"
+
+# Create mount point
+echo "Creating mount point..."
+mkdir -p "$RAMFS_MOUNT"
+
+# Create tmpfs (RAM filesystem)
+echo "Mounting tmpfs..."
+mount -t tmpfs -o size="$RAMFS_SIZE" tmpfs "$RAMFS_MOUNT"
+
+# Copy filesystem to RAM using tar
+echo "Copying filesystem to RAM (this may take a while)..."
+cp -a / "$RAMFS_MOUNT/" --exclude=/dev --exclude=/proc --exclude=/sys --exclude=/tmp \
+    --exclude=/run --exclude=/mnt --exclude=/media --exclude=/lost+found \
+    --exclude="$RAMFS_MOUNT" 2>/dev/null || true
+
+# Create the excluded directories
+echo "Creating system directories..."
+mkdir -p "$RAMFS_MOUNT/dev/pts"
+mkdir -p "$RAMFS_MOUNT/proc"
+mkdir -p "$RAMFS_MOUNT/sys"
+mkdir -p "$RAMFS_MOUNT/tmp"
+mkdir -p "$RAMFS_MOUNT/run"
+mkdir -p "$RAMFS_MOUNT/mnt"
+mkdir -p "$RAMFS_MOUNT/media"
+
+# Copy required libraries
+echo "Copying system libraries..."
+mkdir -p "$RAMFS_MOUNT/lib/" "$RAMFS_MOUNT/usr/lib/"
+cp -a /lib/* "$RAMFS_MOUNT/lib/" || true
+cp -a /usr/lib/* "$RAMFS_MOUNT/usr/lib/" || true
+
+# Mount essential filesystems
+echo "Mounting essential filesystems..."
+mount --bind /dev "$RAMFS_MOUNT/dev"
+mount --bind /dev/pts "$RAMFS_MOUNT/dev/pts"
+mount --bind /proc "$RAMFS_MOUNT/proc"
+mount --bind /sys "$RAMFS_MOUNT/sys"
+mount -t tmpfs -o rw,nosuid,nodev,mode=755 tmpfs "$RAMFS_MOUNT/run"
+ln -sf /dev/pts/ptmx "$RAMFS_MOUNT/dev/ptmx"
+
+# Copy configuration files
+echo "Copying configuration..."
+mkdir -p "$RAMFS_MOUNT/etc/" "$RAMFS_MOUNT/var/"
+cp -a /etc/* "$RAMFS_MOUNT/etc/" || true
+cp -a /var/* "$RAMFS_MOUNT/var/" || true
+
+mkdir -p "$RAMFS_MOUNT/bin/" "$RAMFS_MOUNT/sbin/" "$RAMFS_MOUNT/usr/bin/" "$RAMFS_MOUNT/usr/sbin/"
+cp -a /bin/* "$RAMFS_MOUNT/bin/" || true
+cp -a /sbin/* "$RAMFS_MOUNT/sbin/" || true
+cp -a /usr/bin/* "$RAMFS_MOUNT/usr/bin/" || true
+cp -a /usr/sbin/* "$RAMFS_MOUNT/usr/sbin/" || true
+
+# Fix busybox symlinks in chroot
+echo "Fixing busybox symlinks..."
+chroot "$RAMFS_MOUNT" /bin/busybox --install -s
