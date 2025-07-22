@@ -3,6 +3,7 @@
 /bin
 /TODO
 /local
+/.local
 /wanix
 /wasm/assets/wanix.prebundle.js
 /wasm/assets/wanix.wasm
