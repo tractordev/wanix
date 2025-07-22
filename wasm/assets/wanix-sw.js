@@ -8,12 +8,6 @@ self.addEventListener("activate", event => {
         cache.addAll([
             "/",
             "/index.html",
-
-            // goal:
-            // "/wanix-0.3.min.js",
-            // "/wanix-0.3.sw.js",
-            // "/wanix-0.3.wasm",
-
             "/wanix.css",
             "/wanix.bundle.js",
             "/wanix.wasm",
