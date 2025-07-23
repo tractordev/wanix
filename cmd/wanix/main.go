@@ -23,13 +23,6 @@ func (m *Main) InitializeCLI(root *cli.Command) {
 	root.AddCommand(serveCmd())
 	root.AddCommand(exportCmd())
 
-	var v any = m
-	if mm, ok := v.(interface{ addConsoleCmd(root *cli.Command) }); ok {
-		mm.addConsoleCmd(root)
-	}
-	if mm, ok := v.(interface{ addMountCmd(root *cli.Command) }); ok {
-		mm.addMountCmd(root)
-	}
 }
 
 func fatal(err error) {

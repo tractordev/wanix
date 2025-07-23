@@ -1,6 +1,6 @@
-//go:build !js && !wasm && !nomount
+//go:build !js && !wasm && mount
 
-package main
+package mount
 
 import (
 	"log"
@@ -12,7 +12,7 @@ import (
 	"tractor.dev/wanix/fs/fusekit"
 )
 
-func (m *Main) addMountCmd(root *cli.Command) {
+func AddMountCmd(root *cli.Command) {
 	cmd := &cli.Command{
 		Usage: "mount",
 		Short: "mount wanix",
@@ -45,4 +45,10 @@ func (m *Main) addMountCmd(root *cli.Command) {
 		},
 	}
 	root.AddCommand(cmd)
+}
+
+func fatal(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
 }

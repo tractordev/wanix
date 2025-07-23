@@ -8,7 +8,6 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/hanwen/go-fuse/v2 v2.7.2
 	github.com/hugelgupf/p9 v0.3.1-0.20240118043522-6f4f11e5296e
-	github.com/magefile/mage v1.15.0
 	github.com/progrium/go-netstack v0.0.0-20240720002214-37b2b8227b91
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701
 	golang.org/x/net v0.39.0

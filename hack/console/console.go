@@ -1,6 +1,6 @@
-//go:build !js && !wasm && !noconsole
+//go:build !js && !wasm && console
 
-package main
+package console
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ import (
 	"tractor.dev/wanix/wasm/assets"
 )
 
-func (m *Main) addConsoleCmd(root *cli.Command) {
+func AddConsoleCmd(root *cli.Command) {
 	cmd := &cli.Command{
 		Usage: "console",
 		Short: "enter wanix console",
@@ -116,4 +116,10 @@ func (m *Main) addConsoleCmd(root *cli.Command) {
 		},
 	}
 	root.AddCommand(cmd)
+}
+
+func fatal(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
 }
