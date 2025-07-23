@@ -20,6 +20,7 @@ import (
 	"tractor.dev/wanix/external/linux"
 	v86 "tractor.dev/wanix/external/v86"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/hack/alpine"
 	"tractor.dev/wanix/shell"
 	"tractor.dev/wanix/wasm/assets"
 )
@@ -41,9 +42,10 @@ func serveCmd() *cli.Command {
 			fmt.Printf("serving on http://%s:%s ...\n", h, p)
 
 			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
-				"v86":   v86.Dir,
-				"linux": linux.Dir,
-				"shell": shell.Dir,
+				"v86":    v86.Dir,
+				"linux":  linux.Dir,
+				"shell":  shell.Dir,
+				"alpine": alpine.Dir,
 			}}
 
 			go serveNetwork()
