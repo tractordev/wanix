@@ -8,3 +8,4 @@
 /wasm/assets/wanix.wasm
 /wasm/assets/wasm_exec.js
 /wasm/assets/wasi/wasi.bundle.js
+/.local
