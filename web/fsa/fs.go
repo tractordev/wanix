@@ -4,7 +4,6 @@ package fsa
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"path"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/fxamacker/cbor/v2"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/web/jsutil"
@@ -42,7 +42,7 @@ func statStore(fsys FS, name string, stat Stat) {
 			stats = append(stats, value.(Stat))
 			return true
 		})
-		b, err := json.Marshal(stats)
+		b, err := cbor.Marshal(stats)
 		if err != nil {
 			log.Println("fsa: statstore: marshal:", err)
 			return
