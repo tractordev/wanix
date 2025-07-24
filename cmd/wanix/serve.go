@@ -48,6 +48,8 @@ func serveCmd() *cli.Command {
 
 			go serveNetwork()
 
+			http.Handle("/.well-known/", http.NotFoundHandler())
+
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
 				w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
