@@ -11,7 +11,7 @@ but you will still need at least Go installed.
 
 - [Docker 20.10+](https://docs.docker.com/get-docker/)
 - [Go 1.23+](https://golang.org/dl/)
-- [TinyGo 0.35+](https://tinygo.org/getting-started/install/) (optional)
+- [TinyGo 0.38+](https://tinygo.org/getting-started/install/) (optional)
 
 ### Building dependencies
 
