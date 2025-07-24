@@ -5,11 +5,11 @@ package fsa
 
 import (
 	"cmp"
-	"encoding/json"
 	"errors"
 	"log"
 	"syscall/js"
 
+	"github.com/fxamacker/cbor/v2"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/web/jsutil"
@@ -39,7 +39,7 @@ func OPFS() (fs.FS, error) {
 		}
 		statCache.Clear()
 		var stats []Stat
-		if err := json.Unmarshal(b, &stats); err != nil {
+		if err := cbor.Unmarshal(b, &stats); err != nil {
 			log.Println("fsa: opfs: unmarshal #stat:", err)
 			return
 		}
