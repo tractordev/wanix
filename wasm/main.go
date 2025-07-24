@@ -6,7 +6,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"log"
-	"net/http"
 	"syscall/js"
 
 	"tractor.dev/wanix"
@@ -16,6 +15,7 @@ import (
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
+	"tractor.dev/wanix/web/jsutil"
 	"tractor.dev/wanix/web/virtio9p"
 )
 
@@ -71,14 +71,14 @@ func fetchTarballFS(name string) (fs.FS, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.Get(u.String())
+	reader, err := jsutil.FetchToReader(u.String())
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	reader, err := gzip.NewReader(resp.Body)
+	defer reader.Close()
+	gzreader, err := gzip.NewReader(reader)
 	if err != nil {
 		return nil, err
 	}
-	return tarfs.Load(tar.NewReader(reader)), nil
+	return tarfs.Load(tar.NewReader(gzreader)), nil
 }
