@@ -1,0 +1,71 @@
+# Copyright © 2021-2023 Montgomery Edwards⁴⁴⁸ (github.com/x448).
+# This file is licensed under MIT License.
+#
+# Safer GitHub Actions Workflow for golangci-lint.
+# https://github.com/x448/safer-golangci-lint 
+#
+name: linters
+
+# Remove default permissions and grant only what is required in each job.
+permissions: {}
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main, master]
+
+env:
+  GO_VERSION: '1.22'
+  GOLINTERS_VERSION: 1.56.2
+  GOLINTERS_ARCH: linux-amd64
+  GOLINTERS_TGZ_DGST: e1c313fb5fc85a33890fdee5dbb1777d1f5829c84d655a47a55688f3aad5e501
+  GOLINTERS_TIMEOUT: 15m
+  OPENSSL_DGST_CMD: openssl dgst -sha256 -r
+  CURL_CMD: curl --proto =https --tlsv1.2 --location --silent --show-error --fail
+
+jobs:
+  main:
+    name: Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          fetch-depth: 1
+
+      - name: Setup Go
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Install golangci-lint
+        run: |
+          GOLINTERS_URL_PREFIX="https://github.com/golangci/golangci-lint/releases/download/v${GOLINTERS_VERSION}/"
+          GOLINTERS_TGZ="golangci-lint-${GOLINTERS_VERSION}-${GOLINTERS_ARCH}.tar.gz"
+          GOLINTERS_EXPECTED_DGST="${GOLINTERS_TGZ_DGST} *${GOLINTERS_TGZ}"
+          DGST_CMD="${OPENSSL_DGST_CMD} ${GOLINTERS_TGZ}"
+
+          cd $(mktemp -d /tmp/golinters.XXXXX)
+          ${CURL_CMD} "${GOLINTERS_URL_PREFIX}${GOLINTERS_TGZ}" --output ${GOLINTERS_TGZ}
+
+          GOLINTERS_GOT_DGST=$(${DGST_CMD})
+          if [ "${GOLINTERS_GOT_DGST}" != "${GOLINTERS_EXPECTED_DGST}" ]
+          then
+            echo "Digest of tarball is not equal to expected digest."
+            echo "Expected digest: " "${GOLINTERS_EXPECTED_DGST}"
+            echo "Got digest:      " "${GOLINTERS_GOT_DGST}"
+            exit 1
+          fi
+
+          tar --no-same-owner -xzf "${GOLINTERS_TGZ}" --strip-components 1
+          install golangci-lint $(go env GOPATH)/bin
+        shell: bash
+
+      # Run required linters enabled in .golangci.yml (or default linters if yml doesn't exist)     
+      - name: Run golangci-lint
+        run: $(go env GOPATH)/bin/golangci-lint run --timeout="${GOLINTERS_TIMEOUT}"
+        shell: bash
