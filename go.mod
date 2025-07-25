@@ -4,7 +4,12 @@ go 1.23.1
 
 replace github.com/hugelgupf/p9 => github.com/progrium/p9 v0.0.0-20250227010111-4025760ecd04
 
+// patch on top of the feature/cbor-tinygo-beta branch
+// based on https://github.com/fxamacker/cbor/issues/686
+replace github.com/fxamacker/cbor/v2 => ./hack/cbor
+
 require (
+	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hanwen/go-fuse/v2 v2.7.2
 	github.com/hugelgupf/p9 v0.3.1-0.20240118043522-6f4f11e5296e
@@ -19,7 +24,6 @@ require (
 require (
 	github.com/apparentlymart/go-cidr v1.1.0 // indirect
 	github.com/ebitengine/purego v0.7.1 // indirect
-	github.com/fxamacker/cbor/v2 v2.5.0 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/inetaf/tcpproxy v0.0.0-20240214030015-3ce58045626c // indirect
