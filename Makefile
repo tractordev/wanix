@@ -24,7 +24,7 @@ build: wasm wanix
 ## Build Wanix using Docker
 docker: deps
 	docker build --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) --load -t wanix .
-	docker run --rm -v "$(PWD):/output" wanix sh -c "cp ./wanix /output"
+	docker run --rm -v "$(shell pwd):/output" wanix sh -c "cp ./wanix /output"
 .PHONY: docker
 
 ## Build Wanix binary
@@ -88,7 +88,7 @@ clobber:
 .PHONY: clobber
 
 wasm/assets/wanix.prebundle.js: wasm/assets/wanix.js
-	docker run --rm -v $(PWD)/wasm/assets:/build esbuild wanix.js --bundle > wasm/assets/wanix.prebundle.js
+	docker run --rm -v $(shell pwd)/wasm/assets:/build esbuild wanix.js --bundle > wasm/assets/wanix.prebundle.js
 
 
 
