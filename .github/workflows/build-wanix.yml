@@ -1,9 +1,20 @@
-name: Build
+name: Build Wanix
 on: [push]
 
 jobs:
+  linux:
+    name: Linux
+    uses: tractordev/wanix/.github/workflows/build-linux.yml@main
+    permissions:
+      contents: read
+      packages: write
+    with:
+      artifact-name: linux
+      path: external/linux
+
   build:
     concurrency: ci-${{ github.ref }}
+    needs: linux
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -45,18 +56,12 @@ jobs:
           no-cache: ${{ github.event_name == 'push' && hashFiles('external/v86/**') != hashFiles('external/v86/**', 'HEAD^') }}
       - run: cd external/v86 && docker run --rm -v "$(pwd):/dst" wanix-v86-build
 
-      # Build Linux kernel
-      - name: Build Linux
-        uses: docker/build-push-action@v5
+      # Download Linux kernel artifact
+      - name: Download Linux kernel artifact
+        uses: actions/download-artifact@v4
         with:
-          context: external/linux
-          push: false
-          load: true
-          tags: wanix-linux-builder:latest
-          cache-from: type=local,src=/tmp/.buildx-cache/linux
-          cache-to: type=local,dest=/tmp/.buildx-cache-new/linux,mode=max
-          no-cache: ${{ github.event_name == 'push' && hashFiles('external/linux/**') != hashFiles('external/linux/**', 'HEAD^') }}
-      - run: cd external/linux && docker run --rm -v "$(pwd):/output" wanix-linux-builder
+          name: linux
+          path: external/linux
 
       # Build WASI
       - run: cd external/wasi && make wanixjs
