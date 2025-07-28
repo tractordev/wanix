@@ -60,6 +60,13 @@ jobs:
     if: always() && needs.detect.result == 'success'
     runs-on: ubuntu-latest
     steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
       - name: Pull from GitHub Container Registry
         run: |
           mkdir -p _artifact
