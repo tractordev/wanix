@@ -72,52 +72,9 @@ jobs:
           name: runtime
           path: _artifact
 
-
   wanix:
     name: Build Wanix
     needs: [linux, v86, shell, runtime]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Download v86 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: v86
-          path: external/v86
-      
-      - name: Download Linux kernel artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: linux
-          path: external/linux
-      
-      - name: Download shell artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: shell
-          path: shell
-
-      - name: Download runtime artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: runtime
-          path: runtime/assets
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '1.23'
-          check-latest: true
-
-      - name: Build Wanix command
-        run: |
-          make cmd
-          mv .local/bin/wanix wanix
-      
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wanix-linux-amd64
-          path: |
-            wanix
+    uses: tractordev/wanix/.github/workflows/build-cmd.yml@main
+    with:
+      go-version: 1.23.1

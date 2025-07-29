@@ -1,0 +1,298 @@
+name: Build Wanix Command
+on:
+  workflow_call:
+    inputs:
+      bin-name:
+        type: string
+        default: wanix
+      go-version:
+        required: true
+        type: string
+    secrets:
+      apple_signing_csv:
+        description: Apple developer signing data
+env:
+  BIN_NAME: ${{ inputs.bin-name }}
+  GO_VERSION: ${{ inputs.go-version }}
+  SIGNING_CSV: ${{ secrets.apple_signing_csv }}
+jobs:
+  build-windows:
+    runs-on: ubuntu-latest
+    name: Windows
+    env:
+      DIST_DIR: dist
+      DIST_OS: windows
+      DIST_ARCH: arm64 amd64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Download v86 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: v86
+          path: external/v86
+      
+      - name: Download Linux kernel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: external/linux
+      
+      - name: Download shell artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shell
+          path: shell
+
+      - name: Download runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime
+          path: runtime/assets
+
+      - name: Build project
+        run: make dist
+
+      - name: Prepare arm64 artifact
+        run: mv dist/*_arm64 ./${BIN_NAME}
+
+      - name: Upload arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BIN_NAME }}-windows-arm64
+          path: ${{ env.BIN_NAME }}
+
+      - name: Prepare amd64 artifact
+        run: mv dist/*_amd64 ./${BIN_NAME}
+
+      - name: Upload amd64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BIN_NAME }}-windows-amd64
+          path: ${{ env.BIN_NAME }}
+
+  build-linux:
+    runs-on: ubuntu-latest
+    name: Linux
+    env:
+      DIST_DIR: dist
+      DIST_OS: linux
+      DIST_ARCH: arm64 amd64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Download v86 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: v86
+          path: external/v86
+      
+      - name: Download Linux kernel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: external/linux
+      
+      - name: Download shell artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shell
+          path: shell
+
+      - name: Download runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime
+          path: runtime/assets
+
+      - name: Build project
+        run: make dist
+
+      - name: Prepare arm64 artifact
+        run: mv dist/*_arm64 ./${BIN_NAME}
+
+      - name: Upload arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BIN_NAME }}-linux-arm64
+          path: ${{ env.BIN_NAME }}
+
+      - name: Prepare amd64 artifact
+        run: mv dist/*_amd64 ./${BIN_NAME}
+
+      - name: Upload amd64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BIN_NAME }}-linux-amd64
+          path: ${{ env.BIN_NAME }}
+
+  build-darwin-arm64:
+    runs-on: macos-latest
+    name: Darwin (arm64)
+    env:
+      DIST_DIR: dist
+      DIST_OS: darwin
+      DIST_ARCH: arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Apple signing
+        run: |
+          export SIGNING_CERTIFICATE=$(echo "$SIGNING_CSV" | cut -d',' -f1)
+          export SIGNING_CERT_PASSWORD=$(echo "$SIGNING_CSV" | cut -d',' -f2)
+          export AC_API_KEY_ID=$(echo "$SIGNING_CSV" | cut -d',' -f3)
+          export AC_ISSUER_ID=$(echo "$SIGNING_CSV" | cut -d',' -f4)
+          export AC_PRIVATE_KEY=$(echo "$SIGNING_CSV" | cut -d',' -f5)
+          echo "$SIGNING_CERTIFICATE" | base64 --decode > cert.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import cert.p12 -k build.keychain -P "$SIGNING_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          echo "$AC_PRIVATE_KEY" | base64 --decode > private_key.p8
+          xcrun notarytool store-credentials --key private_key.p8 \
+            --key-id "$AC_API_KEY_ID" --issuer "$AC_ISSUER_ID" ac-profile
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Download v86 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: v86
+          path: external/v86
+      
+      - name: Download Linux kernel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: external/linux
+      
+      - name: Download shell artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shell
+          path: shell
+
+      - name: Download runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime
+          path: runtime/assets
+
+      - name: Build project
+        run: |
+          make dist
+          mv dist/*_arm64 ./${BIN_NAME}
+
+      - name: Sign
+        run: |
+          codesign --timestamp --options runtime --sign "Developer ID Application" ./${BIN_NAME}
+
+      - name: Notarize
+        run: |
+          zip ${BIN_NAME}.zip ${BIN_NAME}
+          xcrun notarytool submit ${BIN_NAME}.zip --keychain-profile ac-profile --wait
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BIN_NAME }}-darwin-arm64
+          path: ${{ env.BIN_NAME }}
+
+  build-darwin-amd64:
+    runs-on: macos-13
+    name: Darwin (amd64)
+    env:
+      DIST_DIR: dist
+      DIST_OS: darwin
+      DIST_ARCH: amd64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup Apple signing
+        run: |
+          export SIGNING_CERTIFICATE=$(echo "$SIGNING_CSV" | cut -d',' -f1)
+          export SIGNING_CERT_PASSWORD=$(echo "$SIGNING_CSV" | cut -d',' -f2)
+          export AC_API_KEY_ID=$(echo "$SIGNING_CSV" | cut -d',' -f3)
+          export AC_ISSUER_ID=$(echo "$SIGNING_CSV" | cut -d',' -f4)
+          export AC_PRIVATE_KEY=$(echo "$SIGNING_CSV" | cut -d',' -f5)
+          echo "$SIGNING_CERTIFICATE" | base64 --decode > cert.p12
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import cert.p12 -k build.keychain -P "$SIGNING_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          echo "$AC_PRIVATE_KEY" | base64 --decode > private_key.p8
+          xcrun notarytool store-credentials --key private_key.p8 \
+            --key-id "$AC_API_KEY_ID" --issuer "$AC_ISSUER_ID" ac-profile
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Download v86 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: v86
+          path: external/v86
+      
+      - name: Download Linux kernel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: external/linux
+      
+      - name: Download shell artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: shell
+          path: shell
+
+      - name: Download runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime
+          path: runtime/assets
+
+
+      - name: Build project
+        run: |
+          make dist
+          mv dist/*_amd64 ./${BIN_NAME}
+
+      - name: Sign
+        run: |
+          codesign --timestamp --options runtime --sign "Developer ID Application" ./${BIN_NAME}
+
+      - name: Notarize
+        run: |
+          zip ${BIN_NAME}.zip ${BIN_NAME}
+          xcrun notarytool submit ${BIN_NAME}.zip --keychain-profile ac-profile --wait
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BIN_NAME }}-darwin-amd64
+          path: ${{ env.BIN_NAME }}

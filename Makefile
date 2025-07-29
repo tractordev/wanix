@@ -94,6 +94,16 @@ clean:
 	make -C shell clean
 .PHONY: clean
 
+DIST_TARGETS	:= $(foreach os, $(DIST_OS), $(foreach arch, $(DIST_ARCH), $(DIST_DIR)/$(NAME)_$(VERSION)_$(os)_$(arch)))
+$(DIST_TARGETS): $(DIST_DIR)/%:
+	GOOS=$(word 3, $(subst _, ,$@)) \
+	GOARCH=$(word 4, $(subst _, ,$@)) \
+	go build -ldflags="-X main.Version=$(VERSION)" $(GOARGS) -o $@ ./cmd/wanix
+
+## Build distribution binaries
+dist: $(DIST_TARGETS)
+.PHONY: dist
+
 runtime/assets/wanix.min.js:
 	make js
 
