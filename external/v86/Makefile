@@ -1,4 +1,4 @@
-DOCKER_CMD ?= $(shell command -v podman || command -v docker)
+DOCKER_CMD 	?= $(shell command -v podman || command -v docker)
 
 build:
 	$(DOCKER_CMD) build $(if $(wildcard libv86.js),,--no-cache) --load -t wanix-build-v86 .
