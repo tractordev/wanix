@@ -9,7 +9,7 @@ DIST_DIR		?= .local/dist
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
 
-## Link/install the local binary
+## Link/install the local Wanix command
 link:
 	[ -f "$(LINK_BIN)/$(NAME)" ] && rm "$(LINK_BIN)/$(NAME)" || true
 	ln -fs "$(shell pwd)/.local/bin/$(NAME)" "$(LINK_BIN)/$(NAME)"
@@ -34,7 +34,7 @@ cmd-docker: deps
 .PHONY: docker
 
 ## Build Wanix command
-cmd: runtime/assets/wanix.wasm runtime/assets/wanix.min.js shell/shell.tgz external/linux/bzImage external/v86/v86.wasm
+cmd: runtime/assets/wanix.$(WASM_TOOLCHAIN).wasm runtime/assets/wanix.min.js shell/shell.tgz external/linux/bzImage external/v86/v86.wasm
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o .local/bin/wanix $(GOARGS) ./cmd/wanix
 .PHONY: cmd
 
@@ -42,23 +42,29 @@ cmd: runtime/assets/wanix.wasm runtime/assets/wanix.min.js shell/shell.tgz exter
 runtime: wasm js
 .PHONY: runtime
 
+## Build WASM and JS modules using Docker
+runtime-docker:
+	docker build --target runtime --load -t wanix-build-runtime -f Dockerfile.runtime .
+	docker run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-runtime
+.PHONY: runtime-docker
+
 ## Build WASM module
 wasm: wasm-$(WASM_TOOLCHAIN)
 .PHONY: wasm
 
 ## Build WASM module using TinyGo
 wasm-tinygo:
-	tinygo build -target wasm -o runtime/assets/wanix.wasm ./runtime/wasm
+	tinygo build -target wasm -o runtime/assets/wanix.tinygo.wasm ./runtime/wasm
 .PHONY: wasm-tinygo
 
 ## Build WASM module using Go
 wasm-go:
-	GOOS=js GOARCH=wasm go build -o runtime/assets/wanix.wasm ./runtime/wasm
+	GOOS=js GOARCH=wasm go build -o runtime/assets/wanix.go.wasm ./runtime/wasm
 .PHONY: wasm-go
 
 ## Build JavaScript module
 js:
-	docker build --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) --load -t wanix-build-js -f runtime/Dockerfile runtime
+	docker build --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) --load -t wanix-build-js -f Dockerfile.runtime .
 	docker run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-js
 .PHONY: js
 
@@ -81,7 +87,8 @@ shell:
 clean:
 	rm -f .local/bin/wanix
 	rm -f runtime/assets/wanix.min.js
-	rm -f runtime/assets/wanix.wasm
+	rm -f runtime/assets/wanix.go.wasm
+	rm -f runtime/assets/wanix.tinygo.wasm
 	make -C external/linux clean
 	make -C external/v86 clean
 	make -C shell clean
@@ -90,8 +97,11 @@ clean:
 runtime/assets/wanix.min.js:
 	make js
 
-runtime/assets/wanix.wasm:
-	make wasm
+runtime/assets/wanix.go.wasm:
+	make wasm-go
+
+runtime/assets/wanix.tinygo.wasm:
+	make wasm-tinygo
 
 shell/shell.tgz:
 	make shell
