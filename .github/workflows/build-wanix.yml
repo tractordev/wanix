@@ -12,9 +12,19 @@ jobs:
       artifact-name: linux
       path: external/linux
 
+  v86:
+    name: v86
+    uses: tractordev/wanix/.github/workflows/build-v86.yml@main
+    permissions:
+      contents: read
+      packages: write
+    with:
+      artifact-name: v86
+      path: external/v86
+
   build:
-    concurrency: ci-${{ github.ref }}
-    needs: linux
+    name: Build Wanix
+    needs: [linux, v86]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -43,18 +53,12 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache-new/esbuild,mode=max
           no-cache: ${{ github.event_name == 'push' && hashFiles('external/esbuild/**') != hashFiles('external/esbuild/**', 'HEAD^') }}
 
-      # Build v86
-      - name: Build v86
-        uses: docker/build-push-action@v5
+      # Download v86 artifact
+      - name: Download v86 artifact
+        uses: actions/download-artifact@v4
         with:
-          context: external/v86
-          push: false
-          load: true
-          tags: wanix-v86-build:latest
-          cache-from: type=local,src=/tmp/.buildx-cache/v86
-          cache-to: type=local,dest=/tmp/.buildx-cache-new/v86,mode=max
-          no-cache: ${{ github.event_name == 'push' && hashFiles('external/v86/**') != hashFiles('external/v86/**', 'HEAD^') }}
-      - run: cd external/v86 && docker run --rm -v "$(pwd):/dst" wanix-v86-build
+          name: v86
+          path: external/v86
 
       # Download Linux kernel artifact
       - name: Download Linux kernel artifact
