@@ -31,20 +31,51 @@ jobs:
     with:
       artifact-name: shell
       path: shell
-  
-  js:
-    name: JavaScript
-    uses: tractordev/wanix/.github/workflows/build-js.yml@main
+
+
+  runtime:
+    name: Build Runtime
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    with:
-      artifact-name: js
-      path: runtime
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
 
-  build:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Wanix runtime and push to GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.runtime
+          push: true
+          tags: ghcr.io/${{ github.repository }}:runtime
+      
+      - name: Write out runtime artifacts
+        run: |
+          mkdir -p _artifact
+          docker run --rm -v $(pwd)/_artifact:/output ghcr.io/${{ github.repository }}:runtime
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime
+          path: _artifact
+
+
+  wanix:
     name: Build Wanix
-    needs: [linux, v86, shell, js]
+    needs: [linux, v86, shell, runtime]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -68,10 +99,10 @@ jobs:
           name: shell
           path: shell
 
-      - name: Download JavaScript artifact
+      - name: Download runtime artifact
         uses: actions/download-artifact@v4
         with:
-          name: js
+          name: runtime
           path: runtime/assets
 
       - name: Set up Go
@@ -80,35 +111,13 @@ jobs:
           go-version: '1.23'
           check-latest: true
 
-      - name: Set up TinyGo
+      - name: Build Wanix command
         run: |
-          wget https://github.com/tinygo-org/tinygo/releases/download/v0.38.0/tinygo_0.38.0_amd64.deb
-          sudo dpkg -i tinygo_0.38.0_amd64.deb
-
-      - name: Build TinyGo WASM and Wanix command
-        run: |
-          make wasm-tinygo cmd
+          make cmd
           mv .local/bin/wanix wanix
-          mv runtime/assets/wanix.wasm wanix.wasm
       
       - uses: actions/upload-artifact@v4
         with:
-          name: wanix-tinygo-linux-amd64
+          name: wanix-linux-amd64
           path: |
-            wanix.wasm
             wanix
-
-      - name: Build (Big) Go WASM and Wanix command
-        run: |
-          make wasm-go cmd
-          mv .local/bin/wanix wanix
-          mv runtime/assets/wanix.wasm wanix.wasm
-      
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wanix-go-linux-amd64
-          path: |
-            wanix.wasm
-            wanix
-      
-      
