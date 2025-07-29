@@ -1,0 +1,4 @@
+node_modules
+assets/wanix.min.js
+assets/wanix.wasm
+assets/wasm_exec.js

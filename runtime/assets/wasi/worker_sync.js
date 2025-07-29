@@ -9,9 +9,8 @@ import {
 	Directory, 
 	DirectoryHandle, 
 	PreopenDirectory,
-	ConsoleStdout,
 	applyPatchPollOneoff
-} from "./wasi.bundle.js";
+} from "../wanix.min.js";
 
 self.onmessage = async (e) => {
     if (!e.data.buffer) {

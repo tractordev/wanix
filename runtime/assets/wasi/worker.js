@@ -1,4 +1,4 @@
-import { WanixFS, CallBuffer } from "./wasi.bundle.js";
+import { WanixFS, CallBuffer } from "../wanix.min.js";
 
 self.onmessage = async (e) => {
     if (!e.data.worker) {

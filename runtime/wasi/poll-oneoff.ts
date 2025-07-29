@@ -1,4 +1,4 @@
-import { WASI, OpenFile } from "./index.ts";
+import { WASI, OpenFile } from "./mod.ts";
 import { wasi } from "@bjorn3/browser_wasi_shim";
 
 // Workaround for https://github.com/bjorn3/browser_wasi_shim/issues/14

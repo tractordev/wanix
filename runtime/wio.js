@@ -1,4 +1,5 @@
-document.addEventListener('DOMContentLoaded', () => {
+export function setupWio() {
+  document.addEventListener('DOMContentLoaded', () => {
     let activeIframe = null;
     let isResizing = false;
     let isMoving = false;
@@ -121,3 +122,4 @@ document.addEventListener('DOMContentLoaded', () => {
       activeIframe = null;
     });
   });
+}
