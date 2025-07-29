@@ -30,7 +30,7 @@ func (f UnionFS) OpenContext(ctx context.Context, name string) (fs.File, error) 
 	}
 
 	if name != "." {
-		log.Printf("non-root open: %s (=> %T %s)", name, rfsys, rname)
+		//log.Printf("non-root open: %s (=> %T %s)", name, rfsys, rname)
 		// if non-root open and not resolved, it does not exist
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}

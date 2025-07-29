@@ -31,13 +31,28 @@ func exportCmd() *cli.Command {
 				"shell": shell.Dir,
 			}}
 
+			// Check for wanix.wasm variants and add to wasmFsys
+			wasmFsys := fskit.MapFS{}
+			if ok, _ := fs.Exists(assets.Dir, "wanix.wasm"); ok {
+				wasmFsys["wanix.wasm"], _ = fs.Sub(assets.Dir, "wanix.wasm")
+
+			} else if ok, _ := fs.Exists(assets.Dir, "wanix.tinygo.wasm"); ok {
+				wasmFsys["wanix.wasm"], _ = fs.Sub(assets.Dir, "wanix.tinygo.wasm")
+
+			} else if ok, _ := fs.Exists(assets.Dir, "wanix.go.wasm"); ok {
+				wasmFsys["wanix.wasm"], _ = fs.Sub(assets.Dir, "wanix.go.wasm")
+
+			} else {
+				log.Fatal("no wanix wasm found in assets")
+			}
+
 			// Create a new tar writer
 			var buf bytes.Buffer
 			tarWriter := tar.NewWriter(&buf)
 
+			fatal(addFileToTar(tarWriter, wasmFsys, "wanix.wasm"))
 			fatal(addFileToTar(tarWriter, fsys, "wanix.min.js"))
 			fatal(addFileToTar(tarWriter, fsys, "wanix-sw.js"))
-			fatal(addFileToTar(tarWriter, fsys, "wanix.wasm"))
 			fatal(addFileToTar(tarWriter, fsys, "wanix.css"))
 			fatal(addFileToTar(tarWriter, fsys, "favicon.ico"))
 			fatal(addFileToTar(tarWriter, fsys, "wasi/worker.js"))
