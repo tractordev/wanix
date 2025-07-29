@@ -1,8 +1,9 @@
-.PHONY: build clobber
 
 build:
-	docker build $(if $(wildcard bzImage),,--no-cache) --load -t wanix-linux-builder .
-	docker run --rm -v "$(shell pwd):/output" wanix-linux-builder
+	docker build $(if $(wildcard bzImage),,--no-cache) --load -t wanix-build-linux .
+	docker run --rm -v "$(shell pwd):/output" wanix-build-linux
+.PHONY: build
 
-clobber:
+clean:
 	rm -f bzImage
+.PHONY: clean

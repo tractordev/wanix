@@ -3,94 +3,104 @@ VERSION 		?= v0.3-$(shell git rev-parse --short HEAD)
 GOARGS			?=
 GOOS			?= $(shell go env GOOS)
 GOARCH			?= $(shell go env GOARCH)
-WASM_GO 		?= tinygo
-BIN 			?= /usr/local/bin
+WASM_TOOLCHAIN 	?= tinygo
+LINK_BIN 		?= /usr/local/bin
 DIST_DIR		?= .local/dist
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
+
+## Link/install the local binary
+link:
+	[ -f "$(LINK_BIN)/$(NAME)" ] && rm "$(LINK_BIN)/$(NAME)" || true
+	ln -fs "$(shell pwd)/.local/bin/$(NAME)" "$(LINK_BIN)/$(NAME)"
+.PHONY: link
 
 ## Build dependencies and Wanix
 all: deps build
 .PHONY: all
 
-## Build dependencies
-deps: linux v86 wasi shell esbuild
+## Build Linux kernel, v86 emulator, and shell
+deps: linux v86 shell
 .PHONY: deps
 
-## Build Wanix (binary and module)
-build: wasm wanix
+## Build Wanix (command and runtime)
+build: wasm cmd
 .PHONY: build
 
-## Build Wanix using Docker
-docker: deps
+## Build Wanix command using Docker
+cmd-docker: deps
 	docker build --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) --load -t wanix .
 	docker run --rm -v "$(shell pwd):/output" wanix sh -c "cp ./wanix /output"
 .PHONY: docker
 
-## Build Wanix binary
-wanix: wasm/assets/wanix.prebundle.js
-	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o wanix $(GOARGS) ./cmd/wanix
-.PHONY: wanix
+## Build Wanix command
+cmd: runtime/assets/wanix.wasm runtime/assets/wanix.min.js shell/shell.tgz external/linux/bzImage external/v86/v86.wasm
+	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o .local/bin/wanix $(GOARGS) ./cmd/wanix
+.PHONY: cmd
+
+## Build WASM and JS modules
+runtime: wasm js
+.PHONY: runtime
 
 ## Build WASM module
-wasm: wasm-$(WASM_GO)
+wasm: wasm-$(WASM_TOOLCHAIN)
 .PHONY: wasm
 
 ## Build WASM module using TinyGo
 wasm-tinygo:
-	tinygo build -target wasm -o wasm/assets/wanix.wasm ./wasm
-	cp wasm/assets/wasm_exec.tinygo.js wasm/assets/wasm_exec.js
+	tinygo build -target wasm -o runtime/assets/wanix.wasm ./runtime/wasm
 .PHONY: wasm-tinygo
 
 ## Build WASM module using Go
 wasm-go:
-	GOOS=js GOARCH=wasm go build -o wasm/assets/wanix.wasm ./wasm
-	cp wasm/assets/wasm_exec.go.js wasm/assets/wasm_exec.js
+	GOOS=js GOARCH=wasm go build -o runtime/assets/wanix.wasm ./runtime/wasm
 .PHONY: wasm-go
+
+## Build JavaScript module
+js:
+	docker build --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) --load -t wanix-build-js -f runtime/Dockerfile runtime
+	docker run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-js
+.PHONY: js
 
 ## Build v86 emulator
 v86:
-	cd external/v86 && make build
+	make -C external/v86
 .PHONY: v86
 
 ## Build Linux kernel
 linux:
-	cd external/linux && make build
+	make -C external/linux
 .PHONY: linux
-
-## Build esbuild
-esbuild:
-	cd external/esbuild && docker build --load -t esbuild .
-.PHONY: esbuild
 
 ## Build shell for Wanix
 shell:
-	cd shell && make build
+	make -C shell
 .PHONY: shell
 
-## Build and bundle WASI module
-wasi: 
-	cd external/wasi && make build
-	cp external/wasi/wasi.bundle.js wasm/assets/wasi/wasi.bundle.js
-.PHONY: wasi
-
 ## Remove all built artifacts
-clobber:
-	rm -f wanix
-	rm -f wasm/assets/wasi/wasi.js
-	rm -f wasm/assets/wasm_exec.js
-	rm -f wasm/assets/wanix.wasm
-	rm -f wasm/assets/wanix.prebundle.js
-	make -C external/linux clobber
-	make -C external/v86 clobber
-	make -C external/wasi clobber
-	make -C shell clobber
-.PHONY: clobber
+clean:
+	rm -f .local/bin/wanix
+	rm -f runtime/assets/wanix.min.js
+	rm -f runtime/assets/wanix.wasm
+	make -C external/linux clean
+	make -C external/v86 clean
+	make -C shell clean
+.PHONY: clean
 
-wasm/assets/wanix.prebundle.js: wasm/assets/wanix.js
-	docker run --rm -v $(shell pwd)/wasm/assets:/build esbuild wanix.js --bundle > wasm/assets/wanix.prebundle.js
+runtime/assets/wanix.min.js:
+	make js
 
+runtime/assets/wanix.wasm:
+	make wasm
 
+shell/shell.tgz:
+	make shell
+
+external/linux/bzImage:
+	make linux
+
+external/v86/v86.wasm:
+	make v86
 
 .DEFAULT_GOAL := show-help
 
