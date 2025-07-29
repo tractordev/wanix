@@ -1,13 +1,27 @@
+# Makefile for Wanix
+#
+# This Makefile is used to build and manage the Wanix project. It is used to
+# build the Linux kernel, v86 emulator, shell, and Wanix command. It is also
+# used to build the distribution binaries.
+#
+# The Makefile is self-documenting, so you can run `make` to see all available
+# tasks and their descriptions. The variables at the top can all be overridden
+# by environment variables or by command line arguments (e.g. `make GOOS=linux`).
+#
 NAME			?= wanix
 VERSION 		?= v0.3-$(shell git rev-parse --short HEAD)
 GOARGS			?=
 GOOS			?= $(shell go env GOOS)
 GOARCH			?= $(shell go env GOARCH)
-WASM_TOOLCHAIN 	?= tinygo
+WASM_TOOLCHAIN 	?= $(shell basename $(shell command -v tinygo || command -v go))
 LINK_BIN 		?= /usr/local/bin
 DIST_DIR		?= .local/dist
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
+
+export DOCKER_CMD 	?= $(shell command -v podman || command -v docker)
+RUNTIME_TARGETS		:= runtime/assets/wanix.$(WASM_TOOLCHAIN).wasm runtime/assets/wanix.min.js
+DEP_TARGETS			:= shell/shell.tgz external/linux/bzImage external/v86/v86.wasm
 
 ## Link/install the local Wanix command
 link:
@@ -20,36 +34,42 @@ all: deps build
 .PHONY: all
 
 ## Build Linux kernel, v86 emulator, and shell
-deps: linux v86 shell
+deps: deps-linux deps-v86 deps-shell
 .PHONY: deps
 
 ## Build Wanix (command and runtime)
-build: wasm cmd
+build: runtime cmd
 .PHONY: build
 
-## Build Wanix command using Docker
-cmd-docker: deps
-	docker build --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) --load -t wanix .
-	docker run --rm -v "$(shell pwd):/output" wanix sh -c "cp ./wanix /output"
-.PHONY: docker
+## Build Wanix (command and runtime) using Docker
+build-docker: runtime-docker cmd-docker
+.PHONY: build-docker
+
 
 ## Build Wanix command
-cmd: runtime/assets/wanix.$(WASM_TOOLCHAIN).wasm runtime/assets/wanix.min.js shell/shell.tgz external/linux/bzImage external/v86/v86.wasm
+cmd: $(DEP_TARGETS) $(RUNTIME_TARGETS)
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o .local/bin/wanix $(GOARGS) ./cmd/wanix
 .PHONY: cmd
 
+## Build Wanix command using Docker
+cmd-docker: $(DEP_TARGETS) $(RUNTIME_TARGETS)
+	$(DOCKER_CMD) build --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) --load -t wanix-build-cmd .
+	$(DOCKER_CMD) run --rm -v "$(shell pwd)/.local/bin:/output" wanix-build-cmd sh -c "cp .local/bin/wanix /output"
+.PHONY: docker
+
+
 ## Build WASM and JS modules
-runtime: wasm js
+runtime: runtime-wasm runtime-js
 .PHONY: runtime
 
 ## Build WASM and JS modules using Docker
 runtime-docker:
-	docker build --target runtime --load -t wanix-build-runtime -f Dockerfile.runtime .
-	docker run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-runtime
+	$(DOCKER_CMD) build --target runtime --load -t wanix-build-runtime -f Dockerfile.runtime .
+	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-runtime
 .PHONY: runtime-docker
 
 ## Build WASM module
-wasm: wasm-$(WASM_TOOLCHAIN)
+runtime-wasm: wasm-$(WASM_TOOLCHAIN)
 .PHONY: wasm
 
 ## Build WASM module using TinyGo
@@ -62,37 +82,47 @@ wasm-go:
 	GOOS=js GOARCH=wasm go build -o runtime/assets/wanix.go.wasm ./runtime/wasm
 .PHONY: wasm-go
 
-## Build JavaScript module
-js:
-	docker build --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) --load -t wanix-build-js -f Dockerfile.runtime .
-	docker run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-js
-.PHONY: js
+## Build JavaScript module (in Docker)
+runtime-js:
+	$(DOCKER_CMD) build --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) --load -t wanix-build-js -f Dockerfile.runtime .
+	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-js
+.PHONY: runtime-js
 
-## Build v86 emulator
-v86:
+## Build v86 emulator (in Docker)
+deps-v86:
 	make -C external/v86
-.PHONY: v86
+.PHONY: deps-v86
 
-## Build Linux kernel
-linux:
+## Build Linux kernel (in Docker)
+deps-linux:
 	make -C external/linux
-.PHONY: linux
+.PHONY: deps-linux
 
-## Build shell for Wanix
-shell:
+## Build shell for Wanix (in Docker)
+deps-shell:
 	make -C shell
-.PHONY: shell
+.PHONY: deps-shell
 
-## Remove all built artifacts
+## Remove dependency artifacts
+deps-clean:
+	make -C external/linux clean
+	make -C external/v86 clean
+	make -C shell clean
+.PHONY: deps-clean
+
+## Remove Wanix runtime and command artifacts
 clean:
 	rm -f .local/bin/wanix
 	rm -f runtime/assets/wanix.min.js
 	rm -f runtime/assets/wanix.go.wasm
 	rm -f runtime/assets/wanix.tinygo.wasm
-	make -C external/linux clean
-	make -C external/v86 clean
-	make -C shell clean
 .PHONY: clean
+
+## Remove all built artifacts
+clobber:
+	make deps-clean
+	make clean
+.PHONY: clobber
 
 DIST_TARGETS	:= $(foreach os, $(DIST_OS), $(foreach arch, $(DIST_ARCH), $(DIST_DIR)/$(NAME)_$(VERSION)_$(os)_$(arch)))
 $(DIST_TARGETS): $(DIST_DIR)/%:
@@ -105,7 +135,7 @@ dist: $(DIST_TARGETS)
 .PHONY: dist
 
 runtime/assets/wanix.min.js:
-	make js
+	make runtime-js
 
 runtime/assets/wanix.go.wasm:
 	make wasm-go
@@ -114,13 +144,13 @@ runtime/assets/wanix.tinygo.wasm:
 	make wasm-tinygo
 
 shell/shell.tgz:
-	make shell
+	make deps-shell
 
 external/linux/bzImage:
-	make linux
+	make deps-linux
 
 external/v86/v86.wasm:
-	make v86
+	make deps-v86
 
 .DEFAULT_GOAL := show-help
 
