@@ -20,8 +20,8 @@ import (
 	"tractor.dev/wanix/external/linux"
 	v86 "tractor.dev/wanix/external/v86"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/runtime/assets"
 	"tractor.dev/wanix/shell"
-	"tractor.dev/wanix/wasm/assets"
 )
 
 func serveCmd() *cli.Command {
@@ -53,12 +53,6 @@ func serveCmd() *cli.Command {
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
 				w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
-
-				if r.URL.Path == "/wanix.bundle.js" {
-					w.Header().Add("Content-Type", "text/javascript")
-					w.Write(assets.WanixBundle())
-					return
-				}
 
 				http.FileServerFS(fsys).ServeHTTP(w, r)
 			}))

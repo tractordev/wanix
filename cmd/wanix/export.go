@@ -14,8 +14,8 @@ import (
 	v86 "tractor.dev/wanix/external/v86"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/runtime/assets"
 	"tractor.dev/wanix/shell"
-	"tractor.dev/wanix/wasm/assets"
 )
 
 func exportCmd() *cli.Command {
@@ -26,22 +26,20 @@ func exportCmd() *cli.Command {
 			log.SetFlags(log.Ltime | log.Lmicroseconds | log.Lshortfile)
 
 			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
-				"v86":             v86.Dir,
-				"linux":           linux.Dir,
-				"shell":           shell.Dir,
-				"wanix.bundle.js": fskit.RawNode(fs.FileMode(0600), assets.WanixBundle()),
+				"v86":   v86.Dir,
+				"linux": linux.Dir,
+				"shell": shell.Dir,
 			}}
 
 			// Create a new tar writer
 			var buf bytes.Buffer
 			tarWriter := tar.NewWriter(&buf)
 
-			fatal(addFileToTar(tarWriter, fsys, "wanix.bundle.js"))
+			fatal(addFileToTar(tarWriter, fsys, "wanix.min.js"))
 			fatal(addFileToTar(tarWriter, fsys, "wanix-sw.js"))
 			fatal(addFileToTar(tarWriter, fsys, "wanix.wasm"))
 			fatal(addFileToTar(tarWriter, fsys, "wanix.css"))
 			fatal(addFileToTar(tarWriter, fsys, "favicon.ico"))
-			fatal(addFileToTar(tarWriter, fsys, "wasi/wasi.bundle.js"))
 			fatal(addFileToTar(tarWriter, fsys, "wasi/worker.js"))
 			fatal(addFileToTar(tarWriter, fsys, "wasi/worker_sync.js"))
 			fatal(addFileToTar(tarWriter, fsys, "shell/shell.tgz"))
