@@ -21,87 +21,58 @@ jobs:
     with:
       artifact-name: v86
       path: external/v86
+  
+  shell:
+    name: Shell
+    uses: tractordev/wanix/.github/workflows/build-shell.yml@main
+    permissions:
+      contents: read
+      packages: write
+    with:
+      artifact-name: shell
+      path: shell
+  
+  js:
+    name: JavaScript
+    uses: tractordev/wanix/.github/workflows/build-js.yml@main
+    permissions:
+      contents: read
+      packages: write
+    with:
+      artifact-name: js
+      path: runtime
 
   build:
     name: Build Wanix
-    needs: [linux, v86]
+    needs: [linux, v86, shell, js]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache Docker layers
-        uses: actions/cache@v3
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      # Build esbuild tool
-      - name: Build esbuild
-        uses: docker/build-push-action@v5
-        with:
-          context: external/esbuild
-          push: false
-          load: true
-          tags: esbuild:latest
-          cache-from: type=local,src=/tmp/.buildx-cache/esbuild
-          cache-to: type=local,dest=/tmp/.buildx-cache-new/esbuild,mode=max
-          no-cache: ${{ github.event_name == 'push' && hashFiles('external/esbuild/**') != hashFiles('external/esbuild/**', 'HEAD^') }}
-
-      # Download v86 artifact
       - name: Download v86 artifact
         uses: actions/download-artifact@v4
         with:
           name: v86
           path: external/v86
-
-      # Download Linux kernel artifact
+      
       - name: Download Linux kernel artifact
         uses: actions/download-artifact@v4
         with:
           name: linux
           path: external/linux
-
-      # Build WASI
-      - run: cd external/wasi && make wanixjs
-      - name: Build WASI
-        uses: docker/build-push-action@v5
+      
+      - name: Download shell artifact
+        uses: actions/download-artifact@v4
         with:
-          context: external/wasi
-          push: false
-          load: true
-          tags: wanix-wasi-builder:latest
-          cache-from: type=local,src=/tmp/.buildx-cache/wasi
-          cache-to: type=local,dest=/tmp/.buildx-cache-new/wasi,mode=max
-          no-cache: ${{ github.event_name == 'push' && hashFiles('external/wasi/**') != hashFiles('external/wasi/**', 'HEAD^') }}
-      - run: cd external/wasi && docker run --rm -v "$(pwd):/output" wanix-wasi-builder
-      - run: cp external/wasi/wasi.bundle.js wasm/assets/wasi/wasi.bundle.js
+          name: shell
+          path: shell
 
-      # Build Shell
-      - name: Build Shell
-        uses: docker/build-push-action@v5
+      - name: Download JavaScript artifact
+        uses: actions/download-artifact@v4
         with:
-          context: shell
-          push: false
-          load: true
-          tags: wanix-shell-builder:latest
-          cache-from: type=local,src=/tmp/.buildx-cache/shell
-          cache-to: type=local,dest=/tmp/.buildx-cache-new/shell,mode=max
-          no-cache: ${{ github.event_name == 'push' && hashFiles('shell/**') != hashFiles('shell/**', 'HEAD^') }}
-      - run: cd shell && docker run --rm -v "$(pwd):/output" wanix-shell-builder
-
-      # Move cache
-      - name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mkdir -p /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new/* /tmp/.buildx-cache/
-          rm -rf /tmp/.buildx-cache-new
+          name: js
+          path: runtime/assets
 
       - name: Set up Go
         uses: actions/setup-go@v4
@@ -111,26 +82,33 @@ jobs:
 
       - name: Set up TinyGo
         run: |
-          wget https://github.com/tinygo-org/tinygo/releases/download/v0.36.0/tinygo_0.36.0_amd64.deb
-          sudo dpkg -i tinygo_0.36.0_amd64.deb
+          wget https://github.com/tinygo-org/tinygo/releases/download/v0.38.0/tinygo_0.38.0_amd64.deb
+          sudo dpkg -i tinygo_0.38.0_amd64.deb
 
-      - name: Build project
+      - name: Build TinyGo WASM and Wanix command
         run: |
-          make wasm-tinygo wanix
-          mv wanix wanix-tinygo
-          make wasm-go wanix
+          make wasm-tinygo cmd
+          mv .local/bin/wanix wanix
+          mv runtime/assets/wanix.wasm wanix.wasm
       
       - uses: actions/upload-artifact@v4
         with:
-          name: wanix-build
+          name: wanix-tinygo-linux-amd64
           path: |
-            wanix-tinygo
+            wanix.wasm
             wanix
-            wasm/assets/wanix.wasm
-            external/linux/bzImage
-            external/v86/libv86.js
-            external/v86/seabios.bin
-            external/v86/v86.wasm
-            external/v86/vgabios.bin
-            external/wasi/wasi.js
-            shell/shell.tgz
+
+      - name: Build (Big) Go WASM and Wanix command
+        run: |
+          make wasm-go cmd
+          mv .local/bin/wanix wanix
+          mv runtime/assets/wanix.wasm wanix.wasm
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wanix-go-linux-amd64
+          path: |
+            wanix.wasm
+            wanix
+      
+      
