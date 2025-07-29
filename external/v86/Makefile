@@ -1,7 +1,8 @@
+DOCKER_CMD ?= $(shell command -v podman || command -v docker)
 
 build:
-	docker build $(if $(wildcard libv86.js),,--no-cache) --load -t wanix-build-v86 .
-	docker run --rm -v "$(shell pwd):/dst" wanix-build-v86
+	$(DOCKER_CMD) build $(if $(wildcard libv86.js),,--no-cache) --load -t wanix-build-v86 .
+	$(DOCKER_CMD) run --rm -v "$(shell pwd):/dst" wanix-build-v86
 .PHONY: build
 
 clean:
