@@ -36,25 +36,25 @@ jobs:
       - name: Download v86 artifact
         uses: actions/download-artifact@v4
         with:
-          name: v86
+          name: dep-v86
           path: external/v86
       
       - name: Download Linux kernel artifact
         uses: actions/download-artifact@v4
         with:
-          name: linux
+          name: dep-linux
           path: external/linux
       
       - name: Download shell artifact
         uses: actions/download-artifact@v4
         with:
-          name: shell
+          name: dep-shell
           path: shell
 
       - name: Download runtime artifact
         uses: actions/download-artifact@v4
         with:
-          name: runtime
+          name: wanix-runtime
           path: runtime/assets
 
       - name: Build project
@@ -98,25 +98,25 @@ jobs:
       - name: Download v86 artifact
         uses: actions/download-artifact@v4
         with:
-          name: v86
+          name: dep-v86
           path: external/v86
       
       - name: Download Linux kernel artifact
         uses: actions/download-artifact@v4
         with:
-          name: linux
+          name: dep-linux
           path: external/linux
       
       - name: Download shell artifact
         uses: actions/download-artifact@v4
         with:
-          name: shell
+          name: dep-shell
           path: shell
 
       - name: Download runtime artifact
         uses: actions/download-artifact@v4
         with:
-          name: runtime
+          name: wanix-runtime
           path: runtime/assets
 
       - name: Build project
@@ -177,25 +177,25 @@ jobs:
       - name: Download v86 artifact
         uses: actions/download-artifact@v4
         with:
-          name: v86
+          name: dep-v86
           path: external/v86
       
       - name: Download Linux kernel artifact
         uses: actions/download-artifact@v4
         with:
-          name: linux
+          name: dep-linux
           path: external/linux
       
       - name: Download shell artifact
         uses: actions/download-artifact@v4
         with:
-          name: shell
+          name: dep-shell
           path: shell
 
       - name: Download runtime artifact
         uses: actions/download-artifact@v4
         with:
-          name: runtime
+          name: wanix-runtime
           path: runtime/assets
 
       - name: Build project
@@ -255,25 +255,25 @@ jobs:
       - name: Download v86 artifact
         uses: actions/download-artifact@v4
         with:
-          name: v86
+          name: dep-v86
           path: external/v86
       
       - name: Download Linux kernel artifact
         uses: actions/download-artifact@v4
         with:
-          name: linux
+          name: dep-linux
           path: external/linux
       
       - name: Download shell artifact
         uses: actions/download-artifact@v4
         with:
-          name: shell
+          name: dep-shell
           path: shell
 
       - name: Download runtime artifact
         uses: actions/download-artifact@v4
         with:
-          name: runtime
+          name: wanix-runtime
           path: runtime/assets
 
 

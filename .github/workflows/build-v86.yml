@@ -6,9 +6,8 @@ on:
         required: true
         type: string
       artifact-name:
-        required: false
+        required: true
         type: string
-        default: v86
 jobs:
   detect:
     name: Detect changes
