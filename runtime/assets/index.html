@@ -2,15 +2,13 @@
 	<head>
 		<meta charset="utf-8"/>
         <link rel="stylesheet" href="./wanix.css" />
+        <link rel="stylesheet" href="../node_modules/xterm/css/xterm.css" />
         <script src="./wanix.min.js"></script>
 	</head>
 	<body>
+        <div id="terminal"></div>
         <script>
             new Wanix({ helpers: true });
-
-            if (!window.location.search.includes('shell=false')) {
-                window.bootShell(window.location.search.includes('console=true'));
-            }
         </script>
 	</body>
 </html>

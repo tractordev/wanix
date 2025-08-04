@@ -19,7 +19,7 @@ DIST_DIR		?= .local/dist
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
 
-export DOCKER_CMD 	?= $(shell command -v podman || command -v docker)
+export DOCKER_CMD 	?= "$(shell command -v podman || command -v docker)"
 RUNTIME_TARGETS		:= runtime/assets/wanix.$(WASM_TOOLCHAIN).wasm runtime/assets/wanix.min.js
 DEP_TARGETS			:= shell/shell.tgz external/linux/bzImage external/v86/v86.wasm
 

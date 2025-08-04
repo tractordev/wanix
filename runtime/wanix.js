@@ -1,4 +1,4 @@
-
+import { Terminal } from 'xterm';
 import * as duplex from "./duplex.min.js";
 import { setupConsoleHelpers } from "./helpers.js";
 import { setupWio } from "./wio.js";
@@ -27,6 +27,30 @@ export class Wanix extends WanixFS {
         execScript.textContent = wasmExecGo;
         document.head.appendChild(execScript);
 
+        const term = new Terminal({
+            cursorBlink: true,
+            convertEol: true,
+        });
+        term.open(document.getElementById('terminal'));
+
+        const ws = new WebSocket("ws://" + window.location.host + "/wanix/ws");
+        ws.binaryType = "arraybuffer";
+
+        ws.onopen = () => {
+            console.log("wanix: websocket connected");
+            term.onData(data => {
+                ws.send(data);
+            });
+            ws.onmessage = (event) => {
+                term.write(new Uint8Aray(event.data));
+            };
+        };
+
+        ws.onclose = () => {
+            console.log("wanix: websocket disconnected");
+            term.write("\r\n\r\n[Connection closed]\r\n");
+        };
+
         const sys = new MessageChannel();
         super(sys.port1);
         
@@ -53,4 +77,3 @@ export class Wanix extends WanixFS {
 if (globalThis.window) {
     window.Wanix = Wanix;
 }
-

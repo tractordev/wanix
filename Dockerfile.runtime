@@ -18,6 +18,7 @@ WORKDIR /build
 RUN apk add --no-cache make
 COPY ./hack/cbor ./hack/cbor
 COPY go.mod go.sum ./
+RUN go mod tidy
 RUN go mod download
 COPY . .
 RUN make wasm-go
