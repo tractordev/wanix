@@ -5,14 +5,19 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 	"github.com/progrium/go-netstack/vnet"
 
@@ -23,6 +28,56 @@ import (
 	"tractor.dev/wanix/runtime/assets"
 	"tractor.dev/wanix/shell"
 )
+
+func wanixConsoleHandler(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("console: websocket upgrade failed: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	cmd := exec.Command("/bin/bash")
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		log.Printf("console: failed to start pty: %v", err)
+		return
+	}
+	defer ptmx.Close()
+
+	// copy everything from the pty to the websocket
+	go func() {
+		if _, err := io.Copy(conn.UnderlyingConn(), ptmx); err != nil {
+			// TODO: handle error
+		}
+		log.Println("wanix console pty closed")
+	}()
+
+	for {
+		mt, msg, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+
+		// Custom protocol: 1 = resize
+		if len(msg) > 0 && msg[0] == 1 {
+			var rows, cols uint16
+			if len(msg) >= 5 {
+				rows = binary.BigEndian.Uint16(msg[1:3])
+				cols = binary.BigEndian.Uint16(msg[3:5])
+				pty.Setsize(ptmx, &pty.Winsize{Rows: rows, Cols: cols})
+			}
+			continue
+		}
+
+		if mt == websocket.TextMessage || mt == websocket.BinaryMessage {
+			ptmx.Write(msg)
+		}
+	}
+
+	cmd.Wait()
+	log.Println("wanix console disconnected")
+}
 
 func serveCmd() *cli.Command {
 	var (
@@ -56,6 +111,7 @@ func serveCmd() *cli.Command {
 			go serveNetwork()
 
 			http.Handle("/.well-known/", http.NotFoundHandler())
+			http.HandleFunc("/wanix/ws", wanixConsoleHandler)
 
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
@@ -70,6 +126,11 @@ func serveCmd() *cli.Command {
 					}
 					http.ServeFileFS(w, r, wasmFsys, "wanix.wasm")
 					return
+				}
+
+				// set content type
+				if ext := filepath.Ext(r.URL.Path); ext != "" {
+					w.Header().Set("Content-Type", mime.TypeByExtension(ext))
 				}
 
 				http.FileServerFS(fsys).ServeHTTP(w, r)

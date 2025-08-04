@@ -2,9 +2,11 @@
 	<head>
 		<meta charset="utf-8"/>
         <link rel="stylesheet" href="./wanix.css" />
+        <link rel="stylesheet" href="../node_modules/xterm/css/xterm.css" />
         <script src="./wanix.min.js"></script>
 	</head>
 	<body>
+        <div id="terminal"></div>
         <script>
             const urlParams = new URLSearchParams(window.location.search);
             new Wanix({ helpers: true, bundle: urlParams.get('bundle') });
