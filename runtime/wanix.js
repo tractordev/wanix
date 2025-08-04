@@ -22,11 +22,6 @@ export class Wanix extends WanixFS {
         v86Script.src = "./v86/libv86.js";
         document.head.appendChild(v86Script);
 
-        // todo: properly detect which to use
-        const execScript = document.createElement('script');
-        execScript.textContent = wasmExecGo;
-        document.head.appendChild(execScript);
-
         const sys = new MessageChannel();
         super(sys.port1);
         
@@ -35,18 +30,38 @@ export class Wanix extends WanixFS {
             instance: this,
             sys: new duplex.PortConn(sys.port2),
             sw: new MessageChannel(),
-            _toport: (port) => new duplex.PortConn(port), // kludge: for worker
+
+            // kludge: for worker
+            _toport: (port) => new duplex.PortConn(port), 
         };
 
         if (config.helpers) {
             setupConsoleHelpers();
         }
 
+        this.loadWasm("./wanix.wasm");
+        
+    }
+
+    async loadWasm(url) {
+        const response = await fetch(url);
+        const wasmBytes = new Uint8Array(await response.arrayBuffer());
+        const wasmString = new TextDecoder('utf-8', { ignoreBOM: true, fatal: false }).decode(wasmBytes);
+
+        const execScript = document.createElement('script');
+        if (wasmString.includes("tinygo_launch")) {
+            console.log("TinyGo WASM detected");
+            execScript.textContent = wasmExecTinygo;
+        } else {
+            console.log("Go WASM detected");
+            execScript.textContent = wasmExecGo;
+        }
+        document.head.appendChild(execScript);
+
         const go = new window.Go(); 
-        WebAssembly.instantiateStreaming(fetch("./wanix.wasm"), go.importObject).then(obj => {
+        WebAssembly.instantiate(wasmBytes, go.importObject).then(obj => {
             go.run(obj.instance);
         }); 
-        
     }
 }
 
