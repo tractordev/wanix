@@ -19,7 +19,6 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/external/linux"
 	v86 "tractor.dev/wanix/external/v86"
-	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/runtime/assets"
 	"tractor.dev/wanix/shell"
@@ -57,17 +56,12 @@ func serveCmd() *cli.Command {
 
 				if r.URL.Path == "/wanix.wasm" {
 					w.Header().Add("Content-Type", "application/wasm")
-
-					// TODO: a flag to select the wasm variant
-					if ok, _ := fs.Exists(assets.Dir, "wanix.wasm"); ok {
-						http.ServeFileFS(w, r, assets.Dir, "wanix.wasm")
-					} else if ok, _ := fs.Exists(assets.Dir, "wanix.tinygo.wasm"); ok {
-						http.ServeFileFS(w, r, assets.Dir, "wanix.tinygo.wasm")
-					} else if ok, _ := fs.Exists(assets.Dir, "wanix.go.wasm"); ok {
-						http.ServeFileFS(w, r, assets.Dir, "wanix.go.wasm")
-					} else {
-						log.Fatal("no wanix wasm found in assets")
+					// TODO: a flag to prefer variant
+					wasmFsys, err := assets.WasmFS(false)
+					if err != nil {
+						log.Fatal(err)
 					}
+					http.ServeFileFS(w, r, wasmFsys, "wanix.wasm")
 					return
 				}
 

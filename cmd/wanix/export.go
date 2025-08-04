@@ -21,7 +21,7 @@ import (
 func exportCmd() *cli.Command {
 	cmd := &cli.Command{
 		Usage: "export",
-		Short: "",
+		Short: "(deprecated)",
 		Run: func(ctx *cli.Context, args []string) {
 			log.SetFlags(log.Ltime | log.Lmicroseconds | log.Lshortfile)
 
@@ -31,19 +31,10 @@ func exportCmd() *cli.Command {
 				"shell": shell.Dir,
 			}}
 
-			// Check for wanix.wasm variants and add to wasmFsys
-			wasmFsys := fskit.MapFS{}
-			if ok, _ := fs.Exists(assets.Dir, "wanix.wasm"); ok {
-				wasmFsys["wanix.wasm"], _ = fs.Sub(assets.Dir, "wanix.wasm")
-
-			} else if ok, _ := fs.Exists(assets.Dir, "wanix.tinygo.wasm"); ok {
-				wasmFsys["wanix.wasm"], _ = fs.Sub(assets.Dir, "wanix.tinygo.wasm")
-
-			} else if ok, _ := fs.Exists(assets.Dir, "wanix.go.wasm"); ok {
-				wasmFsys["wanix.wasm"], _ = fs.Sub(assets.Dir, "wanix.go.wasm")
-
-			} else {
-				log.Fatal("no wanix wasm found in assets")
+			// TODO: a flag to prefer variant
+			wasmFsys, err := assets.WasmFS(false)
+			if err != nil {
+				log.Fatal(err)
 			}
 
 			// Create a new tar writer
