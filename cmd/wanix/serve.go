@@ -29,22 +29,29 @@ func serveCmd() *cli.Command {
 		listenAddr string
 	)
 	cmd := &cli.Command{
-		Usage: "serve",
-		Short: "serve wanix",
+		Usage: "serve [dir]",
+		Short: "serve directory contents with wanix overlay",
 		Run: func(ctx *cli.Context, args []string) {
+			dir := "."
+			if len(args) > 0 {
+				dir = args[0]
+			}
+			dirFS := os.DirFS(dir)
+
 			log.SetFlags(log.Ltime | log.Lmicroseconds | log.Lshortfile)
 
 			h, p, _ := net.SplitHostPort(listenAddr)
 			if h == "" {
 				h = "localhost"
 			}
-			fmt.Printf("serving on http://%s:%s ...\n", h, p)
+			fmt.Printf("serving %s files with wanix overlay on http://%s:%s ...\n", dir, h, p)
 
-			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
+			extra := fskit.MapFS{
 				"v86":   v86.Dir,
 				"linux": linux.Dir,
 				"shell": shell.Dir,
-			}}
+			}
+			fsys := fskit.UnionFS{assets.Dir, extra, dirFS}
 
 			go serveNetwork()
 
