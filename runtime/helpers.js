@@ -1,3 +1,5 @@
+import { Terminal } from 'xterm';
+
 export function setupConsoleHelpers() {
     window.list = (name) => { 
         window.wanix.instance.readDir(name).then(console.log); 
@@ -38,32 +40,38 @@ export function setupConsoleHelpers() {
         window.wanix.instance.close(fd);
     };
 
-    window.bootShell = async (screen=false) => {
-        if (screen) {
-            const screen = document.createElement('div');
-            const div = document.createElement('div');
-            const canvas = document.createElement('canvas');
-            screen.appendChild(div);
-            screen.appendChild(canvas);
-            screen.id = 'screen';
-            document.body.appendChild(screen);
-        }
+    window.bootShell = async (isConsole) => {
         const w = window.wanix.instance;
-
         const query = new URLSearchParams(window.location.search);
         const url = query.get("tty");
-        if (url) {
-            // websocket tty mode 
-            await w.readFile("cap/new/ws");
-            await w.writeFile("cap/1/ctl", `mount ${url}`);
-            await w.readFile("web/vm/new");
-            await w.writeFile("task/1/ctl", "bind cap/1/data web/vm/1/ttyS0");
-        } else {
-            // xterm.js mode 
-            await w.readFile("web/dom/new/xterm");
-            await w.writeFile("web/dom/body/ctl", "append-child 1");
-            await w.readFile("web/vm/new");
-            await w.writeFile("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0");
+
+        if (isConsole) {
+            const term = new Terminal({
+                cursorBlink: true,
+                convertEol: true,
+            });
+            term.open(document.getElementById('terminal'));
+    
+            const tty = await w.open("web/tty/new");
+            term.onData(async (data) => {
+                w.write(tty, data);
+            });
+    
+            const reader = w.readable(tty).getReader();
+            (async () => {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) {
+                        break;
+                    }
+                    term.write(value);
+                }
+            })();
+        }
+        
+        await w.readFile("web/vm/new");
+        if (isConsole) {
+            await w.writeFile("task/1/ctl", `bind web/tty/1/data web/vm/1/ttyS0`);
         }
         
         await w.writeFile("task/1/ctl", "bind . web/vm/1/fsys");
@@ -94,3 +102,4 @@ export function setupConsoleHelpers() {
         await w.writeFile("web/vm/2/ctl", "start");
     }
 }
+

@@ -24,40 +24,6 @@ export class Wanix extends WanixFS {
         v86Script.src = "./v86/libv86.js";
         document.head.appendChild(v86Script);
 
-        const v86Script = document.createElement('script');
-        v86Script.src = "./v86/libv86.js";
-        document.head.appendChild(v86Script);
-
-        // todo: properly detect which to use
-        const execScript = document.createElement('script');
-        execScript.textContent = wasmExecGo;
-        document.head.appendChild(execScript);
-
-        const term = new Terminal({
-            cursorBlink: true,
-            convertEol: true,
-        });
-        term.open(document.getElementById('terminal'));
-
-        const ws = new WebSocket("ws://" + window.location.host + "/wanix/ws");
-        ws.binaryType = "arraybuffer";
-
-        ws.onopen = () => {
-            console.log("wanix: websocket connected");
-            term.onData(data => {
-                ws.send(data);
-            });
-            ws.onmessage = (event) => {
-                term.write(new Uint8Aray(event.data));
-            };
-        };
-
-        ws.onclose = () => {
-            console.log("wanix: websocket disconnected");
-            term.write("\r\n\r\n[Connection closed]\r\n");
-        };
-
-
         const sys = new MessageChannel();
         super(sys.port1);
         
