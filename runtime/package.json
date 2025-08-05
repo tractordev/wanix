@@ -2,7 +2,10 @@
     "dependencies": {
         "@bjorn3/browser_wasi_shim": "^0.4.1",
         "cbor-x": "^1.6.0",
+<<<<<<< HEAD
         "js-untar": "^2.0.0",
+=======
+>>>>>>> 3238d25cd13dd2a9d7bfcd5e609f8c2f4866356a
         "xterm": "^5.3.0"
     }
 }
