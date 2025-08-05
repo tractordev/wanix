@@ -4,6 +4,8 @@ import { setupConsoleHelpers } from "./helpers.js";
 import { setupWio } from "./wio.js";
 import { WanixFS } from "./fs.js";
 
+import untar from "js-untar";
+
 // text loaders set up by esbuild
 import wasmExecGo from "./wasm/wasm_exec.go.js";
 import wasmExecTinygo from "./wasm/wasm_exec.tinygo.js";
@@ -39,13 +41,28 @@ export class Wanix extends WanixFS {
             setupConsoleHelpers();
         }
 
-        this.loadWasm("./wanix.wasm");
+        if (config.bundle) {
+            this.loadBundle(config.bundle);
+        } else {
+            fetch("./wanix.wasm").then(r => r.arrayBuffer()).then(this.loadWasm);
+        }
         
     }
 
-    async loadWasm(url) {
-        const response = await fetch(url);
-        const wasmBytes = new Uint8Array(await response.arrayBuffer());
+    async loadBundle(bundle) {
+        console.log("loading bundle", bundle);
+        const response = await fetch(bundle);
+        const stream = response.body.pipeThrough(new DecompressionStream('gzip'));
+        const bundleFiles = await untar(await new Response(stream).arrayBuffer()).progress((f) => {
+            if (f.name === "wanix.wasm") {
+                console.log("loading wasm from bundle");
+                this.loadWasm(f.buffer);
+            }
+        });
+    }
+
+    async loadWasm(buffer) {
+        const wasmBytes = new Uint8Array(buffer);
         const wasmString = new TextDecoder('utf-8', { ignoreBOM: true, fatal: false }).decode(wasmBytes);
 
         const execScript = document.createElement('script');

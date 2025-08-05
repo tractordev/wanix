@@ -6,7 +6,8 @@
 	</head>
 	<body>
         <script>
-            new Wanix({ helpers: true });
+            const urlParams = new URLSearchParams(window.location.search);
+            new Wanix({ helpers: true, bundle: urlParams.get('bundle') });
 
             if (!window.location.search.includes('shell=false')) {
                 window.bootShell(window.location.search.includes('console=true'));
