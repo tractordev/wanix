@@ -175,10 +175,10 @@ func (ns *NS) Unbind(src fs.FS, srcPath, dstPath string) error {
 	return nil
 }
 
-// Bind adds a file or directory to the namespace. If specified, mode is "after" (default), "before", or "replace",
-// which controls the order of the bindings.
-// TODO: replace mode arg with BindMode enum
-func (ns *NS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
+// Bind adds a file or directory to the namespace.
+// If specified, mode controls the order of the bindings.
+// Only the first mode is used. If not specified, ModeAfter is used.
+func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, mode ...BindMode) error {
 	if !fs.ValidPath(srcPath) {
 		return &fs.PathError{Op: "bind", Path: srcPath, Err: fs.ErrNotExist}
 	}
@@ -202,15 +202,21 @@ func (ns *NS) Bind(src fs.FS, srcPath, dstPath, mode string) error {
 	file.Close()
 
 	ref := bindTarget{fs: rfsys, path: rname, fi: fi}
-	switch mode {
-	case "", "after":
+	var m BindMode
+	if len(mode) == 0 {
+		m = ModeAfter
+	} else {
+		m = mode[0]
+	}
+	switch m {
+	case ModeAfter:
 		ns.bindings[dstPath] = append([]bindTarget{ref}, ns.bindings[dstPath]...)
-	case "before":
+	case ModeBefore:
 		ns.bindings[dstPath] = append(ns.bindings[dstPath], ref)
-	case "replace":
+	case ModeReplace:
 		ns.bindings[dstPath] = []bindTarget{ref}
 	default:
-		return &fs.PathError{Op: "bind", Path: mode, Err: fs.ErrInvalid}
+		return &fs.PathError{Op: "bind", Path: dstPath, Err: fs.ErrInvalid}
 	}
 	return nil
 }

@@ -44,15 +44,15 @@ func (k *K) NewRoot() (*task.Resource, error) {
 	k.NS = p.Namespace()
 	k.nsch <- k.NS
 	// bind hidden kernel devices
-	if err := p.Namespace().Bind(k.Cap, ".", "#cap", ""); err != nil {
+	if err := p.Namespace().Bind(k.Cap, ".", "#cap"); err != nil {
 		return nil, err
 	}
-	if err := p.Namespace().Bind(k.Task, ".", "#task", ""); err != nil {
+	if err := p.Namespace().Bind(k.Task, ".", "#task"); err != nil {
 		return nil, err
 	}
 
 	for name, mod := range k.Mod {
-		if err := p.Namespace().Bind(mod, ".", name, ""); err != nil {
+		if err := p.Namespace().Bind(mod, ".", name); err != nil {
 			return nil, err
 		}
 	}

@@ -78,7 +78,7 @@ func (r *Resource) Dir() string {
 }
 
 func (r *Resource) Bind(srcPath, dstPath string) error {
-	return r.ns.Bind(r.ns, srcPath, dstPath, "")
+	return r.ns.Bind(r.ns, srcPath, dstPath)
 }
 
 func (r *Resource) Unbind(srcPath, dstPath string) error {

@@ -193,7 +193,7 @@ func setupAPI(peer *talk.Peer, root *task.Resource) {
 		c.Receive(&args)
 
 		ns := root.Namespace()
-		err := ns.Bind(ns, args[0], args[1], "")
+		err := ns.Bind(ns, args[0], args[1])
 		if err != nil {
 			r.Return(err)
 			return

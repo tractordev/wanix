@@ -47,7 +47,7 @@ func main() {
 		js.CopyBytesToGo(b, jsBuf)
 		buf := bytes.NewBuffer(b)
 		bundleFS := tarfs.Load(tar.NewReader(buf))
-		root.Namespace().Bind(bundleFS, ".", "#bundle", "")
+		root.Namespace().Bind(bundleFS, ".", "#bundle")
 		root.Bind("#bundle", "bundle")
 	}
 
@@ -61,7 +61,7 @@ func main() {
 	if err := fs.CopyFS(shellfs, ".", rw, "."); err != nil {
 		log.Fatal(err)
 	}
-	root.Namespace().Bind(rw, ".", "#shell", "")
+	root.Namespace().Bind(rw, ".", "#shell")
 	// root.Namespace().Bind(fskit.MemFS{}, ".", "#shell", "")
 
 	// afs, err := fetchTarballFS("/shell/alpine.tgz")
