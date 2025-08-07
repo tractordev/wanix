@@ -4,6 +4,7 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"log"
 	"syscall/js"
@@ -38,6 +39,17 @@ func main() {
 	root.Bind("#task", "task")
 	root.Bind("#cap", "cap")
 	root.Bind("#web", "web")
+
+	bundleBytes := inst.Get("bundle")
+	if !bundleBytes.IsUndefined() {
+		jsBuf := js.Global().Get("Uint8Array").New(bundleBytes)
+		b := make([]byte, jsBuf.Length())
+		js.CopyBytesToGo(b, jsBuf)
+		buf := bytes.NewBuffer(b)
+		bundleFS := tarfs.Load(tar.NewReader(buf))
+		root.Namespace().Bind(bundleFS, ".", "#bundle", "")
+		root.Bind("#bundle", "bundle")
+	}
 
 	shellfs, err := fetchTarballFS("/shell/shell.tgz")
 	if err != nil {

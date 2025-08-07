@@ -27,7 +27,7 @@ export class Wanix extends WanixFS {
         const sys = new MessageChannel();
         super(sys.port1);
         
-        window.wanix = this.context = {
+        window.wanix = {
             config,
             instance: this,
             sys: new duplex.PortConn(sys.port2),
@@ -53,10 +53,18 @@ export class Wanix extends WanixFS {
         console.log("loading bundle", bundle);
         const response = await fetch(bundle);
         const stream = response.body.pipeThrough(new DecompressionStream('gzip'));
-        const bundleFiles = await untar(await new Response(stream).arrayBuffer()).progress((f) => {
+        window.wanix.bundle = await new Response(stream).arrayBuffer();
+        const toUntar = window.wanix.bundle.slice();
+        let foundWasm = false;
+        untar(toUntar).progress((f) => {
             if (f.name === "wanix.wasm") {
+                foundWasm = true;
                 console.log("loading wasm from bundle");
                 this.loadWasm(f.buffer);
+            }
+        }).then(() => {
+            if (!foundWasm) {
+                fetch("./wanix.wasm").then(r => r.arrayBuffer()).then(this.loadWasm);
             }
         });
     }
