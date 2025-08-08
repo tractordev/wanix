@@ -9,6 +9,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/vfs"
+	"tractor.dev/wanix/vfs/pipe"
 )
 
 type Service struct {
@@ -42,23 +43,23 @@ func (d *Service) Alloc(kind string, parent *Resource) (*Resource, error) {
 	d.nextID++
 	rid := strconv.Itoa(d.nextID)
 
-	a0, b0 := internal.BufferedConnPipe(false)
-	a1, b1 := internal.BufferedConnPipe(false)
-	a2, b2 := internal.BufferedConnPipe(false)
+	_, p0a, p0b := pipe.NewFS(false)
+	_, p1a, p1b := pipe.NewFS(false)
+	_, p2a, p2b := pipe.NewFS(false)
 
 	p := &Resource{
 		starter: starter,
 		id:      d.nextID,
 		typ:     kind,
 		fds: map[string]fs.FS{
-			"0": newFdFile(a0, "0"),
-			"1": newFdFile(a1, "1"),
-			"2": newFdFile(a2, "2"),
+			"0": fskit.FileFS(p0a, "0"),
+			"1": fskit.FileFS(p1a, "1"),
+			"2": fskit.FileFS(p2a, "2"),
 		},
 		sys: map[string]fs.FS{
-			"fd0": newFdFile(b0, "fd0"),
-			"fd1": newFdFile(b1, "fd1"),
-			"fd2": newFdFile(b2, "fd2"),
+			"fd0": fskit.FileFS(p0b, "fd0"),
+			"fd1": fskit.FileFS(p1b, "fd1"),
+			"fd2": fskit.FileFS(p2b, "fd2"),
 		},
 	}
 	ctx := context.WithValue(context.Background(), TaskContextKey, p)

@@ -14,6 +14,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/tarfs"
 	"tractor.dev/wanix/internal"
+	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
 	"tractor.dev/wanix/web/jsutil"
@@ -30,6 +31,7 @@ func main() {
 
 	k := wanix.New()
 	k.AddModule("#web", web.New(k, inst))
+	k.AddModule("#pipe", &pipe.Allocator{})
 
 	root, err := k.NewRoot()
 	if err != nil {

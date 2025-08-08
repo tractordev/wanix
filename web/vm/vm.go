@@ -13,6 +13,7 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
+	"tractor.dev/wanix/vfs/pipe"
 )
 
 type VM struct {
@@ -67,11 +68,11 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 type serial struct {
 	js.Value
-	buf *internal.BufferedPipe
+	buf *pipe.Buffer
 }
 
 func newSerial(vm js.Value) *serial {
-	buf := internal.NewBufferedPipe(true)
+	buf := pipe.NewBuffer(true)
 	vm.Call("add_listener", "serial0-output-byte", js.FuncOf(func(this js.Value, args []js.Value) any {
 		buf.Write([]byte{byte(args[0].Int())})
 		return nil

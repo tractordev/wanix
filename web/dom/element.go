@@ -13,6 +13,7 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
+	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/web/jsutil"
 )
 
@@ -117,11 +118,11 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 
 type termDataFile struct {
 	js.Value
-	buf *internal.BufferedPipe
+	buf *pipe.Buffer
 }
 
 func newTermData(term js.Value) *termDataFile {
-	buf := internal.NewBufferedPipe(true)
+	buf := pipe.NewBuffer(true)
 	enc := js.Global().Get("TextEncoder").New()
 	term.Call("onData", js.FuncOf(func(this js.Value, args []js.Value) any {
 		jsbuf := enc.Call("encode", args[0])
