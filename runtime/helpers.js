@@ -61,9 +61,14 @@ export function setupConsoleHelpers() {
         } else {
             // xterm.js mode 
             await w.readFile("web/dom/new/xterm");
-            await w.writeFile("web/dom/body/ctl", "append-child 1");
             await w.readFile("web/vm/new");
-            await w.writeFile("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0");
+
+            await w.writeFile("task/1/ctl", "bind #console/data web/dom/1/data");
+            await w.writeFile("task/1/ctl", "bind #console/data1 web/vm/1/ttyS0");
+            
+            // await w.writeFile("task/1/ctl", "bind web/dom/1/data web/vm/1/ttyS0");
+
+            await w.writeFile("web/dom/body/ctl", "append-child 1");
         }
         
         await w.writeFile("task/1/ctl", "bind . web/vm/1/fsys");
