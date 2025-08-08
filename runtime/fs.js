@@ -26,6 +26,10 @@ export class WanixFS {
         return (await this.peer.call("ReadFile", [name])).value;
     }
 
+    async readText(name) {
+        return (new TextDecoder()).decode(await this.readFile(name));
+    }
+
     async stat(name) {
         return (await this.peer.call("Stat", [name])).value;
     }
