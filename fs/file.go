@@ -1,8 +1,11 @@
 package fs
 
 import (
+	"encoding/gob"
 	"fmt"
+	"hash/fnv"
 	"io"
+	"reflect"
 )
 
 // Write writes data to the file.
@@ -76,4 +79,48 @@ func Sync(f File) error {
 		return sf.Sync()
 	}
 	return fmt.Errorf("%w: Sync", ErrNotSupported)
+}
+
+type IdentityFile interface {
+	File
+	Identity() ID
+}
+
+type ID struct {
+	Dev uint64
+	Ino uint64
+	Ptr uint64
+	Sum uint64
+}
+
+type Namer interface {
+	Name() string
+}
+
+func Identity(f any) ID {
+	if ifi, ok := f.(IdentityFile); ok {
+		return ifi.Identity()
+	}
+
+	// todo: get from stat
+
+	if nf, ok := f.(Namer); ok {
+		h := fnv.New64a()
+		h.Write([]byte(nf.Name()))
+		return ID{Sum: h.Sum64()}
+	}
+
+	rv := reflect.ValueOf(f)
+	if rv.Kind() == reflect.Ptr {
+		return ID{Ptr: uint64(rv.Pointer())}
+	}
+
+	h := fnv.New64a()
+	gob.NewEncoder(h).Encode(f)
+	return ID{Sum: h.Sum64()}
+}
+
+func SameFile(a, b File) bool {
+	// log.Println("SameFile", a, b, Identity(a), Identity(b))
+	return Identity(a) == Identity(b)
 }
