@@ -74,6 +74,10 @@ func (f *renamedFile) Stat() (fs.FileInfo, error) {
 // we also have to implement any other interfaces that we want to expose
 // from the underlying file implementation
 
+func (f *renamedFile) Identity() fs.ID {
+	return fs.Identity(f.File)
+}
+
 func (f *renamedFile) Seek(offset int64, whence int) (int64, error) {
 	return fs.Seek(f.File, offset, whence)
 }
