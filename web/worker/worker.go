@@ -56,6 +56,14 @@ func (r *Resource) Start(args ...string) error {
 	}
 
 	r.worker = js.Global().Get("Worker").New(url, js.ValueOf(map[string]any{"type": "module"}))
+	r.worker.Set("onerror", js.FuncOf(func(this js.Value, args []js.Value) any {
+		js.Global().Get("console").Call("error", args[0])
+		return nil
+	}))
+	r.worker.Set("onmessageerror", js.FuncOf(func(this js.Value, args []js.Value) any {
+		js.Global().Get("console").Call("error", args[0])
+		return nil
+	}))
 
 	ch := js.Global().Get("MessageChannel").New()
 	connPort := js.Global().Get("wanix").Call("_toport", ch.Get("port1"))
