@@ -42,6 +42,8 @@ func main() {
 	root.Bind("#cap", "cap")
 	root.Bind("#web", "web")
 
+	root.Bind("#pipe", "#console")
+
 	bundleBytes := inst.Get("bundle")
 	if !bundleBytes.IsUndefined() {
 		jsBuf := js.Global().Get("Uint8Array").New(bundleBytes)
