@@ -20,6 +20,15 @@ const (
 	ModeBefore  BindMode = -1
 )
 
+// BindAllocator is an interface that can be implemented by a filesystem
+// to allocate a new filesystem for a binding.
+type BindAllocator interface {
+	// BindAllocFS is called when a new binding is added to the namespace.
+	// It should return a new filesystem for the binding.
+	// The name is the source path of the binding.
+	BindAllocFS(name string) (fs.FS, error)
+}
+
 // NS represents a namespace with Plan9-style file and directory bindings.
 // Todo: figure out how to make this thread safe. Tricky because ResolveFS
 // can call back into the namespace.
@@ -191,6 +200,16 @@ func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, mode ...BindMode) error {
 	if err != nil {
 		return err
 	}
+
+	// If the source filesystem implements BindAllocator,
+	// use it to allocate a new filesystem for the binding.
+	if allocator, ok := rfsys.(BindAllocator); ok {
+		rfsys, err = allocator.BindAllocFS(srcPath)
+		if err != nil {
+			return err
+		}
+	}
+
 	file, err := rfsys.Open(rname)
 	if err != nil {
 		return err
@@ -202,6 +221,7 @@ func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, mode ...BindMode) error {
 	file.Close()
 
 	ref := bindTarget{fs: rfsys, path: rname, fi: fi}
+
 	var m BindMode
 	if len(mode) == 0 {
 		m = ModeAfter
