@@ -10,7 +10,7 @@ import {
 	DirectoryHandle, 
 	PreopenDirectory,
 	applyPatchPollOneoff
-} from "../wanix.min.js";
+} from "./lib.js";
 
 self.onmessage = async (e) => {
     if (!e.data.buffer) {
@@ -48,7 +48,7 @@ self.onmessage = async (e) => {
 	});
 
 	
-	const wasm = await WebAssembly.compileStreaming(fetch("/:/"+e.data.args[0]));
+	const wasm = await WebAssembly.compile(e.data.bin);
 	const inst = await WebAssembly.instantiate(wasm, imports);
 	go.run(inst);
 	const code = wasi.start(inst);
@@ -573,3 +573,5 @@ self.onmessage = async (e) => {
 		});
 	}
 })();
+
+console.log("wasi worker sync loaded");

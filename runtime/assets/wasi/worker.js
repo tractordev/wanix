@@ -1,4 +1,4 @@
-import { WanixFS, CallBuffer } from "../wanix.min.js";
+import { WanixFS, CallBuffer } from "./lib.js";
 
 self.onmessage = async (e) => {
     if (!e.data.worker) {
@@ -8,8 +8,8 @@ self.onmessage = async (e) => {
     const pid = e.data.worker.env.pid;
     const fs = new WanixFS(e.data.worker.fsys);
 
-    const shared = new SharedArrayBuffer(16384);
-    const call = new CallBuffer(shared);
+    const buffer = new SharedArrayBuffer(16384);
+    const call = new CallBuffer(buffer);
 
     const worker = new Worker("./worker_sync.js", {type: "module"});
     worker.onmessage = async (e) => {
@@ -87,14 +87,21 @@ self.onmessage = async (e) => {
         // console.log(performance.now() - start);
     }
 
-    const cmd = await fs.readFile(`task/${pid}/cmd`);
-    const env = await fs.readFile(`task/${pid}/env`);
+    const cmdBuf = await fs.readFile(`task/${pid}/cmd`);
+    const envBuf = await fs.readFile(`task/${pid}/env`);
+    const cmd = (new TextDecoder()).decode(cmdBuf).trim();
+    const env = (new TextDecoder()).decode(envBuf).trim().split("\n");
+    const args = cmd.split(" ");
+    const bin = await fs.readFile(args[0]);
     worker.postMessage({
-        buffer: shared, 
-        args: (new TextDecoder()).decode(cmd).trim().split(" "),
-        env: (new TextDecoder()).decode(env).trim().split("\n"),
+        buffer, 
+        bin,
+        args,
+        env,
         stdin: `task/${pid}/.sys/fd0`,
         stdout: `task/${pid}/.sys/fd1`,
         stderr: `task/${pid}/.sys/fd2`,
     });
 }
+
+console.log("wasi worker loaded");
