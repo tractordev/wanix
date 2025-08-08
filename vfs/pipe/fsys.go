@@ -79,7 +79,7 @@ func (a *Allocator) OpenContext(ctx context.Context, name string) (iofs.File, er
 }
 
 func (a *Allocator) BindAllocFS(name string) (iofs.FS, error) {
-	fsys, _, _ := NewFS(false)
+	fsys, _, _ := NewFS(true)
 	return fsys, nil
 }
 
