@@ -31,7 +31,7 @@ export class Wanix extends WanixFS {
             config,
             instance: this,
             sys: new duplex.PortConn(sys.port2),
-            sw: new MessageChannel(),
+            // sw: new MessageChannel(),
 
             // kludge: for worker
             _toport: (port) => new duplex.PortConn(port), 
