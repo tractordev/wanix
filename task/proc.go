@@ -2,9 +2,7 @@ package task
 
 import (
 	"context"
-	"io"
 	"log"
-	"net"
 	"strconv"
 	"strings"
 
@@ -152,42 +150,4 @@ func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error
 		return nil, err
 	}
 	return fs.OpenContext(ctx, fsys, rname)
-}
-
-type ConnFile struct {
-	net.Conn
-	Name string
-}
-
-func newFdFile(conn net.Conn, name string) fs.FS {
-	return fskit.OpenFunc(func(ctx context.Context, _ string) (fs.File, error) {
-		return &ConnFile{Conn: conn, Name: name}, nil
-	})
-}
-
-func (s *ConnFile) Stat() (fs.FileInfo, error) {
-	return fskit.Entry(s.Name, 0644), nil
-}
-
-func (s *ConnFile) WriteAt(p []byte, off int64) (n int, err error) {
-	return s.Write(p)
-}
-
-func (s *ConnFile) Write(p []byte) (n int, err error) {
-	return s.Conn.Write(p)
-}
-
-func (s *ConnFile) ReadAt(p []byte, off int64) (n int, err error) {
-	if off > 0 {
-		return 0, io.EOF
-	}
-	return s.Read(p)
-}
-
-func (s *ConnFile) Read(p []byte) (int, error) {
-	return s.Conn.Read(p)
-}
-
-func (s *ConnFile) Close() error {
-	return nil
 }
