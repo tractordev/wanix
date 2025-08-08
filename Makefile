@@ -86,6 +86,7 @@ wasm-go:
 runtime-js:
 	$(DOCKER_CMD) build --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) --load -t wanix-build-js -f Dockerfile.runtime .
 	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-js
+	mv runtime/assets/wanix.wasilib.js runtime/assets/wasi/lib.js
 .PHONY: runtime-js
 
 ## Build v86 emulator (in Docker)
