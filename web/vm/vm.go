@@ -4,6 +4,7 @@ package vm
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"path"
@@ -20,7 +21,7 @@ type VM struct {
 	id     int
 	typ    string
 	value  js.Value
-	serial *serial
+	serial *serialReadWriter
 }
 
 func (r *VM) Value() js.Value {
@@ -31,7 +32,41 @@ func (r *VM) Open(name string) (fs.File, error) {
 	return r.OpenContext(context.Background(), name)
 }
 
+func TryPatch(ctx context.Context, serial *serialReadWriter, serialFile *fskit.StreamFile) error {
+	fsys, name, ok := fs.Origin(ctx)
+	if !ok {
+		return nil
+	}
+	ttyFile := path.Join(path.Dir(name), "ttyS0")
+	if ok, err := fs.Exists(fsys, ttyFile); !ok {
+		return fmt.Errorf("no ttyS0 file: %w", err)
+	}
+	tty, err := fsys.Open(ttyFile)
+	if err != nil {
+		return fmt.Errorf("open ttyS0 file: %w", err)
+	}
+	if fs.SameFile(tty, serialFile) {
+		return nil
+	}
+	if w, ok := tty.(io.Writer); ok {
+		go func() {
+			_, err := io.Copy(serial, tty)
+			if err != nil {
+				log.Println("dom append-child: copy ttyS0 to serial:", err)
+			}
+		}()
+		go func() {
+			_, err := io.Copy(w, serial)
+			if err != nil {
+				log.Println("dom append-child: copy serial to ttyS0:", err)
+			}
+		}()
+	}
+	return nil
+}
+
 func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
+	serialFile := fskit.NewStreamFile(r.serial, r.serial, nil, fs.FileMode(0644))
 	fsys := fskit.MapFS{
 		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
@@ -39,21 +74,8 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 			Run: func(_ *cli.Context, args []string) {
 				switch args[0] {
 				case "start":
-					fsys, name, ok := fs.Origin(ctx)
-					if ok {
-						ttyFile := path.Join(path.Dir(name), "ttyS0")
-						if ok, err := fs.Exists(fsys, ttyFile); ok {
-							if tty, err := fsys.Open(ttyFile); err == nil {
-								go io.Copy(r.serial, tty)
-								if w, ok := tty.(io.Writer); ok {
-									go io.Copy(w, r.serial)
-								}
-							} else {
-								log.Println("vm start:", err)
-							}
-						} else {
-							log.Println("vm start: no ttyS0 file", err)
-						}
+					if err := TryPatch(ctx, r.serial, serialFile); err != nil {
+						log.Println("vm start:", err)
 					}
 					r.value.Get("ready").Call("then", js.FuncOf(func(this js.Value, args []js.Value) any {
 						r.value.Call("run")
@@ -63,33 +85,36 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 			},
 		}),
 	}
+	if r.serial != nil {
+		fsys["ttyS0"] = fskit.FileFS(serialFile, "ttyS0")
+	}
 	return fs.OpenContext(ctx, fsys, name)
 }
 
-type serial struct {
+type serialReadWriter struct {
 	js.Value
 	buf *pipe.Buffer
 }
 
-func newSerial(vm js.Value) *serial {
+func newSerialReadWriter(vm js.Value) *serialReadWriter {
 	buf := pipe.NewBuffer(true)
 	vm.Call("add_listener", "serial0-output-byte", js.FuncOf(func(this js.Value, args []js.Value) any {
 		buf.Write([]byte{byte(args[0].Int())})
 		return nil
 	}))
-	return &serial{
+	return &serialReadWriter{
 		Value: vm,
 		buf:   buf,
 	}
 }
 
-func (s *serial) Write(p []byte) (n int, err error) {
+func (s *serialReadWriter) Write(p []byte) (n int, err error) {
 	buf := js.Global().Get("Uint8Array").New(len(p))
 	n = js.CopyBytesToJS(buf, p)
 	s.Value.Call("serial_send_bytes", 0, buf)
 	return
 }
 
-func (s *serial) Read(p []byte) (int, error) {
+func (s *serialReadWriter) Read(p []byte) (int, error) {
 	return s.buf.Read(p)
 }

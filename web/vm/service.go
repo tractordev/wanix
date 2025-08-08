@@ -41,7 +41,7 @@ func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error)
 							id:     d.nextID,
 							typ:    name,
 							value:  vm,
-							serial: newSerial(vm),
+							serial: newSerialReadWriter(vm),
 						}
 						fskit.SetData(n, []byte(rid+"\n"))
 						return nil

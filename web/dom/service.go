@@ -72,7 +72,7 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 					d.nextID++
 					rid := strconv.Itoa(d.nextID)
 					var el js.Value
-					var termData *termDataFile
+					var termData *terminalReadWriter
 					if name == "xterm" {
 						xterm.Load()
 						el = js.Global().Get("document").Call("createElement", "div")
@@ -115,7 +115,7 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 						fitAddon := js.Global().Get("FitAddon").Get("FitAddon").New()
 						term.Call("loadAddon", fitAddon)
 						term.Set("fitAddon", fitAddon)
-						termData = newTermData(term)
+						termData = newTerminalReadWriter(term)
 						setupFileDrop(el, d.k.NS)
 					} else {
 						el = js.Global().Get("document").Call("createElement", name)

@@ -5,6 +5,9 @@ package dom
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
+	"path"
 	"strconv"
 	"strings"
 	"syscall/js"
@@ -24,7 +27,7 @@ type Element struct {
 	value   js.Value
 	dom     *Service
 
-	termData *termDataFile
+	termData *terminalReadWriter
 }
 
 func (r *Element) ID() string {
@@ -37,6 +40,39 @@ func (r *Element) Value() js.Value {
 
 func (r *Element) Open(name string) (fs.File, error) {
 	return r.OpenContext(context.Background(), name)
+}
+
+func TryPatch(ctx context.Context, el *Element, termFile *fskit.StreamFile) error {
+	fsys, name, ok := fs.Origin(ctx)
+	if !ok {
+		return nil
+	}
+	dataFile := path.Join(path.Dir(path.Dir(name)), el.ID(), "data")
+	if ok, err := fs.Exists(fsys, dataFile); !ok {
+		return fmt.Errorf("no data file: %s %w", dataFile, err)
+	}
+	data, err := fsys.Open(dataFile)
+	if err != nil {
+		return fmt.Errorf("open data file: %w", err)
+	}
+	if fs.SameFile(data, termFile) {
+		return nil
+	}
+	if w, ok := data.(io.Writer); ok {
+		go func() {
+			_, err := io.Copy(el.termData, data)
+			if err != nil {
+				log.Println("dom append-child: copy data to term:", err)
+			}
+		}()
+		go func() {
+			_, err := io.Copy(w, el.termData)
+			if err != nil {
+				log.Println("dom append-child: copy term to data:", err)
+			}
+		}()
+	}
+	return nil
 }
 
 func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error) {
@@ -59,6 +95,10 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 					if el.typ == "xterm" {
 						el.Value().Get("term").Call("open", el.Value())
 						el.Value().Get("term").Get("fitAddon").Call("fit")
+						termFile := fskit.NewStreamFile(el.termData, el.termData, nil, fs.FileMode(0644))
+						if err := TryPatch(ctx, el, termFile); err != nil {
+							log.Println("dom append-child:", err)
+						}
 					}
 				case "remove": // remove
 					delete(r.dom.resources, r.ID())
@@ -108,20 +148,19 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 			return r.value.Get("innerText").String(), nil
 		}),
 	}
-	if r.typ == "xterm" {
-		fsys["data"] = fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
-			return r.termData, nil
-		})
+	if r.typ == "xterm" && r.termData != nil {
+		termFile := fskit.NewStreamFile(r.termData, r.termData, nil, fs.FileMode(0644))
+		fsys["data"] = fskit.FileFS(termFile, "data")
 	}
 	return fs.OpenContext(ctx, fsys, name)
 }
 
-type termDataFile struct {
+type terminalReadWriter struct {
 	js.Value
 	buf *pipe.Buffer
 }
 
-func newTermData(term js.Value) *termDataFile {
+func newTerminalReadWriter(term js.Value) *terminalReadWriter {
 	buf := pipe.NewBuffer(true)
 	enc := js.Global().Get("TextEncoder").New()
 	term.Call("onData", js.FuncOf(func(this js.Value, args []js.Value) any {
@@ -131,29 +170,21 @@ func newTermData(term js.Value) *termDataFile {
 		buf.Write(gobuf)
 		return nil
 	}))
-	return &termDataFile{
+	return &terminalReadWriter{
 		Value: term,
 		buf:   buf,
 	}
 }
 
-func (s *termDataFile) Stat() (fs.FileInfo, error) {
-	return fskit.Entry("data", 0644), nil
-}
-
-func (s *termDataFile) Write(p []byte) (n int, err error) {
+func (s *terminalReadWriter) Write(p []byte) (n int, err error) {
 	buf := js.Global().Get("Uint8Array").New(len(p))
 	n = js.CopyBytesToJS(buf, p)
 	s.Value.Call("write", buf)
 	return
 }
 
-func (s *termDataFile) Read(p []byte) (int, error) {
+func (s *terminalReadWriter) Read(p []byte) (int, error) {
 	return s.buf.Read(p)
-}
-
-func (s *termDataFile) Close() error {
-	return nil
 }
 
 // TODO: handle multiple files, put in dir under opfs
