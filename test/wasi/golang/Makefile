@@ -1,7 +1,8 @@
-.PHONY: build clobber
 
 build:
 	GOOS=wasip1 GOARCH=wasm go build -o golangcheck.wasm .
+.PHONY: build
 
-clobber:
+clean:
 	rm -f golangcheck.wasm
+.PHONY: clean
