@@ -1,0 +1,13 @@
+localhost/:1  Refused to apply style from 'http://localhost:7654/node_modules/xterm/css/xterm.css' because its MIME type ('text/plain') is not a supported stylesheet MIME type, and strict MIME checking is enabled.
+wanix.min.js:12600 wanix: websocket connected
+wanix.min.js:12597  WebSocket connection to 'ws://localhost:7654/wanix/ws' failed: Invalid frame header
+Wanix @ wanix.min.js:12597
+wanix.min.js:12609 wanix: websocket disconnected
+localhost/:1  Uncaught (in promise) TypeError: WebAssembly.instantiate(): Import #0 "wasi_snapshot_preview1": module is not an object or function
+wanix-sw.js:29  ServiceWorker: no handler registered
+(anonymous) @ wanix-sw.js:29
+wanix-sw.js:29  ServiceWorker: no handler registered
+(anonymous) @ wanix-sw.js:29
+wanix-sw.js:29  ServiceWorker: no handler registered
+(anonymous) @ wanix-sw.js:29
+localhost/:1  Refused to apply style from 'http://localhost:7654/node_modules/xterm/css/xterm.css' because its MIME type ('text/plain') is not a supported stylesheet MIME type, and strict MIME checking is enabled.

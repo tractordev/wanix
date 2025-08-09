@@ -22,6 +22,7 @@ func (m *Main) InitializeCLI(root *cli.Command) {
 	root.Version = Version
 	root.AddCommand(serveCmd())
 	root.AddCommand(exportCmd())
+	root.AddCommand(bundleCmd())
 
 }
 

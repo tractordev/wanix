@@ -1,48 +1,9 @@
-
 html, body {
     height: 100%;
     margin: 0;
-    padding: 0;
-    overflow: hidden;
-    position: relative;
-    box-sizing: border-box;
+    background-color: #000;
 }
 
-.wanix-terminal {
-    width: 100%;
+#terminal {
     height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-}
-
-iframe {
-    border: 8px solid #b0eced;
-    position: absolute;
-    background-color: rgba(190, 190, 190, 0.8);
-    z-index: 1000;
-}
-
-/* Make sure the xterm canvas elements fill the container */
-.xterm {
-    height: 100%;
-    width: 100%;
-}
-
-.xterm-viewport,
-.xterm-screen {
-    width: 100%;
-    height: 100%;
-}
-
-#screen {
-    z-index: 1;
-    position: absolute;
-    bottom: 0;
-    right: 0;
-}
-#screen > div {
-    white-space: pre;
-    font: 14px monospace;
-    line-height: 14px;
 }

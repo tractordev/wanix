@@ -5,51 +5,113 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 	"github.com/progrium/go-netstack/vnet"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/external/linux"
 	v86 "tractor.dev/wanix/external/v86"
-	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/runtime/assets"
 	"tractor.dev/wanix/shell"
 )
+
+func wanixConsoleHandler(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("console: websocket upgrade failed: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	cmd := exec.Command("/bin/bash")
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		log.Printf("console: failed to start pty: %v", err)
+		return
+	}
+	defer ptmx.Close()
+
+	// copy everything from the pty to the websocket
+	go func() {
+		if _, err := io.Copy(conn.UnderlyingConn(), ptmx); err != nil {
+			// TODO: handle error
+		}
+		log.Println("wanix console pty closed")
+	}()
+
+	for {
+		mt, msg, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+
+		// Custom protocol: 1 = resize
+		if len(msg) > 0 && msg[0] == 1 {
+			var rows, cols uint16
+			if len(msg) >= 5 {
+				rows = binary.BigEndian.Uint16(msg[1:3])
+				cols = binary.BigEndian.Uint16(msg[3:5])
+				pty.Setsize(ptmx, &pty.Winsize{Rows: rows, Cols: cols})
+			}
+			continue
+		}
+
+		if mt == websocket.TextMessage || mt == websocket.BinaryMessage {
+			ptmx.Write(msg)
+		}
+	}
+
+	cmd.Wait()
+	log.Println("wanix console disconnected")
+}
 
 func serveCmd() *cli.Command {
 	var (
 		listenAddr string
 	)
 	cmd := &cli.Command{
-		Usage: "serve",
-		Short: "serve wanix",
+		Usage: "serve [dir]",
+		Short: "serve directory contents with wanix overlay",
 		Run: func(ctx *cli.Context, args []string) {
+			dir := "."
+			if len(args) > 0 {
+				dir = args[0]
+			}
+			dirFS := os.DirFS(dir)
+
 			log.SetFlags(log.Ltime | log.Lmicroseconds | log.Lshortfile)
 
 			h, p, _ := net.SplitHostPort(listenAddr)
 			if h == "" {
 				h = "localhost"
 			}
-			fmt.Printf("serving on http://%s:%s ...\n", h, p)
+			fmt.Printf("serving %s files with wanix overlay on http://%s:%s ...\n", dir, h, p)
 
-			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
+			extra := fskit.MapFS{
 				"v86":   v86.Dir,
 				"linux": linux.Dir,
 				"shell": shell.Dir,
-			}}
+			}
+			fsys := fskit.UnionFS{assets.Dir, extra, dirFS}
 
 			go serveNetwork()
 
 			http.Handle("/.well-known/", http.NotFoundHandler())
+			http.HandleFunc("/wanix/ws", wanixConsoleHandler)
 
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
@@ -57,18 +119,18 @@ func serveCmd() *cli.Command {
 
 				if r.URL.Path == "/wanix.wasm" {
 					w.Header().Add("Content-Type", "application/wasm")
-
-					// TODO: a flag to select the wasm variant
-					if ok, _ := fs.Exists(assets.Dir, "wanix.wasm"); ok {
-						http.ServeFileFS(w, r, assets.Dir, "wanix.wasm")
-					} else if ok, _ := fs.Exists(assets.Dir, "wanix.tinygo.wasm"); ok {
-						http.ServeFileFS(w, r, assets.Dir, "wanix.tinygo.wasm")
-					} else if ok, _ := fs.Exists(assets.Dir, "wanix.go.wasm"); ok {
-						http.ServeFileFS(w, r, assets.Dir, "wanix.go.wasm")
-					} else {
-						log.Fatal("no wanix wasm found in assets")
+					// TODO: a flag to prefer variant
+					wasmFsys, err := assets.WasmFS(false)
+					if err != nil {
+						log.Fatal(err)
 					}
+					http.ServeFileFS(w, r, wasmFsys, "wanix.wasm")
 					return
+				}
+
+				// set content type
+				if ext := filepath.Ext(r.URL.Path); ext != "" {
+					w.Header().Set("Content-Type", mime.TypeByExtension(ext))
 				}
 
 				http.FileServerFS(fsys).ServeHTTP(w, r)

@@ -2,15 +2,22 @@
 	<head>
 		<meta charset="utf-8"/>
         <link rel="stylesheet" href="./wanix.css" />
+        <link rel="stylesheet" href="../node_modules/xterm/css/xterm.css" />
         <script src="./wanix.min.js"></script>
 	</head>
 	<body>
+        <div id="terminal"></div>
         <script>
-            new Wanix({ helpers: true });
+<<<<<<< HEAD
+            const urlParams = new URLSearchParams(window.location.search);
+            new Wanix({ helpers: true, bundle: urlParams.get('bundle') });
 
             if (!window.location.search.includes('shell=false')) {
                 window.bootShell(window.location.search.includes('console=true'));
             }
+=======
+            new Wanix({ helpers: true });
+>>>>>>> 3238d25cd13dd2a9d7bfcd5e609f8c2f4866356a
         </script>
 	</body>
 </html>

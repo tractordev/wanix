@@ -9,6 +9,7 @@ replace github.com/hugelgupf/p9 => github.com/progrium/p9 v0.0.0-20250227010111-
 replace github.com/fxamacker/cbor/v2 => ./hack/cbor
 
 require (
+	github.com/creack/pty v1.1.21
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hanwen/go-fuse/v2 v2.7.2
