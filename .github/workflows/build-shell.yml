@@ -45,6 +45,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Download v86 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dep-v86
+          path: ${{ inputs.path }}/vm/v86
+      
+      - name: Download Linux kernel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dep-linux
+          path: ${{ inputs.path }}/vm/v86
+
       - name: Build Wanix shell and push to GHCR
         uses: docker/build-push-action@v5
         with:

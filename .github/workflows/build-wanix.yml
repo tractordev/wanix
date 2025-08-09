@@ -24,6 +24,7 @@ jobs:
   
   shell:
     name: Shell
+    needs: [linux, v86]
     uses: tractordev/wanix/.github/workflows/build-shell.yml@main
     permissions:
       contents: read

@@ -70,6 +70,7 @@ COPY --from=lib32 /lib/i386-linux-gnu/libdl.so.2 /bundle/rootfs/lib
 COPY --from=preload /build/preload.so /bundle/rootfs/lib
 COPY --from=wexec /home/tinygo/wexec /bundle/rootfs/bin
 COPY --from=busybox /build/busybox /bundle/rootfs/bin
+COPY vm /bundle/vm
 COPY bin/* /bundle/rootfs/bin
 RUN chmod +x /bundle/rootfs/bin/*
 COPY etc/* /bundle/rootfs/etc
