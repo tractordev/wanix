@@ -73,12 +73,12 @@ runtime-wasm: wasm-$(WASM_TOOLCHAIN)
 .PHONY: wasm
 
 ## Build WASM module using TinyGo
-wasm-tinygo:
+wasm-tinygo: runtime/wasi/worker/lib.js
 	tinygo build -target wasm -o runtime/assets/wanix.tinygo.wasm ./runtime/wasm
 .PHONY: wasm-tinygo
 
 ## Build WASM module using Go
-wasm-go:
+wasm-go: runtime/wasi/worker/lib.js
 	GOOS=js GOARCH=wasm go build -o runtime/assets/wanix.go.wasm ./runtime/wasm
 .PHONY: wasm-go
 
