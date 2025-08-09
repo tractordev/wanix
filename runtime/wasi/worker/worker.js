@@ -31,7 +31,7 @@ async function initializeSyncWorker(e) {
     const bin = await fs.readFile(args[0]);
     const buffer = new SharedArrayBuffer(16384);
     const call = new CallBuffer(buffer);
-    const worker = new Worker("./worker.js", {type: "module"});
+    const worker = new Worker(e.data.worker.url, {type: "module"});
     worker.onmessage = messageHandler(fs, call, pid);    
     worker.postMessage({
         buffer, 
@@ -156,7 +156,8 @@ async function runWasi(e) {
 	const inst = await WebAssembly.instantiate(wasm, imports);
     const wasmString = new TextDecoder('utf-8', { ignoreBOM: true, fatal: false }).decode(e.data.bin);
     let code = 0;
-	if (wasmString.includes("tinygo_launch")) {
+	// split so we don't trigger the tinygo check itself by being in the embedded source
+	if (wasmString.includes(["t","i","n","y","g","o","_","l","a","u","n","c","h"].join(""))) {
         wasi.initialize(inst);
         code = await go.run(inst);
     } else {
@@ -189,12 +190,12 @@ async function runWasi(e) {
 		throw new Error("cannot export Go (neither global, window nor self is defined)");
 	}
 
-	if (!global.require && typeof require !== "undefined") {
-		global.require = require;
-	}
+	// if (!global.require && typeof require !== "undefined") {
+	// 	global.require = require;
+	// }
 
 	if (!global.fs && global.require) {
-		global.fs = require("node:fs");
+		// global.fs = require("node:fs");
 	}
 
 	const enosys = () => {
@@ -266,12 +267,12 @@ async function runWasi(e) {
 	}
 
 	if (!global.crypto) {
-		const nodeCrypto = require("node:crypto");
-		global.crypto = {
-			getRandomValues(b) {
-				nodeCrypto.randomFillSync(b);
-			},
-		};
+		// const nodeCrypto = require("node:crypto");
+		// global.crypto = {
+		// 	getRandomValues(b) {
+		// 		nodeCrypto.randomFillSync(b);
+		// 	},
+		// };
 	}
 
 	if (!global.performance) {
@@ -284,11 +285,11 @@ async function runWasi(e) {
 	}
 
 	if (!global.TextEncoder) {
-		global.TextEncoder = require("node:util").TextEncoder;
+		// global.TextEncoder = require("node:util").TextEncoder;
 	}
 
 	if (!global.TextDecoder) {
-		global.TextDecoder = require("node:util").TextDecoder;
+		// global.TextDecoder = require("node:util").TextDecoder;
 	}
 
 	// End of polyfills for common API.

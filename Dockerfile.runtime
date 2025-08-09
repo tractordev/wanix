@@ -7,14 +7,16 @@ COPY ./runtime .
 RUN esbuild index.ts \
             --bundle \
             # --minify \
+            --format=esm \
             --loader:.go.js=text \
             --loader:.tinygo.js=text \
             --outfile=wanix.min.js
 RUN esbuild wasi/mod.ts \
             --bundle \
+            --minify \
             --format=esm \
-            --outfile=wasi/lib.js
-CMD ["/bin/sh", "-c", "cp /build/wanix.min.js /output/ && cp -rf /build/wasi/lib.js /output/wasi/"]
+            --outfile=lib.js
+CMD ["/bin/sh", "-c", "cp /build/wanix.min.js /output/assets/ && cp /build/lib.js /output/wasi/worker/"]
 
 
 FROM golang:1.24.5-alpine AS wasm-go
@@ -39,7 +41,7 @@ CMD ["/bin/sh", "-c", "cp -f /build/runtime/assets/wanix.tinygo.wasm /output/"]
 
 FROM alpine:latest AS runtime
 WORKDIR /build
-COPY --from=js /build/wasi/lib.js /build/wasi/lib.js
+COPY --from=js /build/lib.js /build/wasi/worker/lib.js
 COPY --from=js /build/wanix.min.js /build/wanix.min.js
 COPY --from=wasm-go /build/runtime/assets/wanix.go.wasm /build/wanix.go.wasm
 COPY --from=wasm-tinygo /build/runtime/assets/wanix.tinygo.wasm /build/wanix.tinygo.wasm

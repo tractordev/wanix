@@ -74,6 +74,7 @@ func (r *Resource) Start(args ...string) error {
 		"fsys":    ch.Get("port2"),
 		"cmdline": strings.Join(args, " "),
 		"env":     env,
+		"url":     url,
 	}}, []any{ch.Get("port2")})
 
 	r.state = "running"

@@ -1,7 +1,6 @@
 package fs
 
 import (
-	"encoding/gob"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -115,9 +114,13 @@ func Identity(f any) ID {
 		return ID{Ptr: uint64(rv.Pointer())}
 	}
 
-	h := fnv.New64a()
-	gob.NewEncoder(h).Encode(f)
-	return ID{Sum: h.Sum64()}
+	if sf, ok := f.(fmt.Stringer); ok {
+		h := fnv.New64a()
+		h.Write([]byte(sf.String()))
+		return ID{Sum: h.Sum64()}
+	}
+
+	panic("unable to get identity")
 }
 
 func SameFile(a, b File) bool {

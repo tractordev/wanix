@@ -3,4 +3,4 @@ assets/wanix.min.js
 assets/wanix.wasm
 assets/wanix.tinygo.wasm
 assets/wanix.go.wasm
-assets/wasi/lib.js
+wasi/worker/lib.js

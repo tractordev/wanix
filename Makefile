@@ -20,7 +20,7 @@ DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
 
 export DOCKER_CMD 	?= $(shell command -v podman || command -v docker)
-RUNTIME_TARGETS		:= runtime/assets/wanix.$(WASM_TOOLCHAIN).wasm runtime/assets/wanix.min.js
+RUNTIME_TARGETS		:= runtime/assets/wanix.$(WASM_TOOLCHAIN).wasm runtime/assets/wanix.min.js runtime/wasi/worker/lib.js
 DEP_TARGETS			:= shell/shell.tgz external/linux/bzImage external/v86/v86.wasm
 
 ## Link/install the local Wanix command
@@ -59,13 +59,13 @@ cmd-docker: $(DEP_TARGETS) $(RUNTIME_TARGETS)
 
 
 ## Build WASM and JS modules
-runtime: runtime-wasm runtime-js
+runtime: runtime-js runtime-wasm
 .PHONY: runtime
 
 ## Build WASM and JS modules using Docker
 runtime-docker:
 	$(DOCKER_CMD) build --target runtime --load -t wanix-build-runtime -f Dockerfile.runtime .
-	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-runtime
+	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime:/output" wanix-build-runtime
 .PHONY: runtime-docker
 
 ## Build WASM module
@@ -85,7 +85,7 @@ wasm-go:
 ## Build JavaScript module (in Docker)
 runtime-js:
 	$(DOCKER_CMD) build --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) --load -t wanix-build-js -f Dockerfile.runtime .
-	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime/assets:/output" wanix-build-js
+	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime:/output" wanix-build-js
 .PHONY: runtime-js
 
 ## Build v86 emulator (in Docker)
@@ -116,6 +116,7 @@ clean:
 	rm -f runtime/assets/wanix.min.js
 	rm -f runtime/assets/wanix.go.wasm
 	rm -f runtime/assets/wanix.tinygo.wasm
+	rm -f runtime/wasi/worker/lib.js
 .PHONY: clean
 
 ## Remove all built artifacts
@@ -133,6 +134,9 @@ $(DIST_TARGETS): $(DIST_DIR)/%:
 ## Build distribution binaries
 dist: $(DIST_TARGETS)
 .PHONY: dist
+
+runtime/wasi/worker/lib.js:
+	make runtime-js
 
 runtime/assets/wanix.min.js:
 	make runtime-js

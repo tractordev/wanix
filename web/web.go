@@ -12,6 +12,7 @@ import (
 	"tractor.dev/wanix/cap"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	wasiworker "tractor.dev/wanix/runtime/wasi/worker"
 	"tractor.dev/wanix/task"
 	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/web/dom"
@@ -72,7 +73,8 @@ func New(k *wanix.K, ctx js.Value) fskit.MapFS {
 		if err != nil {
 			return err
 		}
-		args := append([]string{fmt.Sprintf("pid=%s", p.ID()), "/wasi/worker.js"}, strings.Split(p.Cmd(), " ")...)
+		url := wasiworker.BlobURL()
+		args := append([]string{fmt.Sprintf("pid=%s", p.ID()), url}, strings.Split(p.Cmd(), " ")...)
 		return w.Start(args...)
 	})
 
