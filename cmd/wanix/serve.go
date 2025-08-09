@@ -27,6 +27,7 @@ import (
 func serveCmd() *cli.Command {
 	var (
 		listenAddr string
+		bundle     string
 	)
 	cmd := &cli.Command{
 		Usage: "serve [dir]",
@@ -44,7 +45,12 @@ func serveCmd() *cli.Command {
 			if h == "" {
 				h = "localhost"
 			}
-			fmt.Printf("serving %s files with wanix overlay on http://%s:%s ...\n", dir, h, p)
+			fmt.Printf("Serving %s files with Wanix overlay ...\n", dir)
+			if bundle != "" {
+				fmt.Printf("Bundle available at: http://%s:%s/?bundle=%s\n", h, p, bundle)
+			} else {
+				fmt.Printf("Bundle available at: http://%s:%s\n", h, p)
+			}
 
 			extra := fskit.MapFS{
 				"v86":   v86.Dir,
@@ -78,6 +84,7 @@ func serveCmd() *cli.Command {
 		},
 	}
 	cmd.Flags().StringVar(&listenAddr, "listen", ":7654", "addr to serve on")
+	cmd.Flags().StringVar(&bundle, "bundle", "", "default bundle to use")
 	return cmd
 }
 
