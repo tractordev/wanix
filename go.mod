@@ -18,21 +18,16 @@ require (
 	golang.org/x/net v0.39.0
 	golang.org/x/term v0.31.0
 	tractor.dev/toolkit-go v0.0.0-20250103001615-9a6753936c19
-	tractor.dev/toolkit-go/desktop v0.0.0-20250103001615-9a6753936c19
 )
 
 require (
 	github.com/apparentlymart/go-cidr v1.1.0 // indirect
-	github.com/ebitengine/purego v0.7.1 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/inetaf/tcpproxy v0.0.0-20240214030015-3ce58045626c // indirect
-	github.com/jchv/go-webview2 v0.0.0-20221223143126-dc24628cff85 // indirect
-	github.com/jchv/go-winloader v0.0.0-20200815041850-dec1ee9a7fd5 // indirect
 	github.com/miekg/dns v1.1.58 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/progrium/darwinkit v0.5.0-preview.0.20240621212928-c9ae70adb484 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/mod v0.18.0 // indirect
