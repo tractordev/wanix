@@ -42,6 +42,7 @@ type Resource struct {
 	dir     string
 	fds     map[string]fs.FS
 	sys     map[string]fs.FS
+	closer  func()
 }
 
 func (r *Resource) Start() error {
@@ -135,6 +136,9 @@ func (r *Resource) ResolveFS(ctx context.Context, name string) (fs.FS, string, e
 		"exit": internal.FieldFile(r.exit, func(in []byte) error {
 			if len(in) > 0 {
 				r.exit = strings.TrimSpace(string(in))
+				if r.closer != nil {
+					go r.closer()
+				}
 			}
 			return nil
 		}),

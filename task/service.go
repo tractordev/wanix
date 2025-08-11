@@ -43,9 +43,9 @@ func (d *Service) Alloc(kind string, parent *Resource) (*Resource, error) {
 	d.nextID++
 	rid := strconv.Itoa(d.nextID)
 
-	_, p0a, p0b := pipe.NewFS(false)
-	_, p1a, p1b := pipe.NewFS(false)
-	_, p2a, p2b := pipe.NewFS(false)
+	_, p0a, p0b := pipe.NewFS(true)
+	_, p1a, p1b := pipe.NewFS(true)
+	_, p2a, p2b := pipe.NewFS(true)
 
 	p := &Resource{
 		starter: starter,
@@ -60,6 +60,11 @@ func (d *Service) Alloc(kind string, parent *Resource) (*Resource, error) {
 			"fd0": fskit.FileFS(p0b, "fd0"),
 			"fd1": fskit.FileFS(p1b, "fd1"),
 			"fd2": fskit.FileFS(p2b, "fd2"),
+		},
+		closer: func() {
+			p0b.Port.Close()
+			p1b.Port.Close()
+			p2b.Port.Close()
 		},
 	}
 	ctx := context.WithValue(context.Background(), TaskContextKey, p)
