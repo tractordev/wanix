@@ -29,6 +29,7 @@ func main() {
 	k := wanix.New()
 	k.AddModule("#web", web.New(k, inst))
 	k.AddModule("#pipe", &pipe.Allocator{})
+	k.AddModule("#|", &pipe.Allocator{}) // alias for #pipe
 
 	root, err := k.NewRoot()
 	if err != nil {
@@ -38,7 +39,7 @@ func main() {
 	root.Bind("#task", "task")
 	root.Bind("#cap", "cap")
 	root.Bind("#web", "web")
-	root.Bind("#pipe", "#console")
+	root.Bind("#|", "#console")
 
 	bundleBytes := inst.Get("bundle")
 	if !bundleBytes.IsUndefined() {
