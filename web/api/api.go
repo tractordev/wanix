@@ -116,7 +116,7 @@ func setupAPI(peer *talk.Peer, root *task.Resource) {
 		buf := make([]byte, count)
 		n, err := f.Read(buf)
 		if err == io.EOF {
-			r.Return([]byte{})
+			r.Return(nil)
 			return
 		}
 		if err != nil {
@@ -294,6 +294,28 @@ func setupAPI(peer *talk.Peer, root *task.Resource) {
 		}
 
 		err := fs.WriteFile(root.Namespace(), name, data, 0x644)
+		if err != nil {
+			r.Return(err)
+			return
+		}
+	}))
+	peer.Handle("AppendFile", rpc.HandlerFunc(func(r rpc.Responder, c *rpc.Call) {
+		var args []any
+		c.Receive(&args)
+
+		// log.Println("WriteFile", args)
+
+		name, ok := args[0].(string)
+		if !ok {
+			panic("arg 0 is not a string")
+		}
+
+		data, ok := args[1].([]byte)
+		if !ok {
+			panic("arg 0 is not a []byte")
+		}
+
+		err := fs.AppendFile(root.Namespace(), name, data)
 		if err != nil {
 			r.Return(err)
 			return

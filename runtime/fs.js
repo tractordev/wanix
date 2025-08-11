@@ -41,6 +41,13 @@ export class WanixFS {
         return (await this.peer.call("WriteFile", [name, contents])).value;
     }
 
+    async appendFile(name, contents) {
+        if (typeof contents === "string") {
+            contents = (new TextEncoder()).encode(contents);
+        }
+        return (await this.peer.call("AppendFile", [name, contents])).value;
+    }
+
     async remove(name) {
         await this.peer.call("Remove", [name]);
     }
@@ -69,4 +76,35 @@ export class WanixFS {
         return (await this.peer.call("Sync", [fd])).value;
     }
 
+    async openReadable(name) {
+        const fd = await this.open(name);
+        return this.readable(fd);
+    }
+
+    async openWritable(name) {
+        const fd = await this.open(name);
+        return this.writable(fd);
+    }
+
+    writable(fd) {
+        const self = this;
+        return new WritableStream({
+            write(chunk) {
+                return self.write(fd, chunk);
+            },
+        });
+    }
+
+    readable(fd) {
+        const self = this;
+        return new ReadableStream({
+            async pull(controller) {
+                const data = await self.read(fd, 1024);
+                if (data === null) {
+                    controller.close();
+                }
+                controller.enqueue(data);
+            },
+        });
+    }
 }

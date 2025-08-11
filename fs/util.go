@@ -88,6 +88,25 @@ func WriteFile(fsys FS, filename string, data []byte, perm FileMode) error {
 	return err
 }
 
+func AppendFile(fsys FS, filename string, data []byte) error {
+	f, err := fsys.Open(filename)
+	if err != nil {
+		return err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	n, err := WriteAt(f, data, fi.Size())
+	if err == nil && n < len(data) {
+		err = io.ErrShortWrite
+	}
+	if err1 := f.Close(); err == nil {
+		err = err1
+	}
+	return err
+}
+
 func Equal(a, b FS) bool {
 	return reflect.DeepEqual(a, b)
 }
