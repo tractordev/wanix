@@ -59,6 +59,7 @@ func main() {
 Build your WASI binary to a directory called `bundle`:
 
 ```
+go mod init hello
 GOOS=wasip1 GOARCH=wasm go build -o ./bundle/hello.wasm .
 ```
 
