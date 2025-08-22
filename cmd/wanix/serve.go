@@ -5,15 +5,19 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hugelgupf/p9/fsimpl/localfs"
+	"github.com/hugelgupf/p9/p9"
 	"github.com/progrium/go-netstack/vnet"
 
 	"tractor.dev/toolkit-go/engine/cli"
@@ -33,9 +37,14 @@ func serveCmd() *cli.Command {
 		Usage: "serve [dir]",
 		Short: "serve directory contents with wanix overlay",
 		Run: func(ctx *cli.Context, args []string) {
+			var err error
 			dir := "."
 			if len(args) > 0 {
 				dir = args[0]
+			}
+			dir, err = filepath.Abs(dir)
+			if err != nil {
+				log.Fatal(err)
 			}
 			dirFS := os.DirFS(dir)
 
@@ -59,11 +68,28 @@ func serveCmd() *cli.Command {
 			}
 			fsys := fskit.UnionFS{assets.Dir, extra, dirFS}
 
-			go serveNetwork()
+			vn, err := vnet.New(&vnet.Configuration{
+				Debug:             false,
+				MTU:               1500,
+				Subnet:            "192.168.127.0/24",
+				GatewayIP:         "192.168.127.1",
+				GatewayMacAddress: "5a:94:ef:e4:0c:dd",
+				GatewayVirtualIPs: []string{},
+			})
+			if err != nil {
+				log.Fatal(err)
+			}
 
 			http.Handle("/.well-known/", http.NotFoundHandler())
+			http.Handle("/.well-known/ethernet", ethernetHandler(vn))
 
+			p9srv := p9.NewServer(localfs.Attacher(dir))
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if websocket.IsWebSocketUpgrade(r) {
+					p9Handler(p9srv, w, r)
+					return
+				}
+
 				w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
 				w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
 
@@ -88,35 +114,72 @@ func serveCmd() *cli.Command {
 	return cmd
 }
 
-func serveNetwork() {
-	vn, err := vnet.New(&vnet.Configuration{
-		Debug:             false,
-		MTU:               1500,
-		Subnet:            "192.168.127.0/24",
-		GatewayIP:         "192.168.127.1",
-		GatewayMacAddress: "5a:94:ef:e4:0c:dd",
-		GatewayVirtualIPs: []string{"192.168.127.253"},
-	})
+func p9Handler(srv *p9.Server, w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println(err)
+		return
 	}
+	defer ws.Close()
 
-	addr := ":8777"
-	if os.Getenv("NET_LISTEN") != "" {
-		addr = os.Getenv("NET_LISTEN")
-	}
-	if strings.HasPrefix(addr, ":") {
-		addr = "0.0.0.0" + addr
-	}
-	if err := http.ListenAndServe(addr, handler(vn)); err != nil {
-		log.Fatal(err)
+	log.Println("p9 session started")
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+
+	go func() {
+		for {
+			typ, buf, err := ws.ReadMessage()
+			if err != nil {
+				log.Println("ws->9p:", err)
+				break
+			}
+			if typ != websocket.BinaryMessage {
+				continue
+			}
+			if _, err := inW.Write(buf); err != nil {
+				log.Println("ws->9p:", err)
+				break
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			// Read message length (4 bytes)
+			sizeBuf := make([]byte, 4)
+			_, err := io.ReadFull(outR, sizeBuf)
+			if err != nil {
+				log.Println("9p->ws:", err)
+				break
+			}
+			messageSize := int(sizeBuf[3])<<24 | int(sizeBuf[2])<<16 | int(sizeBuf[1])<<8 | int(sizeBuf[0])
+			payloadSize := messageSize - 4
+
+			messageBuf := make([]byte, payloadSize)
+			_, err = io.ReadFull(outR, messageBuf)
+			if err != nil {
+				log.Println("9p->ws:", err)
+				break
+			}
+
+			buf := append(sizeBuf, messageBuf...)
+			if err := ws.WriteMessage(websocket.BinaryMessage, buf); err != nil {
+				log.Println("9p->ws:", err)
+				break
+			}
+		}
+	}()
+
+	if err := srv.Handle(inR, outW); err != nil {
+		log.Println("9p session ended:", err)
 	}
 }
 
-func handler(vn *vnet.VirtualNetwork) http.Handler {
+func ethernetHandler(vn *vnet.VirtualNetwork) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if vn == nil {
-			http.Error(w, "network not available", http.StatusNotFound)
+			http.Error(w, "ethernet not available", http.StatusNotFound)
 			return
 		}
 		if !websocket.IsWebSocketUpgrade(r) {
@@ -132,7 +195,7 @@ func handler(vn *vnet.VirtualNetwork) http.Handler {
 		}
 		defer ws.Close()
 
-		fmt.Println("network session started")
+		log.Println("ethernet session started")
 
 		if err := vn.AcceptQemu(r.Context(), &qemuAdapter{Conn: ws}); err != nil {
 			if strings.Contains(err.Error(), "websocket: close") {
@@ -152,6 +215,8 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// qemuAdapter wraps a websocket connection and converts
+// messages to qemu length prefixed protocol and back
 type qemuAdapter struct {
 	*websocket.Conn
 	mu          sync.Mutex
