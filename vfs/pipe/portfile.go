@@ -31,7 +31,7 @@ func (pf *PortFile) Close() error { return nil }
 func (pf *PortFile) Read(b []byte) (int, error) { return pf.Port.Read(b) }
 
 func (pf *PortFile) Stat() (fs.FileInfo, error) {
-	return fskit.Entry(pf.Name, fs.FileMode(0644)), nil
+	return fskit.Entry(pf.Name, fs.FileMode(0644)|fs.ModeNamedPipe, int64(pf.Port.Size())), nil
 }
 
 // Optional stream-friendly methods
