@@ -58,3 +58,9 @@ func (bp *Buffer) Close() error {
 	bp.dataCond.Broadcast()
 	return nil
 }
+
+func (bp *Buffer) Size() int {
+	bp.mu.Lock()
+	defer bp.mu.Unlock()
+	return bp.buffer.Len()
+}

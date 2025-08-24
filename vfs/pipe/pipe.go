@@ -38,3 +38,7 @@ func (p *Port) Close() error {
 	}
 	return err2
 }
+
+func (p *Port) Size() int {
+	return p.reader.Size()
+}

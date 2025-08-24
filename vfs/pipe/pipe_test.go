@@ -248,3 +248,66 @@ func TestPortFileCloseNoOp(t *testing.T) {
 
 	_ = rf.Close()
 }
+
+func TestPortFileSize(t *testing.T) {
+	t.Run("size reflects buffer length", func(t *testing.T) {
+		fsys, _, _ := NewFS(false)
+
+		// Open both ends of the pipe as files
+		writerFile, err := fsys.Open("data")
+		if err != nil {
+			t.Fatalf("failed to open writer file 'data': %v", err)
+		}
+		defer writerFile.Close()
+
+		readerFile, err := fsys.Open("data1")
+		if err != nil {
+			t.Fatalf("failed to open reader file 'data1': %v", err)
+		}
+		defer readerFile.Close()
+
+		// Confirm initial size to be 0
+		info, err := readerFile.Stat()
+		if err != nil {
+			t.Fatalf("Stat on reader failed initially: %v", err)
+		}
+		if info.Size() != 0 {
+			t.Errorf("initial size was %d, want 0", info.Size())
+		}
+
+		// Write data and check new size
+		msg := []byte("hello world")
+		writer, ok := writerFile.(io.Writer)
+		if !ok {
+			t.Fatal("writerFile does not implement io.Writer")
+		}
+
+		if _, err := writer.Write(msg); err != nil {
+			t.Fatalf("Write failed: %v", err)
+		}
+
+		info, err = readerFile.Stat()
+		if err != nil {
+			t.Fatalf("Stat on reader failed after write: %v", err)
+		}
+		if info.Size() != int64(len(msg)) {
+			t.Errorf("size after write was %d, want %d", info.Size(), len(msg))
+		}
+
+		// Read some data and check final size
+		readBytes := 5
+		buf := make([]byte, readBytes)
+		if _, err := readerFile.Read(buf); err != nil {
+			t.Fatalf("Read failed: %v", err)
+		}
+
+		info, err = readerFile.Stat()
+		if err != nil {
+			t.Fatalf("Stat on reader failed after read: %v", err)
+		}
+		expectedSize := int64(len(msg) - readBytes)
+		if info.Size() != expectedSize {
+			t.Errorf("size after read was %d, want %d", info.Size(), expectedSize)
+		}
+	})
+}
