@@ -19,7 +19,7 @@ RUN esbuild wasi/mod.ts \
 CMD ["/bin/sh", "-c", "cp /build/wanix.min.js /output/assets/ && cp /build/lib.js /output/wasi/worker/"]
 
 
-FROM golang:1.24.5-alpine AS wasm-go
+FROM golang:1.25.0-alpine AS wasm-go
 WORKDIR /build
 RUN apk add --no-cache make
 COPY ./hack/cbor ./hack/cbor
@@ -31,7 +31,7 @@ RUN make wasm-go
 CMD ["/bin/sh", "-c", "cp -f /build/runtime/assets/wanix.go.wasm /output/"]
 
 
-FROM tinygo/tinygo:0.38.0 AS wasm-tinygo
+FROM tinygo/tinygo:0.39.0 AS wasm-tinygo
 WORKDIR /build
 COPY . .
 ENV GOFLAGS="-buildvcs=false"

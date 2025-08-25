@@ -17,7 +17,7 @@ You will need either Docker 20.10+ or Podman 5.5+ to build project dependencies.
 You also want Go and, optionally but recommended, TinyGo.
 
 - [Go 1.25+](https://golang.org/dl/)
-- [TinyGo 0.38+](https://tinygo.org/getting-started/install/) (optional)
+- [TinyGo 0.39+](https://tinygo.org/getting-started/install/) (optional)
 
 You will also need `make` installed.
 
