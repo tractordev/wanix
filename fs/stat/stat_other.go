@@ -1,3 +1,5 @@
+//go:build js || wasip1 || windows
+
 package stat
 
 import (
