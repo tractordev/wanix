@@ -9,13 +9,13 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/hugelgupf/p9/fsimpl/templatefs"
 	"github.com/hugelgupf/p9/linux"
 	"github.com/hugelgupf/p9/p9"
 	"tractor.dev/wanix/fs"
+	"tractor.dev/wanix/fs/stat"
 )
 
 // AttacherOption interface for configuring the attacher
@@ -191,15 +191,15 @@ func (l *p9file) GetAttr(req p9.AttrMask) (p9.QID, p9.AttrMask, p9.Attr, error) 
 		ctimeNano    uint64
 	)
 
-	if stat, ok := fi.Sys().(*syscall.Stat_t); ok {
+	if st := stat.InfoToStat(fi); st != nil {
 		if l.vattrs == nil {
-			uid = int(stat.Uid)
-			gid = int(stat.Gid)
+			uid = int(st.Uid)
+			gid = int(st.Gid)
 		}
-		nlink = uint64(stat.Nlink)
-		rdev = uint64(stat.Rdev)
-		blockSize = uint64(stat.Blksize)
-		blocks = uint64(stat.Blocks)
+		nlink = uint64(st.Nlink)
+		rdev = uint64(st.Rdev)
+		blockSize = uint64(st.Blksize)
+		blocks = uint64(st.Blocks)
 		// Use ModTime for all timestamps since js/wasm doesn't provide access times
 		now := time.Now()
 		atimeSeconds = uint64(now.Unix())
