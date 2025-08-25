@@ -18,20 +18,33 @@ func Write(f File, data []byte) (int, error) {
 
 // WriteAt writes data to the file at the given offset.
 func WriteAt(f File, data []byte, off int64) (int, error) {
+	// Validate offset
+	if off < 0 {
+		return 0, fmt.Errorf("negative offset: %d", off)
+	}
+
+	// Try WriterAt interface first (most efficient)
+	if wa, ok := f.(io.WriterAt); ok {
+		return wa.WriteAt(data, off)
+	}
+
+	// Check if file supports writing at all
 	_, ok := f.(io.Writer)
 	if !ok {
 		return 0, ErrPermission
 	}
-	wa, ok := f.(io.WriterAt)
-	if ok {
-		return wa.WriteAt(data, off)
+
+	// For offset 0, we can write directly
+	if off == 0 {
+		return Write(f, data)
 	}
-	if off > 0 {
-		_, err := Seek(f, off, 0)
-		if err != nil {
-			return 0, err
-		}
+
+	// Seek to the desired position
+	_, err := Seek(f, off, 0) // SEEK_SET = 0
+	if err != nil {
+		return 0, fmt.Errorf("seek to offset %d: %w", off, err)
 	}
+
 	return Write(f, data)
 }
 
