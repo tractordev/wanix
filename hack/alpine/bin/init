@@ -1,28 +1,34 @@
 #!/bin/busybox sh
 
-# install busybox symlinks
-/bin/busybox --install -s /bin
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t cgroup2 cgroup2 /sys/fs/cgroup
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
 
-# fix any broken symlinks.
-# this shouldn't be necessary, but some symlinks
-# end up pointing to nothing. perhaps related to issue #175
-for link in $(/bin/busybox find /bin -maxdepth 1 -type l); do
-  /bin/busybox rm "$link"
-  /bin/busybox ln -s "/bin/busybox" "$link"
-done
-
-# another needed broken symlink not in bin
-rm /usr/lib/libz.so.1
-ln -s /usr/lib/libz.so.1.3.1 /usr/lib/libz.so.1
 
 # configure networking
 echo "nameserver 8.8.8.8" > /etc/resolv.conf
 ifconfig eth0 up
 udhcpc -i eth0 -s /bin/post-dhcp
 
-# configure apk
-#echo 'http://dl-cdn.alpinelinux.org/alpine/v3.21/main' > /etc/apk/repositories
-#echo 'http://dl-cdn.alpinelinux.org/alpine/v3.21/community' >> /etc/apk/repositories
+
+# this is all for podman/containers
+mkdir -p /mnt/ram /var/lib/containers
+mount -t tmpfs -o size=4G tmpfs /mnt/ram
+dd if=/dev/zero of=/mnt/ram/containers.img bs=1M count=0 seek=3072 > /dev/null 2>&1
+mkfs.ext4 -F -L containers /mnt/ram/containers.img > /dev/null 2>&1
+losetup -fP /mnt/ram/containers.img
+mount /dev/loop0 /var/lib/containers
+mount -t tmpfs -o mode=0755,size=64M tmpfs /run
+mkdir -p /dev/shm
+mount -t tmpfs -o mode=1777,size=64M tmpfs /dev/shm 2>/dev/null
+truncate -s 8M /dev/shm/podman.locks
+mount -t tmpfs -o mode=1777,size=4G tmpfs /tmp
+mount -o bind /tmp /var/tmp
+
+
+echo "Welcome to Alpine Linux"
 
 # start shell
 setsid /bin/busybox sh -c "exec /bin/busybox sh </dev/ttyS0 >/dev/ttyS0 2>&1"
