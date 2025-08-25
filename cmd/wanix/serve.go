@@ -9,21 +9,21 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/hugelgupf/p9/fsimpl/localfs"
 	"github.com/hugelgupf/p9/p9"
 	"github.com/progrium/go-netstack/vnet"
+	"tractor.dev/wanix/fs/localfs"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/external/linux"
 	v86 "tractor.dev/wanix/external/v86"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/p9kit"
 	"tractor.dev/wanix/runtime/assets"
 	"tractor.dev/wanix/shell"
 )
@@ -46,7 +46,10 @@ func serveCmd() *cli.Command {
 			if err != nil {
 				log.Fatal(err)
 			}
-			dirFS := os.DirFS(dir)
+			dirfs, err := localfs.New(dir)
+			if err != nil {
+				log.Fatal(err)
+			}
 
 			log.SetFlags(log.Ltime | log.Lmicroseconds | log.Lshortfile)
 
@@ -66,7 +69,7 @@ func serveCmd() *cli.Command {
 				"linux": linux.Dir,
 				"shell": shell.Dir,
 			}
-			fsys := fskit.UnionFS{assets.Dir, extra, dirFS}
+			fsys := fskit.UnionFS{assets.Dir, extra, dirfs}
 
 			vn, err := vnet.New(&vnet.Configuration{
 				Debug:             false,
@@ -83,7 +86,7 @@ func serveCmd() *cli.Command {
 			http.Handle("/.well-known/", http.NotFoundHandler())
 			http.Handle("/.well-known/ethernet", ethernetHandler(vn))
 
-			p9srv := p9.NewServer(localfs.Attacher(dir))
+			p9srv := p9.NewServer(p9kit.Attacher(dirfs, p9kit.WithXattrAttrStore()))
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if websocket.IsWebSocketUpgrade(r) {
 					p9Handler(p9srv, w, r)
