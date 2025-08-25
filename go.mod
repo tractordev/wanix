@@ -1,6 +1,6 @@
 module tractor.dev/wanix
 
-go 1.23.1
+go 1.25
 
 replace github.com/hugelgupf/p9 => github.com/progrium/p9 v0.0.0-20250227010111-4025760ecd04
 
