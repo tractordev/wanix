@@ -138,6 +138,38 @@ func (f *SubdirFS) Readlink(name string) (string, error) {
 	return link, f.fixErr(err)
 }
 
+func (f *SubdirFS) SetXattr(ctx context.Context, name string, attr string, data []byte, flags int) error {
+	full, err := f.fullName("setxattr", name)
+	if err != nil {
+		return err
+	}
+	return f.fixErr(SetXattr(ctx, f.Fsys, full, attr, data, flags))
+}
+
+func (f *SubdirFS) GetXattr(ctx context.Context, name string, attr string) ([]byte, error) {
+	full, err := f.fullName("getxattr", name)
+	if err != nil {
+		return nil, err
+	}
+	return GetXattr(ctx, f.Fsys, full, attr)
+}
+
+func (f *SubdirFS) ListXattrs(ctx context.Context, name string) ([]string, error) {
+	full, err := f.fullName("listxattrs", name)
+	if err != nil {
+		return nil, err
+	}
+	return ListXattrs(ctx, f.Fsys, full)
+}
+
+func (f *SubdirFS) RemoveXattr(ctx context.Context, name string, attr string) error {
+	full, err := f.fullName("removexattr", name)
+	if err != nil {
+		return err
+	}
+	return f.fixErr(RemoveXattr(ctx, f.Fsys, full, attr))
+}
+
 func (f *SubdirFS) Sub(dir string) (FS, error) {
 	if dir == "." {
 		return f, nil
