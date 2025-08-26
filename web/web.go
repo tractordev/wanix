@@ -15,10 +15,10 @@ import (
 	wasiworker "tractor.dev/wanix/runtime/wasi/worker"
 	"tractor.dev/wanix/task"
 	"tractor.dev/wanix/vfs/pipe"
+	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web/dom"
 	"tractor.dev/wanix/web/fsa"
 	"tractor.dev/wanix/web/sw"
-	"tractor.dev/wanix/web/vm"
 	"tractor.dev/wanix/web/worker"
 )
 

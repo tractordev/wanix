@@ -8,6 +8,13 @@ import (
 	"tractor.dev/wanix/vfs"
 )
 
+type Resource interface {
+	fs.FS
+	ID() string
+}
+
+type Factory func(id, kind string) Resource
+
 type K struct {
 	Cap  *cap.Service
 	Task *task.Service

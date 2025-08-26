@@ -36,7 +36,7 @@ func main() {
 		log.Fatal(err)
 	}
 	args := os.Args[1:]
-	args[0] = strings.TrimPrefix(filepath.Join("web/vm/1/fsys", wd, args[0]), "/")
+	args[0] = strings.TrimPrefix(filepath.Join("vm/1/fsys", wd, args[0]), "/")
 
 	debug("allocating pid")
 	pidRaw, err := os.ReadFile("/task/new/wasi")

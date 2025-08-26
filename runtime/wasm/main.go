@@ -13,6 +13,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/tarfs"
 	"tractor.dev/wanix/vfs/pipe"
+	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
 	"tractor.dev/wanix/web/virtio9p"
@@ -28,6 +29,7 @@ func main() {
 
 	k := wanix.New()
 	k.AddModule("#web", web.New(k, inst))
+	k.AddModule("#vm", vm.New())
 	k.AddModule("#pipe", &pipe.Allocator{})
 	k.AddModule("#|", &pipe.Allocator{}) // alias for #pipe
 
@@ -39,6 +41,7 @@ func main() {
 	root.Bind("#task", "task")
 	root.Bind("#cap", "cap")
 	root.Bind("#web", "web")
+	root.Bind("#vm", "vm")
 	root.Bind("#|", "#console")
 
 	bundleBytes := inst.Get("bundle")

@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-package vm
+package v86
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
@@ -18,10 +19,21 @@ import (
 )
 
 type VM struct {
-	id     int
-	typ    string
+	id     string
+	kind   string
 	value  js.Value
 	serial *serialReadWriter
+}
+
+func New(id, kind string) wanix.Resource {
+	return &VM{
+		id:   id,
+		kind: kind,
+	}
+}
+
+func (r *VM) ID() string {
+	return r.id
 }
 
 func (r *VM) Value() js.Value {
@@ -32,7 +44,7 @@ func (r *VM) Open(name string) (fs.File, error) {
 	return r.OpenContext(context.Background(), name)
 }
 
-func TryPatch(ctx context.Context, serial *serialReadWriter, serialFile *fskit.StreamFile) error {
+func TryPatch(ctx context.Context, serial io.ReadWriter, serialFile *fskit.StreamFile) error {
 	fsys, name, ok := fs.Origin(ctx)
 	if !ok {
 		return nil
@@ -74,6 +86,14 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 			Run: func(_ *cli.Context, args []string) {
 				switch args[0] {
 				case "start":
+					// todo: check if already started
+					options, err := parseFlags(args[1:])
+					if err != nil {
+						log.Println("vm start:", err)
+						return
+					}
+					r.value = makeVM(r.ID(), options)
+					r.serial = newSerialReadWriter(r.value)
 					if err := TryPatch(ctx, r.serial, serialFile); err != nil {
 						log.Println("vm start:", err)
 					}
@@ -89,6 +109,16 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 		fsys["ttyS0"] = fskit.FileFS(serialFile, "ttyS0")
 	}
 	return fs.OpenContext(ctx, fsys, name)
+}
+
+func makeVM(id string, options map[string]any) js.Value {
+	vm := js.Global().Get("V86").New(options)
+	readyPromise := js.Global().Get("Promise").New(js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		vm.Call("add_listener", "emulator-loaded", args[0])
+		return nil
+	}))
+	vm.Set("ready", readyPromise)
+	return vm
 }
 
 type serialReadWriter struct {
