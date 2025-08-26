@@ -7,6 +7,7 @@ import (
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/internal/shlex"
 )
 
 func FieldFile(args ...any) fs.FS {
@@ -68,7 +69,10 @@ func ControlFile(cmd *cli.Command) fs.FS {
 		return &fskit.FuncFile{
 			Node: fskit.Entry(cmd.Name(), 0755),
 			CloseFunc: func(n *fskit.Node) error {
-				args := strings.Split(strings.TrimSpace(string(n.Data())), " ")
+				args, err := shlex.Split(strings.TrimSpace(string(n.Data())), true)
+				if err != nil {
+					return err
+				}
 				if len(args) == 0 {
 					return nil
 				}
