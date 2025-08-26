@@ -13,6 +13,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/tarfs"
 	"tractor.dev/wanix/vfs/pipe"
+	"tractor.dev/wanix/vfs/ramfs"
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
@@ -32,6 +33,7 @@ func main() {
 	k.AddModule("#vm", vm.New())
 	k.AddModule("#pipe", &pipe.Allocator{})
 	k.AddModule("#|", &pipe.Allocator{}) // alias for #pipe
+	k.AddModule("#ramfs", &ramfs.Allocator{})
 
 	root, err := k.NewRoot()
 	if err != nil {
