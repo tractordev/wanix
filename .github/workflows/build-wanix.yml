@@ -39,6 +39,7 @@ jobs:
           context: .
           file: Dockerfile
           target: runtime-dist
+          push: true
           outputs: |
             type=local,dest=./_artifact
           tags: ghcr.io/${{ github.repository }}:runtime
