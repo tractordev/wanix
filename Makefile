@@ -13,14 +13,13 @@ VERSION 		?= v0.3-$(shell git rev-parse --short HEAD)
 GOARGS			?=
 GOOS			?= $(shell go env GOOS)
 GOARCH			?= $(shell go env GOARCH)
-WASM_TOOLCHAIN 	?= $(shell basename $(shell command -v tinygo || command -v go))
+WASM_DEBUG 		?= 
 LINK_BIN 		?= /usr/local/bin
 DIST_DIR		?= .local/dist
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
 
 export DOCKER_CMD 	?= $(shell command -v podman || command -v docker)
-RUNTIME_TARGETS		:= runtime/assets/wanix.$(WASM_TOOLCHAIN).wasm runtime/assets/wanix.min.js runtime/wasi/worker/lib.js
 
 ## Link/install the local Wanix command
 link:
@@ -29,7 +28,7 @@ link:
 .PHONY: link
 
 ## Build Wanix and Wanix shell
-all: shell build
+all: shell/bundle.tgz build
 .PHONY: all
 
 ## Build Wanix (command and runtime)
@@ -39,16 +38,19 @@ build: runtime cmd
 ## Build Wanix (command and runtime) using Docker
 build-docker:
 	mkdir -p $(DIST_DIR)
-	$(DOCKER_CMD) build -t wanix-build -f Dockerfile .
+	$(DOCKER_CMD) build --target dist -t wanix-build -f Dockerfile .
 	$(DOCKER_CMD) rm -f wanix-build
 	$(DOCKER_CMD) create --name wanix-build wanix-build
 	$(DOCKER_CMD) cp wanix-build:/ $(DIST_DIR)/
+	mv $(DIST_DIR)/wanix .local/bin/
+	ls -lah $(DIST_DIR)
+	ls -lah .local/bin/wanix
 .PHONY: build-docker
 
-
 ## Build Wanix command
-cmd: shell $(RUNTIME_TARGETS)
+cmd: runtime/assets/wanix$(if $(WASM_DEBUG),.debug,).wasm runtime/assets/wanix.min.js
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o .local/bin/wanix $(GOARGS) ./cmd/wanix
+	ls -lah .local/bin/wanix
 .PHONY: cmd
 
 ## Build WASM and JS modules
@@ -56,36 +58,42 @@ runtime: js wasm
 .PHONY: runtime
 
 ## Build WASM module
-wasm: wasm-$(WASM_TOOLCHAIN)
+wasm: $(if $(WASM_DEBUG),wasm-go,wasm-tinygo)
 .PHONY: wasm
 
 ## Build WASM module using TinyGo
 wasm-tinygo: runtime/wasi/worker/lib.js
-	tinygo build -target wasm -o runtime/assets/wanix.tinygo.wasm ./runtime/wasm
+	tinygo build -target wasm -o runtime/assets/wanix.wasm ./runtime/wasm
+	ls -lah runtime/assets/wanix.wasm
 .PHONY: wasm-tinygo
 
 ## Build WASM module using Go
 wasm-go: runtime/wasi/worker/lib.js
-	GOOS=js GOARCH=wasm go build -o runtime/assets/wanix.go.wasm ./runtime/wasm
+	GOOS=js GOARCH=wasm go build -o runtime/assets/wanix.debug.wasm ./runtime/wasm
+	ls -lah runtime/assets/wanix.debug.wasm
 .PHONY: wasm-go
 
-## Build JavaScript module (in Docker)
+## Build JavaScript modules (in Docker)
 js:
 	$(DOCKER_CMD) build --load -t wanix-build-js --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) -f Dockerfile .
-	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime:/output" wanix-build-js
+	$(DOCKER_CMD) rm -f wanix-build-js
+	$(DOCKER_CMD) create --name wanix-build-js wanix-build-js
+	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/wasi/worker/lib.js runtime/wasi/worker/lib.js
+	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/assets/wanix.min.js runtime/assets/wanix.min.js
+	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/assets/wanix.js runtime/assets/wanix.js
 .PHONY: js
 
-## Build shell for Wanix (in Docker)
-shell:
-	make -C shell
-.PHONY: shell
+## Build shell bundle for Wanix (in Docker)
+bundle-shell:
+	make -C shell clean bundle.tgz
+.PHONY: bundle-shell
 
 ## Remove all built artifacts
 clean:
 	rm -f .local/bin/wanix
 	rm -f runtime/assets/wanix.min.js
-	rm -f runtime/assets/wanix.go.wasm
-	rm -f runtime/assets/wanix.tinygo.wasm
+	rm -f runtime/assets/wanix.debug.wasm
+	rm -f runtime/assets/wanix.wasm
 	rm -f runtime/wasi/worker/lib.js
 	make -C shell clean
 .PHONY: clean
@@ -107,14 +115,14 @@ runtime/wasi/worker/lib.js:
 runtime/assets/wanix.min.js:
 	make js
 
-runtime/assets/wanix.go.wasm:
+runtime/assets/wanix.debug.wasm:
 	make wasm-go
 
-runtime/assets/wanix.tinygo.wasm:
+runtime/assets/wanix.wasm:
 	make wasm-tinygo
 
 shell/bundle.tgz:
-	make shell
+	make bundle-shell
 
 .DEFAULT_GOAL := show-help
 
