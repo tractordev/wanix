@@ -12,18 +12,18 @@ import (
 var Dir embed.FS
 
 // WasmFS returns a filesystem containing the wanix.wasm file.
-// If preferTiny is true, it will prefer the tinygo build.
+// If preferDebug is true, it will prefer the Go build.
 // If no wasm file is found, it will return an error.
-func WasmFS(preferTiny bool) (fs.FS, error) {
+func WasmFS(preferDebug bool) (fs.FS, error) {
 	wasmFsys := fskit.MapFS{}
-	if ok, _ := fs.Exists(Dir, "wanix.go.wasm"); ok {
-		wasmFsys["wanix.wasm"], _ = fs.Sub(Dir, "wanix.go.wasm")
+	if ok, _ := fs.Exists(Dir, "wanix.debug.wasm"); ok {
+		wasmFsys["wanix.wasm"], _ = fs.Sub(Dir, "wanix.debug.wasm")
 	}
-	if len(wasmFsys) > 0 && !preferTiny {
+	if len(wasmFsys) > 0 && preferDebug {
 		return wasmFsys, nil
 	}
-	if ok, _ := fs.Exists(Dir, "wanix.tinygo.wasm"); ok {
-		wasmFsys["wanix.wasm"], _ = fs.Sub(Dir, "wanix.tinygo.wasm")
+	if ok, _ := fs.Exists(Dir, "wanix.wasm"); ok {
+		wasmFsys["wanix.wasm"], _ = fs.Sub(Dir, "wanix.wasm")
 	}
 	if len(wasmFsys) > 0 {
 		return wasmFsys, nil
