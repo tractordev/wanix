@@ -39,8 +39,8 @@ jobs:
           context: .
           file: Dockerfile
           target: runtime-dist
-          outputs:
-            - "type=local,dest=./_artifact"
+          outputs: |
+            type=local,dest=./_artifact
           tags: ghcr.io/${{ github.repository }}:runtime
       
       - name: Write out runtime artifacts
