@@ -1,14 +1,64 @@
-FROM alpine:latest
-ARG GOOS=linux
-ARG GOARCH=amd64
-
-WORKDIR /build
+FROM golang:1.25.0-alpine3.22 AS base
 RUN apk add --no-cache \
-    bash \
-    curl \
+    nodejs \
+    npm \
     git \
-    go \
+    esbuild \
     make
 
+FROM base AS js
+WORKDIR /build/runtime
+COPY ./runtime/package.json .
+RUN npm install
+COPY ./runtime .
+RUN esbuild index.ts \
+    --outfile=assets/wanix.min.js \
+    --bundle \
+    --loader:.go.js=text \
+    --loader:.tinygo.js=text \
+    --format=esm
+RUN esbuild wasi/mod.ts \
+    --outfile=wasi/worker/lib.js \
+    --bundle \
+    --format=esm
+
+FROM tinygo/tinygo:0.39.0 AS wasm-tinygo
+WORKDIR /build
+USER root
+ENV GOFLAGS="-buildvcs=false"
+RUN git config --global --add safe.directory /build
+COPY ./hack/cbor ./hack/cbor
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
+COPY --from=js /build/runtime/wasi/worker/lib.js /build/runtime/wasi/worker/lib.js
+RUN make wasm-tinygo
+
+FROM base AS go-base
+WORKDIR /build
+COPY ./hack/cbor ./hack/cbor
+COPY go.mod go.sum ./
+RUN go mod download
+
+FROM go-base AS wasm-go
+COPY . .
+COPY --from=js /build/runtime/wasi/worker/lib.js /build/runtime/wasi/worker/lib.js
+RUN make wasm-go
+
+
+FROM go-base AS cmd
+COPY . .
+ARG GOOS=linux
+ARG GOARCH=amd64
+COPY --from=js /build/runtime/wasi/worker/lib.js /build/runtime/wasi/worker/lib.js
+COPY --from=js /build/runtime/assets/wanix.min.js /build/runtime/assets/wanix.min.js
+COPY --from=wasm-go /build/runtime/assets/wanix.go.wasm /build/runtime/assets/wanix.go.wasm
+COPY --from=wasm-tinygo /build/runtime/assets/wanix.tinygo.wasm /build/runtime/assets/wanix.tinygo.wasm
 RUN make cmd
+
+FROM scratch AS runtime-dist
+WORKDIR /
+COPY --from=js /build/runtime/assets/wanix.min.js /wanix.min.js
+COPY --from=wasm-go /build/runtime/assets/wanix.go.wasm /wanix.go.wasm
+COPY --from=wasm-tinygo /build/runtime/assets/wanix.tinygo.wasm /wanix.tinygo.wasm
+CMD ["true"]

@@ -1,7 +1,7 @@
 # Makefile for Wanix
 #
 # This Makefile is used to build and manage the Wanix project. It is used to
-# build the Linux kernel, v86 emulator, shell, and Wanix command. It is also
+# build the Wanix shell, WASM and JS modules, and Wanix command. It is also
 # used to build the distribution binaries.
 #
 # The Makefile is self-documenting, so you can run `make` to see all available
@@ -21,7 +21,6 @@ DIST_ARCH		?= arm64 amd64
 
 export DOCKER_CMD 	?= $(shell command -v podman || command -v docker)
 RUNTIME_TARGETS		:= runtime/assets/wanix.$(WASM_TOOLCHAIN).wasm runtime/assets/wanix.min.js runtime/wasi/worker/lib.js
-DEP_TARGETS			:= shell/bundle.tgz
 
 ## Link/install the local Wanix command
 link:
@@ -29,47 +28,35 @@ link:
 	ln -fs "$(shell pwd)/.local/bin/$(NAME)" "$(LINK_BIN)/$(NAME)"
 .PHONY: link
 
-## Build dependencies and Wanix
-all: deps build
+## Build Wanix and Wanix shell
+all: shell build
 .PHONY: all
-
-## Build Linux kernel, v86 emulator, and shell
-deps: deps-shell
-.PHONY: deps
 
 ## Build Wanix (command and runtime)
 build: runtime cmd
 .PHONY: build
 
 ## Build Wanix (command and runtime) using Docker
-build-docker: runtime-docker cmd-docker
+build-docker:
+	mkdir -p $(DIST_DIR)
+	$(DOCKER_CMD) build -t wanix-build -f Dockerfile .
+	$(DOCKER_CMD) rm -f wanix-build
+	$(DOCKER_CMD) create --name wanix-build wanix-build
+	$(DOCKER_CMD) cp wanix-build:/ $(DIST_DIR)/
 .PHONY: build-docker
 
 
 ## Build Wanix command
-cmd: $(DEP_TARGETS) $(RUNTIME_TARGETS)
+cmd: shell $(RUNTIME_TARGETS)
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o .local/bin/wanix $(GOARGS) ./cmd/wanix
 .PHONY: cmd
 
-## Build Wanix command using Docker
-cmd-docker: $(DEP_TARGETS) $(RUNTIME_TARGETS)
-	$(DOCKER_CMD) build --build-arg GOOS=$(GOOS) --build-arg GOARCH=$(GOARCH) --load -t wanix-build-cmd .
-	$(DOCKER_CMD) run --rm -v "$(shell pwd)/.local/bin:/output" wanix-build-cmd sh -c "cp .local/bin/wanix /output"
-.PHONY: docker
-
-
 ## Build WASM and JS modules
-runtime: runtime-js runtime-wasm
+runtime: js wasm
 .PHONY: runtime
 
-## Build WASM and JS modules using Docker
-runtime-docker:
-	$(DOCKER_CMD) build --target runtime --load -t wanix-build-runtime -f Dockerfile.runtime .
-	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime:/output" wanix-build-runtime
-.PHONY: runtime-docker
-
 ## Build WASM module
-runtime-wasm: wasm-$(WASM_TOOLCHAIN)
+wasm: wasm-$(WASM_TOOLCHAIN)
 .PHONY: wasm
 
 ## Build WASM module using TinyGo
@@ -83,35 +70,26 @@ wasm-go: runtime/wasi/worker/lib.js
 .PHONY: wasm-go
 
 ## Build JavaScript module (in Docker)
-runtime-js:
-	$(DOCKER_CMD) build --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) --load -t wanix-build-js -f Dockerfile.runtime .
+js:
+	$(DOCKER_CMD) build --load -t wanix-build-js --target js $(if $(wildcard runtime/assets/wanix.min.js),,--no-cache) -f Dockerfile .
 	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime:/output" wanix-build-js
-.PHONY: runtime-js
+.PHONY: js
 
 ## Build shell for Wanix (in Docker)
-deps-shell:
+shell:
 	make -C shell
-.PHONY: deps-shell
+.PHONY: shell
 
-## Remove dependency artifacts
-deps-clean:
-	make -C shell clean
-.PHONY: deps-clean
-
-## Remove Wanix runtime and command artifacts
+## Remove all built artifacts
 clean:
 	rm -f .local/bin/wanix
 	rm -f runtime/assets/wanix.min.js
 	rm -f runtime/assets/wanix.go.wasm
 	rm -f runtime/assets/wanix.tinygo.wasm
 	rm -f runtime/wasi/worker/lib.js
+	make -C shell clean
 .PHONY: clean
 
-## Remove all built artifacts
-clobber:
-	make deps-clean
-	make clean
-.PHONY: clobber
 
 DIST_TARGETS	:= $(foreach os, $(DIST_OS), $(foreach arch, $(DIST_ARCH), $(DIST_DIR)/$(NAME)_$(VERSION)_$(os)_$(arch)))
 $(DIST_TARGETS): $(DIST_DIR)/%:
@@ -124,10 +102,10 @@ dist: $(DIST_TARGETS)
 .PHONY: dist
 
 runtime/wasi/worker/lib.js:
-	make runtime-js
+	make js
 
 runtime/assets/wanix.min.js:
-	make runtime-js
+	make js
 
 runtime/assets/wanix.go.wasm:
 	make wasm-go
@@ -136,7 +114,7 @@ runtime/assets/wanix.tinygo.wasm:
 	make wasm-tinygo
 
 shell/bundle.tgz:
-	make deps-shell
+	make shell
 
 .DEFAULT_GOAL := show-help
 
