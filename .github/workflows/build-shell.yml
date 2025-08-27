@@ -49,8 +49,8 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ${{ inputs.path }}
+          platform: linux/386
           push: true
-          load: true
           tags: ghcr.io/${{ github.repository }}:shell
 
 
@@ -73,7 +73,9 @@ jobs:
           docker create --name wanix-shell-export ghcr.io/${{ github.repository }}:shell noop
           docker export wanix-shell-export | tar -C bundle -xf -
           docker rm wanix-shell-export
+          ls -lah bundle
           tar -C bundle -czf _artifact/bundle.tgz .
+          ls -lah _artifact
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
