@@ -69,7 +69,7 @@ jobs:
       - name: Pull from GitHub Container Registry
         run: |
           mkdir -p bundle _artifact
-          docker create --name wanix-shell-export ghcr.io/${{ github.repository }}:${{ inputs.artifact-name }}
+          docker create --name wanix-shell-export ghcr.io/${{ github.repository }}:${{ inputs.artifact-name }} noop
           docker export wanix-shell-export | tar -C bundle -xf -
           docker rm wanix-shell-export
           tar -C bundle -czf _artifact/bundle.tgz .
