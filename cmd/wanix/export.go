@@ -8,9 +8,7 @@ import (
 	"path/filepath"
 
 	"tractor.dev/toolkit-go/engine/cli"
-	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/runtime/assets"
-	"tractor.dev/wanix/shell"
 )
 
 func exportCmd() *cli.Command {
@@ -45,30 +43,23 @@ func exportCmd() *cli.Command {
 				log.Fatal(err)
 			}
 
-			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
-				"shell": shell.Dir,
-			}}
-
-			// TODO: a flag to prefer variant
+			// TODO: a flag to prefer debug
 			wasmFsys, err := assets.WasmFS(false)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			fatal(os.MkdirAll(filepath.Join(dir, "wasi"), 0755))
-			fatal(os.MkdirAll(filepath.Join(dir, "shell"), 0755))
-
 			// Copy files to directory
 			fatal(copyFile(wasmFsys, "wanix.wasm", filepath.Join(dir, "wanix.wasm")))
 			for _, f := range []string{
 				"wanix.min.js",
+				"wanix.js",
 				"wanix-sw.js",
 				"wanix.css",
 				"favicon.ico",
-				"shell/bundle.tgz",
 				"index.html",
 			} {
-				if err := copyFile(fsys, f, filepath.Join(dir, f)); err != nil {
+				if err := copyFile(assets.Dir, f, filepath.Join(dir, f)); err != nil {
 					log.Fatal(err)
 				}
 			}

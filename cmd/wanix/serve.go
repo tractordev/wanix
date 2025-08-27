@@ -23,7 +23,6 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/p9kit"
 	"tractor.dev/wanix/runtime/assets"
-	"tractor.dev/wanix/shell"
 )
 
 func serveCmd() *cli.Command {
@@ -62,10 +61,7 @@ func serveCmd() *cli.Command {
 				fmt.Printf("Bundle available at: http://%s:%s\n", h, p)
 			}
 
-			extra := fskit.MapFS{
-				"shell": shell.Dir,
-			}
-			fsys := fskit.UnionFS{assets.Dir, extra, dirfs}
+			fsys := fskit.UnionFS{assets.Dir, dirfs}
 
 			vn, err := vnet.New(&vnet.Configuration{
 				Debug:             false,
@@ -94,8 +90,8 @@ func serveCmd() *cli.Command {
 
 				if r.URL.Path == "/wanix.wasm" {
 					w.Header().Add("Content-Type", "application/wasm")
-					// TODO: a flag to prefer variant
-					wasmFsys, err := assets.WasmFS(false)
+					// TODO: a flag to prefer debug
+					wasmFsys, err := assets.WasmFS(true)
 					if err != nil {
 						log.Fatal(err)
 					}

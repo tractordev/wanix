@@ -31,7 +31,7 @@ func bundleCmd() *cli.Command {
 func bundleInitCmd() *cli.Command {
 	var (
 		embedRuntime bool
-		// embedShell   bool
+		embedDebug   bool
 	)
 	cmd := &cli.Command{
 		Usage: "init <dir>",
@@ -56,8 +56,8 @@ func bundleInitCmd() *cli.Command {
 				log.Fatal(err)
 			}
 
-			if embedRuntime {
-				wasmFs, err := assets.WasmFS(false)
+			if embedRuntime || embedDebug {
+				wasmFs, err := assets.WasmFS(embedDebug)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -79,7 +79,7 @@ func bundleInitCmd() *cli.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&embedRuntime, "runtime", false, "embed Wasm runtime")
-	// cmd.Flags().BoolVar(&embedShell, "shell", false, "embed Wanix shell")
+	cmd.Flags().BoolVar(&embedDebug, "debug", false, "embed debug Wasm runtime")
 	return cmd
 }
 
