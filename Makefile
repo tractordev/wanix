@@ -21,7 +21,7 @@ DIST_ARCH		?= arm64 amd64
 
 export DOCKER_CMD 	?= $(shell command -v podman || command -v docker)
 RUNTIME_TARGETS		:= runtime/assets/wanix.$(WASM_TOOLCHAIN).wasm runtime/assets/wanix.min.js runtime/wasi/worker/lib.js
-DEP_TARGETS			:= shell/shell.tgz external/linux/bzImage external/v86/v86.wasm
+DEP_TARGETS			:= shell/bundle.tgz
 
 ## Link/install the local Wanix command
 link:
@@ -34,7 +34,7 @@ all: deps build
 .PHONY: all
 
 ## Build Linux kernel, v86 emulator, and shell
-deps: deps-linux deps-v86 deps-shell
+deps: deps-shell
 .PHONY: deps
 
 ## Build Wanix (command and runtime)
@@ -88,16 +88,6 @@ runtime-js:
 	$(DOCKER_CMD) run --rm -v "$(shell pwd)/runtime:/output" wanix-build-js
 .PHONY: runtime-js
 
-## Build v86 emulator (in Docker)
-deps-v86:
-	make -C external/v86
-.PHONY: deps-v86
-
-## Build Linux kernel (in Docker)
-deps-linux:
-	make -C external/linux
-.PHONY: deps-linux
-
 ## Build shell for Wanix (in Docker)
 deps-shell:
 	make -C shell
@@ -105,8 +95,6 @@ deps-shell:
 
 ## Remove dependency artifacts
 deps-clean:
-	make -C external/linux clean
-	make -C external/v86 clean
 	make -C shell clean
 .PHONY: deps-clean
 
@@ -147,14 +135,8 @@ runtime/assets/wanix.go.wasm:
 runtime/assets/wanix.tinygo.wasm:
 	make wasm-tinygo
 
-shell/shell.tgz:
+shell/bundle.tgz:
 	make deps-shell
-
-external/linux/bzImage:
-	make deps-linux
-
-external/v86/v86.wasm:
-	make deps-v86
 
 .DEFAULT_GOAL := show-help
 

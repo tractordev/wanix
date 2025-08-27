@@ -69,7 +69,7 @@ func parseFlags(args []string) (map[string]any, error) {
 		cmdline += " " + append
 	}
 	return map[string]any{
-		"wasm_path":        "./v86/v86.wasm",
+		"wasm_path":        js.Global().Get("wanix").Get("v86wasm"),
 		"screen_container": js.Global().Get("document").Call("getElementById", "screen"),
 		"memory_size":      memorySize,
 		"vga_memory_size":  8 * 1024 * 1024, // 8MB
@@ -78,13 +78,13 @@ func parseFlags(args []string) (map[string]any, error) {
 			"handle9p": js.Global().Get("wanix").Get("virtioHandle"),
 		},
 		"bios": map[string]any{
-			"url": "./v86/seabios.bin",
+			"buffer": js.Global().Get("wanix").Get("v86seabios"),
 		},
 		"vga_bios": map[string]any{
-			"url": "./v86/vgabios.bin",
+			"buffer": js.Global().Get("wanix").Get("v86vgabios"),
 		},
 		"bzimage": map[string]any{
-			"url": "./linux/bzImage",
+			"buffer": js.Global().Get("wanix").Get("bzImage"),
 		},
 		"cmdline": cmdline,
 	}, nil

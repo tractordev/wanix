@@ -32,18 +32,6 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
-
-      - name: Download v86 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dep-v86
-          path: external/v86
-      
-      - name: Download Linux kernel artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dep-linux
-          path: external/linux
       
       - name: Download shell artifact
         uses: actions/download-artifact@v4
@@ -95,18 +83,6 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
 
-      - name: Download v86 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dep-v86
-          path: external/v86
-      
-      - name: Download Linux kernel artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dep-linux
-          path: external/linux
-      
       - name: Download shell artifact
         uses: actions/download-artifact@v4
         with:
@@ -173,18 +149,6 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
-
-      - name: Download v86 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dep-v86
-          path: external/v86
-      
-      - name: Download Linux kernel artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dep-linux
-          path: external/linux
       
       - name: Download shell artifact
         uses: actions/download-artifact@v4
@@ -251,18 +215,6 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true
-
-      - name: Download v86 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dep-v86
-          path: external/v86
-      
-      - name: Download Linux kernel artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dep-linux
-          path: external/linux
       
       - name: Download shell artifact
         uses: actions/download-artifact@v4

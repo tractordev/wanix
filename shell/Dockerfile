@@ -1,11 +1,10 @@
-##
-# Multi-arch, multi-phase builder for Wanix shell
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
 ARG X86_64=linux/x86_64
-ARG X86_32=linux/386
 
 ##
 # Build wexec with tinygo for i386
-FROM tinygo/tinygo:0.36.0 AS wexec
+FROM --platform=$BUILDPLATFORM tinygo/tinygo:0.36.0 AS wexec
 COPY wexec/main.go .
 RUN GOOS=linux GOARCH=386 tinygo build -o wexec main.go
 
@@ -25,7 +24,7 @@ RUN gcc -m32 -shared -fPIC -o preload.so main.c -ldl
 
 ##
 # Build busybox with gcc for i386
-FROM debian:bullseye AS busybox
+FROM --platform=$BUILDPLATFORM debian:bullseye AS busybox
 ARG BUSYBOX_VERSION=1.35.0
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -48,32 +47,39 @@ RUN cd busybox-${BUSYBOX_VERSION} && \
     chmod +x busybox && \
     mv busybox /build
 
-##
-# Grab i386 libraries
-FROM --platform=$X86_32 i386/debian:12-slim AS lib32
+FROM --platform=$BUILDPLATFORM ghcr.io/progrium/linux-build:latest AS kernel
+COPY kernel.config .config
+RUN make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- oldconfig < /dev/null && \
+    make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- bzImage -j$(nproc)
+
+FROM ghcr.io/progrium/v86:latest AS v86
 
 ##
-# Build shell rootfs tarball
-FROM alpine:latest
-WORKDIR /bundle
-RUN mkdir -p \
-    /bundle/rootfs/bin \
-    /bundle/rootfs/dev \
-    /bundle/rootfs/proc \
-    /bundle/rootfs/lib \
-    /bundle/rootfs/etc
-COPY --from=lib32 /lib/ld-linux.so.2 /bundle/rootfs/lib
-COPY --from=lib32 /lib/i386-linux-gnu/libc.so.6 /bundle/rootfs/lib
-COPY --from=lib32 /lib/i386-linux-gnu/libm.so.6 /bundle/rootfs/lib
-COPY --from=lib32 /lib/i386-linux-gnu/libresolv.so.2 /bundle/rootfs/lib
-COPY --from=lib32 /lib/i386-linux-gnu/libdl.so.2 /bundle/rootfs/lib
-COPY --from=preload /build/preload.so /bundle/rootfs/lib
-COPY --from=wexec /home/tinygo/wexec /bundle/rootfs/bin
-COPY --from=busybox /build/busybox /bundle/rootfs/bin
-COPY vm /bundle/vm
-COPY bin/* /bundle/rootfs/bin
-RUN chmod +x /bundle/rootfs/bin/*
-COPY etc/* /bundle/rootfs/etc
-COPY init.js /bundle/init.js
-RUN tar -zcf /shell.tgz -C /bundle .
-CMD ["/bin/sh", "-c", "cp -f /shell.tgz /output/"]
+# Grab i386 libraries
+FROM --platform=$TARGETPLATFORM i386/debian:12-slim AS lib32
+RUN mkdir -p /empty
+
+##
+# Build shell bundle
+FROM scratch
+COPY --from=lib32 /empty /rootfs/bin
+COPY --from=lib32 /empty /rootfs/dev
+COPY --from=lib32 /empty /rootfs/etc
+COPY --from=lib32 /empty /rootfs/proc
+COPY --from=lib32 /empty /rootfs/lib
+COPY --from=lib32 /lib/ld-linux.so.2 /rootfs/lib/
+COPY --from=lib32 /lib/i386-linux-gnu/libc.so.6 /rootfs/lib/
+COPY --from=lib32 /lib/i386-linux-gnu/libm.so.6 /rootfs/lib/
+COPY --from=lib32 /lib/i386-linux-gnu/libresolv.so.2 /rootfs/lib/
+COPY --from=lib32 /lib/i386-linux-gnu/libdl.so.2 /rootfs/lib/
+COPY --from=preload /build/preload.so /rootfs/lib/
+COPY --from=wexec /home/tinygo/wexec /rootfs/bin/
+COPY --from=busybox /build/busybox /rootfs/bin/
+COPY --from=kernel /build/arch/x86/boot/bzImage /kernel/bzImage
+COPY --from=v86 /libv86.js /v86/libv86.js
+COPY --from=v86 /v86.wasm /v86/v86.wasm
+COPY --from=v86 /bios/seabios.bin /v86/seabios.bin
+COPY --from=v86 /bios/vgabios.bin /v86/vgabios.bin
+COPY bin/* /rootfs/bin
+COPY etc/* /rootfs/etc
+COPY init.js /init.js

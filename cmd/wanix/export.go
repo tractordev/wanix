@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 
 	"tractor.dev/toolkit-go/engine/cli"
-	"tractor.dev/wanix/external/linux"
-	v86 "tractor.dev/wanix/external/v86"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/runtime/assets"
 	"tractor.dev/wanix/shell"
@@ -48,8 +46,6 @@ func exportCmd() *cli.Command {
 			}
 
 			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
-				"v86":   v86.Dir,
-				"linux": linux.Dir,
 				"shell": shell.Dir,
 			}}
 
@@ -59,10 +55,8 @@ func exportCmd() *cli.Command {
 				log.Fatal(err)
 			}
 
-			fatal(os.MkdirAll(filepath.Join(dir, "v86"), 0755))
 			fatal(os.MkdirAll(filepath.Join(dir, "wasi"), 0755))
 			fatal(os.MkdirAll(filepath.Join(dir, "shell"), 0755))
-			fatal(os.MkdirAll(filepath.Join(dir, "linux"), 0755))
 
 			// Copy files to directory
 			fatal(copyFile(wasmFsys, "wanix.wasm", filepath.Join(dir, "wanix.wasm")))
@@ -71,12 +65,7 @@ func exportCmd() *cli.Command {
 				"wanix-sw.js",
 				"wanix.css",
 				"favicon.ico",
-				"shell/shell.tgz",
-				"linux/bzImage",
-				"v86/libv86.js",
-				"v86/v86.wasm",
-				"v86/seabios.bin",
-				"v86/vgabios.bin",
+				"shell/bundle.tgz",
 				"index.html",
 			} {
 				if err := copyFile(fsys, f, filepath.Join(dir, f)); err != nil {

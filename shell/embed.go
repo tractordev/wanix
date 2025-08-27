@@ -4,5 +4,5 @@ import (
 	"embed"
 )
 
-//go:embed shell.tgz
+//go:embed bundle.tgz
 var Dir embed.FS

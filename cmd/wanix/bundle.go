@@ -12,11 +12,8 @@ import (
 	"strings"
 
 	"tractor.dev/toolkit-go/engine/cli"
-	"tractor.dev/wanix/external/linux"
-	v86 "tractor.dev/wanix/external/v86"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/runtime/assets"
-	"tractor.dev/wanix/shell"
 )
 
 func bundleCmd() *cli.Command {
@@ -34,9 +31,7 @@ func bundleCmd() *cli.Command {
 func bundleInitCmd() *cli.Command {
 	var (
 		embedRuntime bool
-		embedV86     bool
-		embedLinux   bool
-		embedShell   bool
+		// embedShell   bool
 	)
 	cmd := &cli.Command{
 		Usage: "init <dir>",
@@ -55,8 +50,8 @@ func bundleInitCmd() *cli.Command {
 				log.Fatal(err)
 			}
 
-			// Create empty initrc file
-			initrc := filepath.Join(dir, "initrc")
+			// Create empty init.js file
+			initrc := filepath.Join(dir, "init.js")
 			if err := os.WriteFile(initrc, []byte{}, 0755); err != nil {
 				log.Fatal(err)
 			}
@@ -71,53 +66,20 @@ func bundleInitCmd() *cli.Command {
 				}
 			}
 
-			if embedShell {
-				imagedir := filepath.Join(dir, "vm", "image")
-				if err := os.MkdirAll(imagedir, 0755); err != nil {
-					log.Fatal(err)
-				}
-				if err := copyFile(shell.Dir, "shell.tgz", filepath.Join(imagedir, "shell.tgz")); err != nil {
-					log.Fatal(err)
-				}
-				embedV86 = true
-				embedLinux = true
-			}
-
-			if embedV86 {
-				v86dir := filepath.Join(dir, "vm", "v86")
-				if err := os.MkdirAll(v86dir, 0755); err != nil {
-					log.Fatal(err)
-				}
-
-				files := []string{
-					"v86.wasm",
-					"libv86.js",
-					"seabios.bin",
-					"vgabios.bin",
-				}
-				for _, f := range files {
-					if err := copyFile(v86.Dir, f, filepath.Join(v86dir, f)); err != nil {
-						log.Fatal(err)
-					}
-				}
-			}
-
-			if embedLinux {
-				linuxdir := filepath.Join(dir, "vm", "linux")
-				if err := os.MkdirAll(linuxdir, 0755); err != nil {
-					log.Fatal(err)
-				}
-				if err := copyFile(linux.Dir, "bzImage", filepath.Join(linuxdir, "bzImage")); err != nil {
-					log.Fatal(err)
-				}
-			}
+			// if embedShell {
+			// 	bundledir := filepath.Join(dir, "shell")
+			// 	if err := os.MkdirAll(bundledir, 0755); err != nil {
+			// 		log.Fatal(err)
+			// 	}
+			// 	if err := copyFile(shell.Dir, "bundle.tgz", filepath.Join(bundledir, "bundle.tgz")); err != nil {
+			// 		log.Fatal(err)
+			// 	}
+			// }
 
 		},
 	}
 	cmd.Flags().BoolVar(&embedRuntime, "runtime", false, "embed Wasm runtime")
-	cmd.Flags().BoolVar(&embedV86, "v86", false, "embed v86 hypervisor")
-	cmd.Flags().BoolVar(&embedLinux, "linux", false, "embed Linux kernel")
-	cmd.Flags().BoolVar(&embedShell, "shell", false, "embed Wanix shell")
+	// cmd.Flags().BoolVar(&embedShell, "shell", false, "embed Wanix shell")
 	return cmd
 }
 

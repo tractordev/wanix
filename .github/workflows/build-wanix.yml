@@ -1,30 +1,9 @@
 name: Build Wanix
 on: [push]
 
-jobs:
-  linux:
-    name: Linux
-    uses: tractordev/wanix/.github/workflows/build-linux.yml@main
-    permissions:
-      contents: read
-      packages: write
-    with:
-      artifact-name: dep-linux
-      path: external/linux
-
-  v86:
-    name: v86
-    uses: tractordev/wanix/.github/workflows/build-v86.yml@main
-    permissions:
-      contents: read
-      packages: write
-    with:
-      artifact-name: dep-v86
-      path: external/v86
-  
+jobs:  
   shell:
     name: Shell
-    needs: [linux, v86]
     uses: tractordev/wanix/.github/workflows/build-shell.yml@main
     permissions:
       contents: read
@@ -75,7 +54,7 @@ jobs:
 
   wanix:
     name: Build Wanix
-    needs: [linux, v86, shell, runtime]
+    needs: [shell, runtime]
     uses: tractordev/wanix/.github/workflows/build-cmd.yml@main
     secrets: inherit
     with:
