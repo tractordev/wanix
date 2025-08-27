@@ -36,14 +36,14 @@ jobs:
       - name: Download shell artifact
         uses: actions/download-artifact@v4
         with:
-          name: dep-shell
+          name: wanix-shell
           path: shell
 
       - name: Download runtime artifact
         uses: actions/download-artifact@v4
         with:
           name: wanix-runtime
-          path: runtime
+          path: runtime/assets
 
       - name: Build project
         run: make dist
@@ -86,14 +86,14 @@ jobs:
       - name: Download shell artifact
         uses: actions/download-artifact@v4
         with:
-          name: dep-shell
+          name: wanix-shell
           path: shell
 
       - name: Download runtime artifact
         uses: actions/download-artifact@v4
         with:
           name: wanix-runtime
-          path: runtime
+          path: runtime/assets
 
       - name: Build project
         run: make dist
@@ -153,14 +153,14 @@ jobs:
       - name: Download shell artifact
         uses: actions/download-artifact@v4
         with:
-          name: dep-shell
+          name: wanix-shell
           path: shell
 
       - name: Download runtime artifact
         uses: actions/download-artifact@v4
         with:
           name: wanix-runtime
-          path: runtime
+          path: runtime/assets
 
       - name: Build project
         run: |
@@ -219,14 +219,14 @@ jobs:
       - name: Download shell artifact
         uses: actions/download-artifact@v4
         with:
-          name: dep-shell
+          name: wanix-shell
           path: shell
 
       - name: Download runtime artifact
         uses: actions/download-artifact@v4
         with:
           name: wanix-runtime
-          path: runtime
+          path: runtime/assets
 
 
       - name: Build project

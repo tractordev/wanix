@@ -50,7 +50,8 @@ jobs:
         with:
           context: ${{ inputs.path }}
           push: true
-          tags: ghcr.io/${{ github.repository }}:${{ inputs.artifact-name }}
+          load: true
+          tags: ghcr.io/${{ github.repository }}:shell
 
 
   upload:
@@ -69,7 +70,7 @@ jobs:
       - name: Pull from GitHub Container Registry
         run: |
           mkdir -p bundle _artifact
-          docker create --name wanix-shell-export ghcr.io/${{ github.repository }}:${{ inputs.artifact-name }} noop
+          docker create --name wanix-shell-export ghcr.io/${{ github.repository }}:shell noop
           docker export wanix-shell-export | tar -C bundle -xf -
           docker rm wanix-shell-export
           tar -C bundle -czf _artifact/bundle.tgz .
