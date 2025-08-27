@@ -16,6 +16,13 @@ RUN esbuild index.ts \
     --bundle \
     --loader:.go.js=text \
     --loader:.tinygo.js=text \
+    --format=esm \
+    --minify
+RUN esbuild index.ts \
+    --outfile=assets/wanix.js \
+    --bundle \
+    --loader:.go.js=text \
+    --loader:.tinygo.js=text \
     --format=esm
 RUN esbuild wasi/mod.ts \
     --outfile=wasi/worker/lib.js \
@@ -52,13 +59,20 @@ ARG GOOS=linux
 ARG GOARCH=amd64
 COPY --from=js /build/runtime/wasi/worker/lib.js /build/runtime/wasi/worker/lib.js
 COPY --from=js /build/runtime/assets/wanix.min.js /build/runtime/assets/wanix.min.js
-COPY --from=wasm-go /build/runtime/assets/wanix.go.wasm /build/runtime/assets/wanix.go.wasm
-COPY --from=wasm-tinygo /build/runtime/assets/wanix.tinygo.wasm /build/runtime/assets/wanix.tinygo.wasm
+COPY --from=wasm-go /build/runtime/assets/wanix.debug.wasm /build/runtime/assets/wanix.debug.wasm
+COPY --from=wasm-tinygo /build/runtime/assets/wanix.wasm /build/runtime/assets/wanix.wasm
 RUN make cmd
 
 FROM scratch AS runtime-dist
 WORKDIR /
 COPY --from=js /build/runtime/assets/wanix.min.js /wanix.min.js
-COPY --from=wasm-go /build/runtime/assets/wanix.go.wasm /wanix.go.wasm
-COPY --from=wasm-tinygo /build/runtime/assets/wanix.tinygo.wasm /wanix.tinygo.wasm
+COPY --from=js /build/runtime/assets/wanix.js /wanix.js
+COPY --from=wasm-go /build/runtime/assets/wanix.debug.wasm /wanix.debug.wasm
+COPY --from=wasm-tinygo /build/runtime/assets/wanix.wasm /wanix.wasm
+CMD ["true"]
+
+FROM scratch AS dist
+WORKDIR /
+COPY --from=runtime-dist /* .
+COPY --from=cmd /build/.local/bin/wanix /wanix
 CMD ["true"]
