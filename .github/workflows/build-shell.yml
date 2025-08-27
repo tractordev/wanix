@@ -73,6 +73,7 @@ jobs:
           docker create --name wanix-shell-export ghcr.io/${{ github.repository }}:shell noop
           docker export wanix-shell-export | tar -C bundle -xf -
           docker rm wanix-shell-export
+          rm -rf bundle/.dockerenv bundle/dev bundle/proc bundle/sys bundle/etc
           ls -lah bundle
           tar -C bundle -czf _artifact/bundle.tgz .
           ls -lah _artifact
