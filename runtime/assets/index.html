@@ -8,7 +8,11 @@
     import { Wanix } from "./wanix.min.js";
     
     const queryParams = new URLSearchParams(window.location.search);
-    const w = new Wanix({ helpers: true, bundle: queryParams.get('bundle') || "/shell/bundle.tgz" });
+    const w = new Wanix({ 
+        helpers: true, 
+        wasm: queryParams.get('wasm') || "./wanix.wasm", 
+        bundle: queryParams.get('bundle') || "/shell/bundle.tgz" 
+    });
     
     const url = queryParams.get("tty");
     if (url) {

@@ -21,7 +21,12 @@ export class Wanix extends WanixFS {
 
         const sys = new MessageChannel();
         super(sys.port1);
+
+        if (!config.wasm) {
+            config.wasm = "./wanix.wasm";
+        }
         
+        this.config = config;
         window.wanix = {
             config,
             instance: this,
@@ -36,10 +41,12 @@ export class Wanix extends WanixFS {
             setupConsoleHelpers();
         }
 
+
+
         if (config.bundle) {
             this.loadBundle(config.bundle);
         } else {
-            fetch("./wanix.wasm").then(r => r.arrayBuffer()).then(this.loadWasm);
+            fetch(config.wasm).then(r => r.arrayBuffer()).then(this.loadWasm);
         }
         
     }
@@ -79,7 +86,7 @@ export class Wanix extends WanixFS {
             }
         }).then(() => {
             if (!foundWasm) {
-                fetch("./wanix.wasm").then(r => r.arrayBuffer()).then(this.loadWasm);
+                fetch(this.config.wasm).then(r => r.arrayBuffer()).then(this.loadWasm);
             }
         });
     }
