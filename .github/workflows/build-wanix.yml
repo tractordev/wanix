@@ -9,7 +9,7 @@ jobs:
       contents: read
       packages: write
     with:
-      artifact-name: wanix-shell
+      artifact-name: shell-bundle
       path: shell
 
 
@@ -43,24 +43,20 @@ jobs:
             type=local,dest=./_artifact
           tags: ghcr.io/${{ github.repository }}:runtime
       
-      - name: Write out runtime artifacts
+      - name: List out runtime artifacts
         run: |
-          # mkdir -p _artifact
-          # docker rm -f wanix-runtime
-          # docker create --name wanix-runtime ghcr.io/${{ github.repository }}:runtime
-          # docker cp wanix-runtime:/ _artifact/
           ls -lah _artifact/
       
       - name: Upload artifact
         if: ${{ !env.ACT }}
         uses: actions/upload-artifact@v4
         with:
-          name: wanix-runtime
+          name: runtime-build
           path: _artifact
 
   wanix:
     name: Build Wanix
-    needs: [shell, runtime]
+    needs: [runtime]
     uses: tractordev/wanix/.github/workflows/build-cmd.yml@main
     secrets: inherit
     with:
