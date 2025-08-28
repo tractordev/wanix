@@ -4,6 +4,8 @@ go 1.25
 
 replace github.com/hugelgupf/p9 => github.com/progrium/p9 v0.0.0-20250227010111-4025760ecd04
 
+replace golang.org/x/sys => github.com/progrium/sys-wasm v0.0.0-20240620081741-5ccc4fc17421
+
 // patch on top of the feature/cbor-tinygo-beta branch
 // based on https://github.com/fxamacker/cbor/issues/686
 replace github.com/fxamacker/cbor/v2 => ./hack/cbor
@@ -16,6 +18,7 @@ require (
 	github.com/progrium/go-netstack v0.0.0-20240720002214-37b2b8227b91
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701
 	golang.org/x/net v0.39.0
+	golang.org/x/sys v0.32.0
 	golang.org/x/term v0.31.0
 	tractor.dev/toolkit-go v0.0.0-20250103001615-9a6753936c19
 )
@@ -32,7 +35,6 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 )
