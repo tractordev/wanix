@@ -110,3 +110,21 @@ func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
 
 	return file.h.FileInfo(), nil
 }
+
+func (fsys *FS) Readlink(name string) (string, error) {
+	d, f := splitpath(name)
+	if _, ok := fsys.files[d]; !ok {
+		return "", &os.PathError{Op: "readlink", Path: name, Err: fs.ErrNotExist}
+	}
+
+	file, ok := fsys.files[d][f]
+	if !ok {
+		return "", &os.PathError{Op: "readlink", Path: name, Err: fs.ErrNotExist}
+	}
+
+	if file.h.Typeflag != tar.TypeSymlink {
+		return "", &os.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
+	}
+
+	return file.h.Linkname, nil
+}
