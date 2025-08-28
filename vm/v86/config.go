@@ -55,7 +55,7 @@ func parseFlags(args []string) (map[string]any, error) {
 	f.StringVar(&bios, "bios", "", "BIOS image file")
 	f.BoolVar(&acpi, "acpi", false, "Enable ACPI")
 	f.BoolVar(&fastboot, "fastboot", false, "Enable fast boot")
-	f.StringVar(&netdev, "netdev", "user,type=ne2k,relay_url=ws://localhost:7654/.well-known/ethernet", "Network device configuration")
+	f.StringVar(&netdev, "netdev", "", "Network device configuration")
 	f.StringVar(&virtfs, "virtfs", "", "VirtFS configuration")
 	if err := f.Parse(args); err != nil {
 		return nil, err

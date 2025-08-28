@@ -11,7 +11,8 @@
     const w = new Wanix({ 
         helpers: true, 
         wasm: queryParams.get('wasm') || "./wanix.wasm", 
-        bundle: queryParams.get('bundle') || "/shell/bundle.tgz" 
+        bundle: queryParams.get('bundle') || "/shell/bundle.tgz",
+        network: queryParams.get('network') || "ws://localhost:7654/.well-known/ethernet"
     });
     
     const url = queryParams.get("tty");
