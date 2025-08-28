@@ -13,9 +13,6 @@ import (
 	"golang.org/x/net/websocket"
 	"golang.org/x/term"
 	"tractor.dev/toolkit-go/engine/cli"
-	"tractor.dev/wanix/external/linux"
-	v86 "tractor.dev/wanix/external/v86"
-	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/runtime/assets"
 )
 
@@ -30,15 +27,10 @@ func AddConsoleCmd(root *cli.Command) {
 
 			defer l.Close()
 
-			fsys := fskit.UnionFS{assets.Dir, fskit.MapFS{
-				"v86":   v86.Dir,
-				"linux": linux.Dir,
-			}}
-
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
 				w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
-				http.FileServerFS(fsys).ServeHTTP(w, r)
+				http.FileServerFS(assets.Dir).ServeHTTP(w, r)
 			}))
 			http.Handle("/.tty", websocket.Handler(func(conn *websocket.Conn) {
 				conn.PayloadType = websocket.BinaryFrame
