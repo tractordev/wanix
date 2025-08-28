@@ -72,7 +72,7 @@ func Serve(fsys fs.FS, inst js.Value, debug bool) {
 	if debug {
 		o = append(o, p9.WithServerLogger(ulog.Log))
 	}
-	srv := p9.NewServer(p9kit.Attacher(fsys), o...)
+	srv := p9.NewServer(p9kit.Attacher(fsys, p9kit.WithMemAttrStore()), o...)
 	if err := srv.Handle(inR, outW); err != nil {
 		log.Fatal(err)
 	}
