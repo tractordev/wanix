@@ -26,36 +26,50 @@ func OpenFile(fsys FS, name string, flag int, perm FileMode) (File, error) {
 	}
 
 	// Log all open flags
-	// log.Printf("openfile flags: O_RDONLY=%v O_WRONLY=%v O_RDWR=%v O_APPEND=%v O_CREATE=%v O_EXCL=%v O_SYNC=%v O_TRUNC=%v",
-	// 	flag&os.O_RDONLY != 0,
-	// 	flag&os.O_WRONLY != 0,
-	// 	flag&os.O_RDWR != 0,
-	// 	flag&os.O_APPEND != 0,
-	// 	flag&os.O_CREATE != 0,
-	// 	flag&os.O_EXCL != 0,
-	// 	flag&os.O_SYNC != 0,
-	// 	flag&os.O_TRUNC != 0)
+	// log.Println(name, fsutil.ParseOpenFlags(flag), fsutil.ParseFileMode(perm))
 
-	// if create flag is set
-	if flag&os.O_CREATE != 0 {
-		if flag&os.O_APPEND == 0 {
-			// if not append, create a new file
-			return Create(fsys, name)
-		} else {
-			// if append, open the file
+	// Handle write-only and read-write modes
+	if flag&os.O_WRONLY != 0 || flag&os.O_RDWR != 0 {
+		// O_CREATE means create file if it doesn't exist
+		if flag&os.O_CREATE != 0 {
 			f, err := fsys.Open(name)
 			if err != nil {
-				// if file doesn't exist, create it
 				if os.IsNotExist(err) {
-					return Create(fsys, name)
+					f, err := Create(fsys, name)
+					if err != nil {
+						return nil, err
+					}
+					if perm != 0 {
+						if err := Chmod(fsys, name, perm); err != nil {
+							f.Close()
+							return nil, err
+						}
+					}
+					return f, nil
 				}
 				return nil, err
 			}
-			// todo: seek to the end?
+			// O_TRUNC means truncate existing file
+			if flag&os.O_TRUNC != 0 {
+				// Close and recreate to truncate
+				f.Close()
+				f, err := Create(fsys, name)
+				if err != nil {
+					return nil, err
+				}
+				if perm != 0 {
+					if err := Chmod(fsys, name, perm); err != nil {
+						f.Close()
+						return nil, err
+					}
+				}
+				return f, nil
+			}
 			return f, nil
 		}
+		// No O_CREATE - file must exist
+		return fsys.Open(name)
 	}
 
-	// just fall back to Open
 	return fsys.Open(name)
 }

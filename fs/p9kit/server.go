@@ -272,7 +272,7 @@ func (l *p9file) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
 	// This matches standard Unix behavior
 	perm := fs.FileMode(0666)
 
-	f, err := fs.OpenFile(l.fsys, l.path, mode.OSFlags(), perm)
+	f, err := fs.OpenFile(l.fsys, l.path, int(mode), perm)
 	if err != nil {
 		return qid, 0, err
 	}
@@ -364,11 +364,7 @@ func (l *p9file) RenameAt(oldName string, newDir p9.File, newName string) error 
 	oldPath := path.Join(l.path, oldName)
 	newPath := path.Join(newDir.(*p9file).path, newName)
 
-	err := fs.Rename(l.fsys, oldPath, newPath)
-	if err != nil {
-		log.Println("RENAME:", err, oldPath, newPath)
-	}
-	return err
+	return fs.Rename(l.fsys, oldPath, newPath)
 }
 
 // Readlink implements p9.File.Readlink.
