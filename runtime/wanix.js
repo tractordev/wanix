@@ -59,28 +59,29 @@ export class Wanix extends WanixFS {
         const toUntar = window.wanix.bundle.slice();
         let foundWasm = false;
         untar(toUntar).progress((f) => {
-            // console.log("found", f.name);
-            if (f.name === "./wanix.wasm") {
+            const fname = f.name.replace(/^\.\//, "");
+            // console.log("bundle file:", fname);
+            if (fname === "wanix.wasm") {
                 foundWasm = true;
                 console.log("loading wasm from bundle");
                 this.loadWasm(f.buffer);
-            } else if (f.name === "./v86/libv86.js") {
+            } else if (fname === "v86/libv86.js") {
                 console.log("loading libv86.js from bundle");
                 const v86Script = document.createElement('script');
                 const blob = new Blob([f.buffer], { type: 'text/javascript' });
                 v86Script.src = URL.createObjectURL(blob);
                 document.head.appendChild(v86Script);
-            } else if (f.name === "./v86/v86.wasm") {
+            } else if (fname === "v86/v86.wasm") {
                 console.log("loading v86.wasm from bundle");
                 const blob = new Blob([f.buffer], { type: 'application/wasm' });
                 window.wanix.v86wasm = URL.createObjectURL(blob);
-            } else if (f.name === "./v86/seabios.bin") {
+            } else if (fname === "v86/seabios.bin") {
                 console.log("loading seabios.bin from bundle");
                 window.wanix.v86seabios = f.buffer;
-            } else if (f.name === "./v86/vgabios.bin") {
+            } else if (fname === "v86/vgabios.bin") {
                 console.log("loading vgabios.bin from bundle");
                 window.wanix.v86vgabios = f.buffer;
-            } else if (f.name === "./kernel/bzImage") {
+            } else if (fname === "kernel/bzImage") {
                 console.log("loading bzImage from bundle");
                 window.wanix.bzImage = f.buffer;
             }
