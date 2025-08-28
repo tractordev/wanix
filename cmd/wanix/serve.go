@@ -79,6 +79,7 @@ func serveCmd() *cli.Command {
 			http.Handle("/.well-known/ethernet", ethernetHandler(vn))
 
 			p9srv := p9.NewServer(p9kit.Attacher(dirfs, p9kit.WithXattrAttrStore()))
+
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if websocket.IsWebSocketUpgrade(r) {
 					p9Handler(p9srv, w, r)
