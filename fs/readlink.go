@@ -3,7 +3,6 @@ package fs
 import (
 	"errors"
 	"io"
-	"path"
 	"strings"
 )
 
@@ -46,26 +45,4 @@ func Readlink(fsys FS, name string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(b)), nil
-}
-
-// deprecated?
-func targetNormalizer(symlink string) func(target string, err error) (string, error) {
-	return func(target string, err error) (normalized string, e error) {
-		if err != nil {
-			e = err
-			return
-		}
-		normalized = target
-		if normalized == "/" {
-			normalized = "."
-			return
-		}
-		if strings.HasPrefix(normalized, "./") {
-			normalized = path.Join(path.Dir(symlink), normalized[2:])
-		}
-		// if strings.HasPrefix(normalized, "/") {
-		// 	normalized = normalized[1:]
-		// }
-		return
-	}
 }
