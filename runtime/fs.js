@@ -14,6 +14,10 @@ export class WanixFS {
         await this.peer.call("Mkdir", [name]);
     }
 
+    async makeDirAll(name) {
+        await this.peer.call("MkdirAll", [name]);
+    }
+
     async bind(name, newname) {
         await this.peer.call("Bind", [name, newname]);
     }
@@ -28,6 +32,10 @@ export class WanixFS {
 
     async readText(name) {
         return (new TextDecoder()).decode(await this.readFile(name));
+    }
+
+    async waitFor(name, timeoutMs=1000) {
+        await this.peer.call("WaitFor", [name, timeoutMs]);
     }
 
     async stat(name) {
@@ -48,8 +56,20 @@ export class WanixFS {
         return (await this.peer.call("AppendFile", [name, contents])).value;
     }
 
+    async rename(oldname, newname) {
+        await this.peer.call("Rename", [oldname, newname]);
+    }
+
+    async copy(oldname, newname) {
+        await this.peer.call("Copy", [oldname, newname]);
+    }
+
     async remove(name) {
         await this.peer.call("Remove", [name]);
+    }
+
+    async removeAll(name) {
+        await this.peer.call("RemoveAll", [name]);
     }
 
     async truncate(name, size) {
