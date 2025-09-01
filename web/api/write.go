@@ -1,0 +1,39 @@
+//go:build js && wasm
+
+package api
+
+import (
+	"log"
+
+	"tractor.dev/toolkit-go/duplex/rpc"
+	"tractor.dev/wanix/fs"
+)
+
+func (s *syscaller) write(r rpc.Responder, c *rpc.Call) {
+	var args []any
+	c.Receive(&args)
+
+	fd, ok := args[0].(uint64)
+	if !ok {
+		log.Panicf("arg 0 is not a uint64: %T %v", args[1], args[1])
+	}
+
+	f, ok := s.fds[int(fd)]
+	if !ok {
+		r.Return(fs.ErrInvalid)
+		return
+	}
+
+	data, ok := args[1].([]byte)
+	if !ok {
+		panic("arg 1 is not a []byte")
+	}
+
+	n, err := fs.Write(f, data)
+	if err != nil {
+		r.Return(err)
+		return
+	}
+
+	r.Return(n)
+}
