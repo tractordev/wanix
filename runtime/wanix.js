@@ -25,6 +25,8 @@ export class Wanix extends WanixFS {
         if (!config.wasm) {
             config.wasm = "./wanix.wasm";
         }
+
+        
         
         this.config = config;
         window.wanix = {
@@ -36,6 +38,7 @@ export class Wanix extends WanixFS {
             // kludge: for worker
             _toport: (port) => new duplex.PortConn(port), 
         };
+        this.ready = new Promise((resolve, reject) => window.wanix.ready = resolve);
 
         if (config.helpers) {
             setupConsoleHelpers();
