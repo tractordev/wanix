@@ -5,7 +5,7 @@
 </head>
 <body>
 <script type="module">
-    import { Wanix } from "./wanix.min.js";
+    import { Wanix, WanixFS } from "./wanix.min.js";
     
     const queryParams = new URLSearchParams(window.location.search);
     const w = new Wanix({ 
@@ -14,7 +14,9 @@
         bundle: queryParams.get('bundle') || "/shell/bundle.tgz",
         network: queryParams.get('network') || "ws://localhost:7654/.well-known/ethernet"
     });
-    
+    await w.ready;
+    console.log("wanix ready");
+
     const url = queryParams.get("tty");
     if (url) {
         // websocket tty mode 
