@@ -64,6 +64,17 @@ func main() {
 		// root.Bind("#bundle", "bundle")
 	}
 
-	go virtio9p.Serve(root.Namespace(), inst, false)
-	api.PortResponder(inst.Get("sys"), root)
+	js.Global().Get("wanix").Set("connect", js.FuncOf(func(this js.Value, args []js.Value) any {
+		ch := js.Global().Get("MessageChannel").New()
+		go api.PortResponder(js.Global().Get("wanix").Call("_toport", ch.Get("port1")), root)
+		return ch.Get("port2")
+	}))
+
+	// todo: remove this, use connect
+	go api.PortResponder(inst.Get("sys"), root)
+
+	js.Global().Get("wanix").Call("ready")
+
+	virtio9p.Serve(root.Namespace(), inst, false)
+
 }
