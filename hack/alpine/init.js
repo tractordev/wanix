@@ -11,7 +11,7 @@
         "rw",
         "root=host9p",
         "rootfstype=9p",
-        `rootflags=trans=virtio,version=9p2000.L,aname=vm/${vm}/fsys,cache=none,msize=8192,access=client`,
+        `rootflags=trans=virtio,version=9p2000.L,aname=vm/${vm}/fsys,cache=none`,
     ];
     const ctlcmd = ["start", "-append", `'${cmdline.join(" ")}'`];
     if (window.wanix.config.network) {
