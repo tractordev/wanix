@@ -9,7 +9,11 @@ import (
 
 // InfoToStat takes a platform native FileInfo and converts it into a 9P2000.L compatible Stat_t
 func InfoToStat(fi os.FileInfo) *Stat_t {
-	nativeStat := fi.Sys().(*syscall.Stat_t)
+	sys := fi.Sys()
+	if sys == nil {
+		return nil
+	}
+	nativeStat := sys.(*syscall.Stat_t)
 	return &Stat_t{
 		Dev:     nativeStat.Dev,
 		Ino:     nativeStat.Ino,
