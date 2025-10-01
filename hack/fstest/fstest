@@ -1,0 +1,30 @@
+#!/bin/sh
+set -e
+
+# Check for help flag
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "Usage: $0 [host:port]"
+    echo "  If host:port is provided, mounts 9p filesystem at /mnt"
+    echo "  Otherwise, mount directly to /mnt to test locally"
+    exit 0
+fi
+
+# Parse host:port argument if provided
+if [ $# -eq 1 ]; then
+    HOST="${1%:*}"
+    PORT="${1#*:}"
+
+    if [ "$HOST" = "$PORT" ]; then
+        echo "Error: Invalid host:port format"
+        exit 1
+    fi
+
+    echo "* Mounting 9p filesystem from $HOST:$PORT at /mnt"
+    sudo mount -t 9p -o trans=tcp,port=$PORT,version=9p2000.L $HOST /mnt
+fi
+
+if [ -n "$FILTER" ]; then
+    BATS_ARGS="${BATS_ARGS} --filter-tags $(echo "$FILTER" | sed 's/-/!/g')"
+fi
+
+exec bats $BATS_ARGS fstest.bats
