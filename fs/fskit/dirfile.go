@@ -21,6 +21,9 @@ func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
 	if !info.IsDir() {
 		info.mode |= fs.ModeDir
 	}
+	if info.size == 0 {
+		info.size = int64(2 + len(entries))
+	}
 	// not sure a better place to do this,
 	// but we'll filter entries starting with # to "hide" them
 	entries = slices.DeleteFunc(entries, func(e fs.DirEntry) bool {
