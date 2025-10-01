@@ -52,7 +52,7 @@ COPY kernel.config .config
 RUN make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- oldconfig < /dev/null && \
     make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- bzImage -j$(nproc)
 
-FROM ghcr.io/progrium/v86:latest AS v86
+FROM --platform=$BUILDPLATFORM ghcr.io/progrium/v86:latest AS v86
 
 ##
 # Grab i386 libraries
