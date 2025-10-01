@@ -1,5 +1,6 @@
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
+ARG LINUX_AMD64=linux/amd64
 
 FROM --platform=$TARGETPLATFORM i386/alpine:latest AS rootfs
 RUN apk add -u e2fsprogs podman netavark
@@ -11,7 +12,7 @@ COPY kernel.config .config
 RUN make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- oldconfig < /dev/null && \
     make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- bzImage -j$(nproc)
 
-FROM ghcr.io/progrium/v86:latest AS v86
+FROM --platform=$LINUX_AMD64 ghcr.io/progrium/v86:latest AS v86
 
 FROM scratch AS bundle
 COPY --from=rootfs / /rootfs
