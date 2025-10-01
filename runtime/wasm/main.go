@@ -17,19 +17,17 @@ import (
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
+	"tractor.dev/wanix/web/runtime"
 	"tractor.dev/wanix/web/virtio9p"
 )
 
 func main() {
 	log.SetFlags(log.Lshortfile)
 
-	inst := js.Global().Get("wanix")
-	if inst.IsUndefined() {
-		log.Fatal("Wanix not initialized on this page")
-	}
+	inst := runtime.Instance()
 
 	k := wanix.New()
-	k.AddModule("#web", web.New(k, inst))
+	k.AddModule("#web", web.New(k))
 	k.AddModule("#vm", vm.New())
 	k.AddModule("#pipe", &pipe.Allocator{})
 	k.AddModule("#|", &pipe.Allocator{}) // alias for #pipe
@@ -40,13 +38,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// todo: let config define, otherwise default to these
 	root.Bind("#task", "task")
 	root.Bind("#cap", "cap")
 	root.Bind("#web", "web")
 	root.Bind("#vm", "vm")
 	root.Bind("#|", "#console")
 
-	bundleBytes := inst.Get("bundle")
+	bundleBytes := inst.Get("_bundle")
 	if !bundleBytes.IsUndefined() {
 		jsBuf := js.Global().Get("Uint8Array").New(bundleBytes)
 		b := make([]byte, jsBuf.Length())
@@ -64,16 +63,15 @@ func main() {
 		// root.Bind("#bundle", "bundle")
 	}
 
-	js.Global().Get("wanix").Set("connect", js.FuncOf(func(this js.Value, args []js.Value) any {
+	inst.Set("createPort", js.FuncOf(func(this js.Value, args []js.Value) any {
 		ch := js.Global().Get("MessageChannel").New()
-		go api.PortResponder(js.Global().Get("wanix").Call("_toport", ch.Get("port1")), root)
+		go api.PortResponder(inst.Call("_portConn", ch.Get("port1")), root)
 		return ch.Get("port2")
 	}))
 
-	// todo: remove this, use connect
-	go api.PortResponder(inst.Get("sys"), root)
+	go api.PortResponder(inst.Call("_portConn", inst.Get("_sys").Get("port1")), root)
 
-	js.Global().Get("wanix").Call("ready")
+	inst.Call("_wasmReady")
 
 	virtio9p.Serve(root.Namespace(), inst, false)
 

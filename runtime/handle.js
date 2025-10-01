@@ -1,6 +1,6 @@
-import * as duplex from "./duplex.min.js";
+import * as duplex from "@progrium/duplex";
 
-export class WanixFS {
+export class WanixHandle {
     constructor(port) {
         const sess = new duplex.Session(new duplex.PortConn(port));
         this.peer = new duplex.Peer(sess, new duplex.CBORCodec());
@@ -28,6 +28,13 @@ export class WanixFS {
     
     async readFile(name) {
         return (await this.peer.call("ReadFile", [name])).value;
+    }
+
+    // not sure if readFile approach is good, but this is an option for now
+    async readFile2(name) {
+        const rd = await this.openReadable(name);
+        const response = new Response(rd); // cute trick
+        return new Uint8Array(await response.arrayBuffer());
     }
 
     async readText(name) {

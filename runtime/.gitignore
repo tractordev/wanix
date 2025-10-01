@@ -1,6 +1,7 @@
 node_modules
 assets/wanix.min.js
 assets/wanix.js
+assets/wanix.handle.js
 assets/wanix.wasm
 assets/wanix.tinygo.wasm
 assets/wanix.go.wasm

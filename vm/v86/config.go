@@ -8,7 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"syscall/js"
 )
 
 func parseFlags(args []string) (map[string]any, error) {
@@ -69,24 +68,11 @@ func parseFlags(args []string) (map[string]any, error) {
 		cmdline += " " + append
 	}
 	return map[string]any{
-		"wasm_path":        js.Global().Get("wanix").Get("v86wasm"),
-		"screen_container": js.Global().Get("document").Call("getElementById", "screen"),
-		"memory_size":      memorySize,
-		"vga_memory_size":  8 * 1024 * 1024, // 8MB
-		"net_device":       parseNetdev(netdev),
-		"filesystem": map[string]any{
-			"handle9p": js.Global().Get("wanix").Get("virtioHandle"),
-		},
-		"bios": map[string]any{
-			"buffer": js.Global().Get("wanix").Get("v86seabios"),
-		},
-		"vga_bios": map[string]any{
-			"buffer": js.Global().Get("wanix").Get("v86vgabios"),
-		},
-		"bzimage": map[string]any{
-			"buffer": js.Global().Get("wanix").Get("bzImage"),
-		},
-		"cmdline": cmdline,
+		"memory_size":     memorySize,
+		"vga_memory_size": 8 * 1024 * 1024, // 8MB
+		"net_device":      parseNetdev(netdev),
+		"cmdline":         cmdline,
+		"autostart":       true,
 	}, nil
 }
 

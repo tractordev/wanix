@@ -18,11 +18,12 @@ import (
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web/dom"
 	"tractor.dev/wanix/web/fsa"
+	"tractor.dev/wanix/web/runtime"
 	"tractor.dev/wanix/web/sw"
 	"tractor.dev/wanix/web/worker"
 )
 
-func New(k *wanix.K, ctx js.Value) fskit.MapFS {
+func New(k *wanix.K) fskit.MapFS {
 	workerfs := worker.New(k.Root)
 	opfs, _ := fsa.OPFS()
 	webfs := fskit.MapFS{
@@ -31,8 +32,9 @@ func New(k *wanix.K, ctx js.Value) fskit.MapFS {
 		"worker": workerfs,
 		"opfs":   opfs,
 	}
-	if !ctx.Get("sw").IsUndefined() {
-		webfs["sw"] = sw.Activate(ctx.Get("sw"), k)
+	if !runtime.Instance().Get("_sw").IsUndefined() {
+		webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
+		webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
 	}
 
 	k.Cap.Register("pickerfs", func(_ *cap.Resource) (cap.Mounter, error) {

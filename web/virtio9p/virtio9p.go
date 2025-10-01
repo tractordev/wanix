@@ -19,7 +19,7 @@ func Serve(fsys fs.FS, inst js.Value, debug bool) {
 
 	var virtioSend js.Value
 
-	inst.Set("virtioHandle", js.FuncOf(func(this js.Value, args []js.Value) any {
+	inst.Set("_virtioHandle", js.FuncOf(func(this js.Value, args []js.Value) any {
 		virtioSend = args[1]
 		go func() {
 			buf := make([]byte, args[0].Get("byteLength").Int())

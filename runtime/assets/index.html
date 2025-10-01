@@ -5,16 +5,16 @@
 </head>
 <body>
 <script type="module">
-    import { Wanix, WanixFS } from "./wanix.min.js";
+    import { WanixRuntime } from "./wanix.min.js";
     
     const queryParams = new URLSearchParams(window.location.search);
-    const w = new Wanix({ 
+    const w = new WanixRuntime({ 
         helpers: true, 
         wasm: queryParams.get('wasm') || "./wanix.wasm", 
         bundle: queryParams.get('bundle') || "/shell/bundle.tgz",
         network: queryParams.get('network') || "ws://localhost:7654/.well-known/ethernet"
     });
-    await w.ready;
+    await w.ready();
     console.log("wanix ready");
 
     const url = queryParams.get("tty");
@@ -31,7 +31,11 @@
     }
     
     try {
-        (new Function(await w.readText("#bundle/init.js")))();
+        const initJS = await w.readText("#bundle/init.js");
+        const blob = new Blob([initJS], { type: 'text/javascript' });
+        const initUrl = URL.createObjectURL(blob);
+        const initModule = await import(initUrl);
+        await initModule.default(w);
     } catch (e) {
         console.log("No bundle init.js found");
     }

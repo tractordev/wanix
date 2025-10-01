@@ -13,7 +13,7 @@ VERSION 		?= v0.3-$(shell git rev-parse --short HEAD)
 GOARGS			?=
 GOOS			?= $(shell go env GOOS)
 GOARCH			?= $(shell go env GOARCH)
-WASM_DEBUG 		?= 
+WASM_DEBUG 		?= true
 LINK_BIN 		?= /usr/local/bin
 DIST_DIR		?= .local/dist
 DIST_OS			?= darwin windows linux
@@ -57,8 +57,8 @@ cmd: runtime/assets/wanix$(if $(WASM_DEBUG),.debug,).wasm runtime/assets/wanix.m
 runtime: js wasm
 .PHONY: runtime
 
-## Build WASM module
-wasm: $(if $(WASM_DEBUG),wasm-go,wasm-tinygo)
+## Build WASM modules
+wasm: $(if $(WASM_DEBUG),wasm-go,) wasm-tinygo
 .PHONY: wasm
 
 ## Build WASM module using TinyGo
@@ -81,6 +81,7 @@ js:
 	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/wasi/worker/lib.js runtime/wasi/worker/lib.js
 	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/assets/wanix.min.js runtime/assets/wanix.min.js
 	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/assets/wanix.js runtime/assets/wanix.js
+	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/assets/wanix.handle.js runtime/assets/wanix.handle.js
 .PHONY: js
 
 ## Build shell bundle for Wanix (in Docker)

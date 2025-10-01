@@ -16,12 +16,13 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/vfs/pipe"
+	"tractor.dev/wanix/web/runtime"
 )
 
 type VM struct {
 	id     string
 	kind   string
-	value  js.Value
+	worker js.Value
 	serial *serialReadWriter
 }
 
@@ -36,9 +37,9 @@ func (r *VM) ID() string {
 	return r.id
 }
 
-func (r *VM) Value() js.Value {
-	return r.value
-}
+// func (r *VM) Value() js.Value {
+// 	return r.value
+// }
 
 func (r *VM) Open(name string) (fs.File, error) {
 	return r.OpenContext(context.Background(), name)
@@ -92,15 +93,12 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 						log.Println("vm start:", err)
 						return
 					}
-					r.value = makeVM(r.ID(), options)
-					r.serial = newSerialReadWriter(r.value)
+					worker, serialport := makeVM(r.ID(), options)
+					r.worker = worker
+					r.serial = newSerialReadWriter(serialport)
 					if err := TryPatch(ctx, r.serial, serialFile); err != nil {
 						log.Println("vm start:", err)
 					}
-					r.value.Get("ready").Call("then", js.FuncOf(func(this js.Value, args []js.Value) any {
-						r.value.Call("run")
-						return nil
-					}))
 				}
 			},
 		}),
@@ -111,14 +109,35 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	return fs.OpenContext(ctx, fsys, name)
 }
 
-func makeVM(id string, options map[string]any) js.Value {
-	vm := js.Global().Get("V86").New(options)
-	readyPromise := js.Global().Get("Promise").New(js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		vm.Call("add_listener", "emulator-loaded", args[0])
+func makeVM(id string, options map[string]any) (js.Value, js.Value) {
+	worker := js.Global().Get("Worker").New("/runtime/assets/v86.js", js.ValueOf(map[string]any{"type": "module"})) //js.ValueOf(map[string]any{"type": "module"})
+	worker.Set("onerror", js.FuncOf(func(this js.Value, args []js.Value) any {
+		js.Global().Get("console").Call("error", args[0])
 		return nil
 	}))
-	vm.Set("ready", readyPromise)
-	return vm
+	worker.Set("onmessageerror", js.FuncOf(func(this js.Value, args []js.Value) any {
+		js.Global().Get("console").Call("error", args[0])
+		return nil
+	}))
+
+	sys := runtime.Instance().Call("createPort")
+	serialch := js.Global().Get("MessageChannel").New()
+	p9ch := js.Global().Get("MessageChannel").New()
+	p9ch.Get("port1").Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
+		runtime.Instance().Call("_virtioHandle", args[0].Get("data"), js.FuncOf(func(this js.Value, args []js.Value) any {
+			p9ch.Get("port1").Call("postMessage", args[0])
+			return nil
+		}))
+		return nil
+	}))
+	worker.Call("postMessage", map[string]any{
+		"id":      id,
+		"sys":     sys,
+		"p9":      p9ch.Get("port2"),
+		"serial":  serialch.Get("port2"),
+		"options": options,
+	}, []any{sys, p9ch.Get("port2"), serialch.Get("port2")})
+	return worker, serialch.Get("port1")
 }
 
 type serialReadWriter struct {
@@ -126,14 +145,14 @@ type serialReadWriter struct {
 	buf *pipe.Buffer
 }
 
-func newSerialReadWriter(vm js.Value) *serialReadWriter {
+func newSerialReadWriter(serialport js.Value) *serialReadWriter {
 	buf := pipe.NewBuffer(true)
-	vm.Call("add_listener", "serial0-output-byte", js.FuncOf(func(this js.Value, args []js.Value) any {
-		buf.Write([]byte{byte(args[0].Int())})
+	serialport.Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
+		buf.Write([]byte{byte(args[0].Get("data").Int())})
 		return nil
 	}))
 	return &serialReadWriter{
-		Value: vm,
+		Value: serialport,
 		buf:   buf,
 	}
 }
@@ -141,7 +160,7 @@ func newSerialReadWriter(vm js.Value) *serialReadWriter {
 func (s *serialReadWriter) Write(p []byte) (n int, err error) {
 	buf := js.Global().Get("Uint8Array").New(len(p))
 	n = js.CopyBytesToJS(buf, p)
-	s.Value.Call("serial_send_bytes", 0, buf)
+	s.Value.Call("postMessage", buf)
 	return
 }
 

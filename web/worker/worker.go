@@ -13,7 +13,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/task"
-	"tractor.dev/wanix/web/api"
+	"tractor.dev/wanix/web/runtime"
 )
 
 type Resource struct {
@@ -65,17 +65,15 @@ func (r *Resource) Start(args ...string) error {
 		return nil
 	}))
 
-	ch := js.Global().Get("MessageChannel").New()
-	connPort := js.Global().Get("wanix").Call("_toport", ch.Get("port1"))
-	go api.PortResponder(connPort, r.task)
+	sys := runtime.Instance().Call("createPort")
 
 	r.worker.Call("postMessage", map[string]any{"worker": map[string]any{
-		"id":      r.id,
-		"fsys":    ch.Get("port2"),
-		"cmdline": strings.Join(args, " "),
-		"env":     env,
-		"url":     url,
-	}}, []any{ch.Get("port2")})
+		"id":  r.id,
+		"sys": sys,
+		"cmd": strings.Join(args, " "),
+		"env": env,
+		"url": url,
+	}}, []any{sys})
 
 	r.state = "running"
 	return nil
