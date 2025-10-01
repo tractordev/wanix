@@ -88,6 +88,7 @@ func serveCmd() *cli.Command {
 
 				w.Header().Add("Cross-Origin-Opener-Policy", "same-origin")
 				w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
+				w.Header().Add("Access-Control-Allow-Origin", "*")
 
 				if r.URL.Path == "/wanix.wasm" {
 					w.Header().Add("Content-Type", "application/wasm")
