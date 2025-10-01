@@ -32,6 +32,9 @@ var (
 	_ p9.Attacher = &attacher{}
 )
 
+// Handle AT_REMOVEDIR (0x200) flag
+const AT_REMOVEDIR = 0x200
+
 func Attacher(fsys fs.FS, options ...AttacherOption) p9.Attacher {
 	a := &attacher{FS: fsys}
 
@@ -317,7 +320,7 @@ func (l *p9file) WriteAt(p []byte, offset int64) (int, error) {
 // Create implements p9.File.Create.
 func (l *p9file) Create(name string, mode p9.OpenFlags, permissions p9.FileMode, _ p9.UID, _ p9.GID) (p9.File, p9.QID, uint32, error) {
 	newName := path.Join(l.path, name)
-	f, err := fs.OpenFile(l.fsys, newName, int(mode)|os.O_CREATE|os.O_EXCL, fs.FileMode(permissions))
+	f, err := fs.OpenFile(l.fsys, newName, int(mode)|os.O_CREATE|os.O_EXCL, permissions.OSMode())
 	if err != nil {
 		return nil, p9.QID{}, 0, err
 	}
@@ -333,7 +336,7 @@ func (l *p9file) Create(name string, mode p9.OpenFlags, permissions p9.FileMode,
 
 // Mkdir implements p9.File.Mkdir.
 func (l *p9file) Mkdir(name string, permissions p9.FileMode, _ p9.UID, _ p9.GID) (p9.QID, error) {
-	if err := fs.Mkdir(l.fsys, path.Join(l.path, name), fs.FileMode(permissions)); err != nil {
+	if err := fs.Mkdir(l.fsys, path.Join(l.path, name), permissions.OSMode()); err != nil {
 		return p9.QID{}, err
 	}
 
@@ -522,13 +525,39 @@ func (l *p9file) UnlinkAt(name string, flags uint32) error {
 	// Construct the full path
 	fullPath := filepath.Join(l.path, name)
 
+	// Check if the target is a directory
+	info, err := fs.Stat(l.fsys, fullPath)
+	if err != nil {
+		return err
+	}
+
+	// If target is a directory but AT_REMOVEDIR flag is not set, return EISDIR
+	if info.IsDir() && (flags&AT_REMOVEDIR) == 0 {
+		return linux.EISDIR
+	}
+
+	// If target is not a directory but AT_REMOVEDIR flag is set, return ENOTDIR
+	if !info.IsDir() && (flags&AT_REMOVEDIR) != 0 {
+		return linux.ENOTDIR
+	}
+
+	if info.IsDir() {
+		children, err := fs.ReadDir(l.fsys, fullPath)
+		if err != nil {
+			return err
+		}
+		if len(children) > 0 {
+			return linux.ENOTEMPTY
+		}
+	}
+
 	// Remove the file or directory
 	return fs.Remove(l.fsys, fullPath)
 }
 
 // Readdir implements p9.File.Readdir.
 func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr error) {
-	// log.Println("server readdir:", l.path)
+	// log.Println("server readdir:", l.path, offset, count)
 	// defer func() {
 	// 	log.Println("p9kit: readdir", l.path, offset, count, dents, derr)
 	// }()
@@ -555,7 +584,7 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 		// we consumed an entry
 		cursor++
 
-		// cursor \in (offset, offset+count)
+		// cursor in (offset, offset+count)
 		if cursor < offset || cursor > offset+uint64(count) {
 			continue
 		}
@@ -569,13 +598,20 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 		}
 		p9Ents = append(p9Ents, p9.Dirent{
 			QID:    qid,
-			Type:   qid.Type,
+			Type:   qidTypeToDirentType(qid.Type), // holy hell
 			Name:   e.Name(),
 			Offset: cursor,
 		})
 	}
 
 	return p9Ents, nil
+}
+
+func qidTypeToDirentType(qtype p9.QIDType) p9.QIDType {
+	if qtype&p9.TypeDir != 0 {
+		return p9.QIDType(4) // DT_DIR
+	}
+	return p9.QIDType(8) // DT_REG
 }
 
 func (l *p9file) SetXattr(attr string, data []byte, flags p9.XattrFlags) error {
