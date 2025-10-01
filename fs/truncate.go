@@ -2,6 +2,7 @@ package fs
 
 import (
 	"errors"
+	"fmt"
 )
 
 type TruncateFS interface {
@@ -24,7 +25,15 @@ func Truncate(fsys FS, name string, size int64) error {
 
 	b, err := ReadFile(fsys, name)
 	if err != nil {
-		return err
+		fmt.Println("truncate:", name, size, "read error:", err)
+		// If file doesn't exist (or anything else), create empty file of requested size
+		return WriteFile(fsys, name, make([]byte, size), 0)
+	}
+
+	if size > int64(len(b)) {
+		fullb := make([]byte, size)
+		copy(fullb, b)
+		return WriteFile(fsys, name, fullb, 0)
 	}
 
 	return WriteFile(fsys, name, b[:size], 0)
