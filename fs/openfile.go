@@ -40,10 +40,13 @@ func OpenFile(fsys FS, name string, flag int, perm FileMode) (File, error) {
 						return nil, err
 					}
 					if perm != 0 {
+						f.Close()
+						// close and reopen after chmod
+						// since close might clobber the chmod
 						if err := Chmod(fsys, name, perm); err != nil {
-							f.Close()
 							return nil, err
 						}
+						return fsys.Open(name)
 					}
 					return f, nil
 				}
@@ -58,10 +61,13 @@ func OpenFile(fsys FS, name string, flag int, perm FileMode) (File, error) {
 					return nil, err
 				}
 				if perm != 0 {
+					f.Close()
+					// close and reopen after chmod
+					// since close might clobber the chmod
 					if err := Chmod(fsys, name, perm); err != nil {
-						f.Close()
 						return nil, err
 					}
+					return fsys.Open(name)
 				}
 				return f, nil
 			}
