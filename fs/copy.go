@@ -46,30 +46,34 @@ func copySymlink(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
 	return Symlink(dstFS, target, dstPath)
 }
 
-func copyFile(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileMode) error {
-	srcf, err := srcFS.Open(srcPath)
-	if err != nil {
-		return err
+func copyFile(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileMode) (err error) {
+	srcf, e := srcFS.Open(srcPath)
+	if e != nil {
+		return e
 	}
 	defer srcf.Close()
-	dstf, err := OpenFile(dstFS, dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode.Perm())
-	if err != nil {
-		return err
+	dstf, e := OpenFile(dstFS, dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode.Perm())
+	if e != nil {
+		return e
 	}
-	defer dstf.Close()
-	// Make the actual permissions match the source permissions
-	// even in the presence of umask.
-	if err := Chmod(dstFS, dstPath, mode.Perm()); err != nil {
-		return fmt.Errorf("chmod1: %w", err)
-	}
+	defer func() {
+		dstf.Close()
+	}()
+	defer func() {
+		// Make the actual permissions match the source permissions
+		// even in the presence of umask.
+		if e := Chmod(dstFS, dstPath, mode.Perm()); e != nil {
+			err = fmt.Errorf("chmod: %w", e)
+		}
+	}()
 	wdstf, ok := dstf.(io.Writer)
 	if !ok {
 		return fmt.Errorf("cannot copy %q to %q: dst not writable", srcPath, dstPath)
 	}
-	if _, err := io.Copy(wdstf, srcf); err != nil {
-		return fmt.Errorf("cannot copy %q to %q: %v", srcPath, dstPath, err)
+	if _, e := io.Copy(wdstf, srcf); err != nil {
+		return fmt.Errorf("cannot copy %q to %q: %v", srcPath, dstPath, e)
 	}
-	return nil
+	return
 }
 
 func copyDir(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileMode) error {
