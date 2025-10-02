@@ -1,41 +1,42 @@
-export function setupConsoleHelpers() {
+export function setupConsoleHelpers(id) {
+    const instance = window.__wanix[id];
     window.list = (name) => { 
-        window.wanix.instance.readDir(name).then(console.log); 
+        instance.readDir(name).then(console.log); 
     };
     window.read = (name) => { 
-        window.wanix.instance.readFile(name).then(d => (new TextDecoder()).decode(d)).then(console.log); 
+        instance.readFile(name).then(d => (new TextDecoder()).decode(d)).then(console.log); 
     };
     window.readBytes = (name) => { 
-        window.wanix.instance.readFile(name).then(console.log); 
+        instance.readFile(name).then(console.log); 
     };
     window.write = (name, content) => { 
-        window.wanix.instance.writeFile(name, content); 
+        instance.writeFile(name, content); 
     };
     window.mkdir = (name) => { 
-        window.wanix.instance.makeDir(name); 
+        instance.makeDir(name); 
     };
     window.bind = (name, newname) => { 
-        window.wanix.instance.bind(name, newname); 
+        instance.bind(name, newname); 
     };
     window.unbind = (name, newname) => { 
-        window.wanix.instance.unbind(name, newname); 
+        instance.unbind(name, newname); 
     };
     window.rm = (name) => { 
-        window.wanix.instance.remove(name); 
+        instance.remove(name); 
     };
     window.stat = (name) => { 
-        window.wanix.instance.stat(name).then(console.log); 
+        instance.stat(name).then(console.log); 
     };
     window.tail = async (name) => {
-        const fd = await window.wanix.instance.open(name);
+        const fd = await instance.open(name);
         while (true) {
-            const data = await window.wanix.instance.read(fd, 1024);
+            const data = await instance.read(fd, 1024);
             if (!data) {
                 break;
             }
             console.log((new TextDecoder()).decode(data));
         }
-        window.wanix.instance.close(fd);
+        instance.close(fd);
     };
 
 

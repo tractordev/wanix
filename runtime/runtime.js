@@ -30,7 +30,7 @@ export class WanixRuntime extends WanixHandle {
         }
 
         if (config.helpers) {
-            setupConsoleHelpers();
+            setupConsoleHelpers(this._id);
         }
 
         if (config.bundle) {
