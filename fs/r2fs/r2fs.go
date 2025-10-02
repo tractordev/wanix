@@ -575,30 +575,52 @@ func (fsys *FS) Create(name string) (fs.File, error) {
 func (fsys *FS) createFile(ctx context.Context, name string, content []byte, mode fs.FileMode) (fs.File, error) {
 	objectKey := fsys.normalizeR2Path(name)
 
-	// Use compare-and-swap for atomic creation with timestamp ordering
-	err := fsys.compareAndSwap(ctx, objectKey, func(existingContent []byte, existingMetadata map[string]string, etag string) ([]byte, map[string]string, error) {
-		// Prepare metadata according to R2 filesystem design
-		metadata := map[string]string{
-			"Content-Mode":      formatFileMode(mode),
-			"Content-Modified":  strconv.FormatInt(time.Now().Unix(), 10),
-			"Content-Ownership": "0:0",
-			"Change-Timestamp":  strconv.FormatInt(time.Now().UnixMicro(), 10),
-		}
+	// Prepare metadata for the new file
+	metadata := map[string]string{
+		"Content-Mode":      formatFileMode(mode),
+		"Content-Modified":  strconv.FormatInt(time.Now().Unix(), 10),
+		"Content-Ownership": "0:0",
+		"Change-Timestamp":  strconv.FormatInt(time.Now().UnixMicro(), 10),
+	}
 
-		// If object exists, check timestamp ordering
+	// Try compare-and-swap first (for existing files with timestamp ordering)
+	// If that fails (object doesn't exist), fall back to direct put
+	err := fsys.compareAndSwap(ctx, objectKey, func(existingContent []byte, existingMetadata map[string]string, etag string) ([]byte, map[string]string, error) {
+		// Check timestamp ordering for existing objects
 		if existingMetadata != nil {
 			existingTimestamp := parseMicroseconds(getMetadataValue(existingMetadata, "Change-Timestamp"))
-			newTimestamp := parseMicroseconds(getMetadataValue(metadata, "Change-Timestamp"))
+			newTimestamp := parseMicroseconds(metadata["Change-Timestamp"])
 			if newTimestamp <= existingTimestamp {
-				// Keep existing metadata if timestamp is not newer
+				// Keep existing content and metadata if timestamp is not newer
 				return existingContent, existingMetadata, nil
 			}
+			// Merge with existing metadata, but override with new values
+			mergedMetadata := make(map[string]string)
+			for k, v := range existingMetadata {
+				mergedMetadata[k] = v
+			}
+			for k, v := range metadata {
+				mergedMetadata[k] = v
+			}
+			metadata = mergedMetadata
 		}
-
 		return content, metadata, nil
 	})
+
+	// If compare-and-swap failed (object doesn't exist), create new object
 	if err != nil {
-		return nil, err
+		input := &s3.PutObjectInput{
+			Bucket:      aws.String(fsys.bucketName),
+			Key:         aws.String(objectKey),
+			Body:        bytes.NewReader(content),
+			Metadata:    metadata,
+			ContentType: aws.String("application/octet-stream"),
+		}
+
+		_, err = fsys.client.PutObject(ctx, input)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Update parent directory listing
