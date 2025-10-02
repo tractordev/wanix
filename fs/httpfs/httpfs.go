@@ -10,36 +10,50 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"tractor.dev/wanix/fs"
 )
 
 // TODO:
-// - rename
-// - symlink
 // - xattrs
 // - revisit ownership
 
+// headCacheEntry represents a cached HEAD request result
+type headCacheEntry struct {
+	info      *httpFileInfo
+	err       error // stores cached errors (e.g., fs.ErrNotExist for 404)
+	cachedAt  time.Time
+	expiresAt time.Time
+}
+
 // FS implements an HTTP-backed filesystem following the design specification
 type FS struct {
-	baseURL string
-	client  *http.Client
+	baseURL   string
+	client    *http.Client
+	headCache map[string]*headCacheEntry
+	cacheTTL  time.Duration
+	cacheMu   sync.RWMutex
 }
 
 // New creates a new HTTP filesystem with the given base URL
 func New(baseURL string) *FS {
 	return &FS{
-		baseURL: strings.TrimSuffix(baseURL, "/"),
-		client:  &http.Client{},
+		baseURL:   strings.TrimSuffix(baseURL, "/"),
+		client:    &http.Client{},
+		headCache: make(map[string]*headCacheEntry),
+		cacheTTL:  500 * time.Millisecond,
 	}
 }
 
 // NewWithClient creates a new HTTP filesystem with a custom HTTP client
 func NewWithClient(baseURL string, client *http.Client) *FS {
 	return &FS{
-		baseURL: strings.TrimSuffix(baseURL, "/"),
-		client:  client,
+		baseURL:   strings.TrimSuffix(baseURL, "/"),
+		client:    client,
+		headCache: make(map[string]*headCacheEntry),
+		cacheTTL:  500 * time.Millisecond,
 	}
 }
 
@@ -190,8 +204,115 @@ func parseOwnership(ownerStr string) (uid, gid int) {
 	return uid, gid
 }
 
+// getCachedHead retrieves cached HEAD request result if valid
+func (fsys *FS) getCachedHead(path string) (*httpFileInfo, error, bool) {
+	fsys.cacheMu.RLock()
+	defer fsys.cacheMu.RUnlock()
+
+	entry, exists := fsys.headCache[path]
+	if !exists {
+		return nil, nil, false
+	}
+
+	if time.Now().After(entry.expiresAt) {
+		// Entry expired, but don't clean it up here to avoid lock upgrade
+		return nil, nil, false
+	}
+
+	// If this is a cached error, return it
+	if entry.err != nil {
+		return nil, entry.err, true
+	}
+
+	// Return a copy to prevent external modification
+	infoCopy := *entry.info
+	return &infoCopy, nil, true
+}
+
+// setCachedHead stores HEAD request result in cache
+func (fsys *FS) setCachedHead(path string, info *httpFileInfo) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+
+	now := time.Now()
+	fsys.headCache[path] = &headCacheEntry{
+		info:      info,
+		err:       nil,
+		cachedAt:  now,
+		expiresAt: now.Add(fsys.cacheTTL),
+	}
+}
+
+// setCachedHeadError stores HEAD request error in cache
+func (fsys *FS) setCachedHeadError(path string, err error) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+
+	now := time.Now()
+	fsys.headCache[path] = &headCacheEntry{
+		info:      nil,
+		err:       err,
+		cachedAt:  now,
+		expiresAt: now.Add(fsys.cacheTTL),
+	}
+}
+
+// invalidateCachedHead removes cached HEAD request result
+func (fsys *FS) invalidateCachedHead(path string) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+	delete(fsys.headCache, path)
+}
+
+// SetCacheTTL sets the cache TTL for HEAD requests
+func (fsys *FS) SetCacheTTL(ttl time.Duration) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+	fsys.cacheTTL = ttl
+}
+
+// GetCacheTTL returns the current cache TTL
+func (fsys *FS) GetCacheTTL() time.Duration {
+	fsys.cacheMu.RLock()
+	defer fsys.cacheMu.RUnlock()
+	return fsys.cacheTTL
+}
+
+// ClearHeadCache clears all cached HEAD request results
+func (fsys *FS) ClearHeadCache() {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+	fsys.headCache = make(map[string]*headCacheEntry)
+}
+
+// ExpireOldHeadCache removes expired entries from the cache
+func (fsys *FS) ExpireOldHeadCache() int {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+
+	now := time.Now()
+	expired := 0
+
+	for path, entry := range fsys.headCache {
+		if now.After(entry.expiresAt) {
+			delete(fsys.headCache, path)
+			expired++
+		}
+	}
+
+	return expired
+}
+
 // headRequest performs a HEAD request to get file metadata
 func (fsys *FS) headRequest(ctx context.Context, path string) (*httpFileInfo, error) {
+	// Check cache first
+	if cachedInfo, cachedErr, found := fsys.getCachedHead(path); found {
+		if cachedErr != nil {
+			return nil, cachedErr
+		}
+		return cachedInfo, nil
+	}
+
 	url := fsys.buildURL(path)
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
@@ -206,13 +327,20 @@ func (fsys *FS) headRequest(ctx context.Context, path string) (*httpFileInfo, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
+		// Cache the 404 error
+		fsys.setCachedHeadError(path, fs.ErrNotExist)
 		return nil, fs.ErrNotExist
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
-	return fsys.parseFileInfo(path, resp.Header), nil
+	info := fsys.parseFileInfo(path, resp.Header)
+
+	// Cache the result
+	fsys.setCachedHead(path, info)
+
+	return info, nil
 }
 
 // parseFileInfo extracts file information from HTTP headers
@@ -334,6 +462,9 @@ func (fsys *FS) createFile(ctx context.Context, name string, content []byte, mod
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
+	// Invalidate cache for this path since we modified the file
+	fsys.invalidateCachedHead(name)
+
 	// Return a file handle for the created file
 	fileInfo := &httpFileInfo{
 		name:    filepath.Base(name),
@@ -385,6 +516,9 @@ func (fsys *FS) symlink(ctx context.Context, oldname, newname string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
+
+	// Invalidate cache for this path since we created a symlink
+	fsys.invalidateCachedHead(newname)
 
 	return nil
 }
@@ -447,6 +581,10 @@ func (fsys *FS) rename(ctx context.Context, oldname, newname string) error {
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
+	// Invalidate cache for both old and new paths since we moved the file
+	fsys.invalidateCachedHead(oldname)
+	fsys.invalidateCachedHead(newname)
+
 	return nil
 }
 
@@ -488,6 +626,9 @@ func (fsys *FS) mkdir(ctx context.Context, name string, perm fs.FileMode) error 
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
+	// Invalidate cache for this path since we created a directory
+	fsys.invalidateCachedHead(name)
+
 	return nil
 }
 
@@ -517,6 +658,9 @@ func (fsys *FS) remove(ctx context.Context, name string) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
+
+	// Invalidate cache for this path since we removed the file
+	fsys.invalidateCachedHead(name)
 
 	return nil
 }
@@ -561,6 +705,9 @@ func (fsys *FS) chmod(ctx context.Context, name string, mode fs.FileMode) error 
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
+	// Invalidate cache for this path since we changed the mode
+	fsys.invalidateCachedHead(name)
+
 	return nil
 }
 
@@ -595,6 +742,9 @@ func (fsys *FS) chown(ctx context.Context, name string, uid, gid int) error {
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
 
+	// Invalidate cache for this path since we changed the ownership
+	fsys.invalidateCachedHead(name)
+
 	return nil
 }
 
@@ -628,6 +778,9 @@ func (fsys *FS) chtimes(ctx context.Context, name string, atime time.Time, mtime
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
+
+	// Invalidate cache for this path since we changed the modification time
+	fsys.invalidateCachedHead(name)
 
 	return nil
 }
@@ -745,6 +898,9 @@ func (f *httpFile) save() error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
+
+	// Invalidate cache for this path since we saved the file
+	f.fs.invalidateCachedHead(f.path)
 
 	return nil
 }
