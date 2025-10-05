@@ -9,13 +9,14 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/hugelgupf/p9/fsimpl/templatefs"
 	"github.com/hugelgupf/p9/linux"
 	"github.com/hugelgupf/p9/p9"
 	"tractor.dev/wanix/fs"
-	"tractor.dev/wanix/fs/stat"
+	"tractor.dev/wanix/fs/pstat"
 )
 
 // AttacherOption interface for configuring the attacher
@@ -159,27 +160,7 @@ func (l *p9file) GetAttr(req p9.AttrMask) (p9.QID, p9.AttrMask, p9.Attr, error) 
 		return qid, p9.AttrMask{}, p9.Attr{}, err
 	}
 
-	// Handle file mode
-	var m p9.FileMode
-	switch {
-	case fi.Mode().IsDir():
-		m = p9.ModeDirectory
-	case fi.Mode().IsRegular():
-		m = p9.ModeRegular
-	case fi.Mode()&fs.ModeSymlink != 0:
-		m = p9.ModeSymlink
-	case fi.Mode()&fs.ModeSocket != 0:
-		m = p9.ModeSocket
-	case fi.Mode()&fs.ModeNamedPipe != 0:
-		m = p9.ModeNamedPipe
-	case fi.Mode()&fs.ModeDevice != 0:
-		if fi.Mode()&fs.ModeCharDevice != 0 {
-			m = p9.ModeCharacterDevice
-		} else {
-			m = p9.ModeBlockDevice
-		}
-	}
-	m |= p9.FileMode(fi.Mode().Perm())
+	m := p9.ModeFromOS(fi.Mode())
 
 	// Get system-specific info if available
 	var (
@@ -194,7 +175,7 @@ func (l *p9file) GetAttr(req p9.AttrMask) (p9.QID, p9.AttrMask, p9.Attr, error) 
 		ctimeNano    uint64
 	)
 
-	if st := stat.InfoToStat(fi); st != nil {
+	if st := pstat.FileInfoToStat(fi); st != nil {
 		if l.vattrs == nil {
 			uid = int(st.Uid)
 			gid = int(st.Gid)
@@ -275,7 +256,7 @@ func (l *p9file) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
 	// This matches standard Unix behavior
 	perm := fs.FileMode(0666)
 
-	f, err := fs.OpenFile(l.fsys, l.path, int(mode), perm)
+	f, err := fs.OpenFile(l.fsys, l.path, mode.OSFlags(), perm.Perm())
 	if err != nil {
 		return qid, 0, err
 	}
@@ -304,14 +285,13 @@ func (l *p9file) Lock(pid int, locktype p9.LockType, flags p9.LockFlags, start, 
 // WriteAt implements p9.File.WriteAt.
 func (l *p9file) WriteAt(p []byte, offset int64) (int, error) {
 	// Check if file was opened with O_APPEND
-	if l.openFlags&p9.OpenFlags(os.O_APPEND) != 0 {
+	if l.openFlags&p9.OpenFlags(p9.Append) != 0 {
 		// For append mode, ignore offset and write at end
 		return fs.Write(l.file, p)
 	}
 
-	// Normal WriteAt behavior
 	i, err := fs.WriteAt(l.file, p, offset)
-	if errors.Is(err, fs.ErrNotSupported) {
+	if err != nil && (errors.Is(err, fs.ErrNotSupported) || strings.Contains(err.Error(), "O_APPEND")) {
 		log.Println(err)
 	}
 	return i, err
@@ -320,12 +300,12 @@ func (l *p9file) WriteAt(p []byte, offset int64) (int, error) {
 // Create implements p9.File.Create.
 func (l *p9file) Create(name string, mode p9.OpenFlags, permissions p9.FileMode, _ p9.UID, _ p9.GID) (p9.File, p9.QID, uint32, error) {
 	newName := path.Join(l.path, name)
-	f, err := fs.OpenFile(l.fsys, newName, int(mode)|os.O_CREATE|os.O_EXCL, permissions.OSMode())
+	f, err := fs.OpenFile(l.fsys, newName, mode.OSFlags()|os.O_CREATE, permissions.OSMode())
 	if err != nil {
 		return nil, p9.QID{}, 0, err
 	}
 
-	l2 := &p9file{path: newName, file: f, fsys: l.fsys, vattrs: l.vattrs}
+	l2 := &p9file{path: newName, file: f, fsys: l.fsys, vattrs: l.vattrs, openFlags: mode}
 	qid, _, err := l2.info()
 	if err != nil {
 		l2.Close()
@@ -526,7 +506,7 @@ func (l *p9file) UnlinkAt(name string, flags uint32) error {
 	fullPath := filepath.Join(l.path, name)
 
 	// Check if the target is a directory
-	info, err := fs.Stat(l.fsys, fullPath)
+	info, err := fs.StatContext(fs.WithNoFollow(context.Background()), l.fsys, fullPath)
 	if err != nil {
 		return err
 	}
@@ -557,14 +537,15 @@ func (l *p9file) UnlinkAt(name string, flags uint32) error {
 
 // Readdir implements p9.File.Readdir.
 func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr error) {
-	// log.Println("server readdir:", l.path, offset, count)
+	// log.Println("p9kit: readdir start:", l.path, "offset:", offset, "count:", count)
 	// defer func() {
-	// 	log.Println("p9kit: readdir", l.path, offset, count, dents, derr)
+	// 	log.Println("p9kit: readdir end:", l.path, "returned:", len(dents), "entries, err:", derr)
 	// }()
 
 	var (
-		p9Ents = make([]p9.Dirent, 0)
-		cursor = uint64(0)
+		p9Ents    = make([]p9.Dirent, 0)
+		cursor    = uint64(0)
+		seenNames = make(map[string]bool) // Track seen entry names to detect duplicates
 	)
 
 	dirfile, ok := l.file.(fs.ReadDirFile)
@@ -584,12 +565,25 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 		// we consumed an entry
 		cursor++
 
-		// cursor in (offset, offset+count)
-		if cursor < offset || cursor > offset+uint64(count) {
+		// Skip entries before the requested offset
+		if cursor <= offset {
 			continue
 		}
 
+		// Stop if we've gone past the requested range
+		if cursor > offset+uint64(count) {
+			break
+		}
+
 		e := singleEnt[0]
+
+		// Detect duplicate entries to prevent infinite loops
+		entryName := e.Name()
+		if seenNames[entryName] {
+			log.Printf("p9kit: detected duplicate entry %q at cursor %d, breaking to prevent infinite loop", entryName, cursor)
+			break
+		}
+		seenNames[entryName] = true
 
 		localEnt := p9file{path: path.Join(l.path, e.Name()), fsys: l.fsys, vattrs: l.vattrs}
 		qid, _, err := localEnt.info()
