@@ -1,0 +1,52 @@
+#!/bin/bash
+
+set -ex
+
+num_files="$1"
+file_size="$2"
+
+if [[ -z "$num_files" || -z "$file_size" ]]; then
+    echo "Usage: $0 <num_files> <file_size>"
+    exit 1
+fi
+
+num_dirs=$((num_files / 8))
+if (( num_dirs < 1 )); then
+    num_dirs=1
+fi
+
+# Generate random hex name (8 chars for files, 4 chars for dirs)
+randhex() {
+    head -c 4 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 8
+}
+randhex4() {
+    head -c 2 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 4
+}
+
+# Create directories
+dir_list=()
+for ((i=0; i<num_dirs; i++)); do
+    dname=$(randhex4)
+    # Randomly choose a parent (or . for root)
+    if (( ${#dir_list[@]} > 0 && RANDOM % 2 == 0 )); then
+        parent="${dir_list[RANDOM % ${#dir_list[@]}]}"
+        fullpath="$parent/$dname"
+    else
+        fullpath="$dname"
+    fi
+    mkdir -p "$fullpath"
+    dir_list+=("$fullpath")
+done
+
+# Always include root as a possible parent
+dir_list+=(".")
+
+# Create files
+for ((i=0; i<num_files; i++)); do
+    fname=$(randhex)
+    parent="${dir_list[RANDOM % ${#dir_list[@]}]}"
+    fpath="$parent/$fname"
+    # Generate random ASCII file of specified size
+    # Use tr to restrict to printable ASCII
+    head -c "$file_size" /dev/urandom | LC_ALL=C tr -dc 'A-Za-z0-9!"#$%&'\''()*+,-./:;<=>?@[\]^_`{|}~' | head -c "$file_size" > "$fpath"
+done

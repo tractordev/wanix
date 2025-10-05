@@ -1,0 +1,5 @@
+#!/bin/bash
+if [ -n "$1" ]; then
+    export BATS_ARGS="${BATS_ARGS} --filter-tags $(echo "$1" | sed 's/-/!/g')"
+fi
+bats $BATS_ARGS $(which fstest)
