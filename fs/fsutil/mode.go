@@ -1,11 +1,11 @@
+// do not use this package, it is deprecated
+
 package fsutil
 
 import (
 	"fmt"
 	"os"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 // FileMode represents all information contained in a file mode
@@ -244,7 +244,7 @@ func ParseOpenFlags(flags int) *OpenFlags {
 	}
 
 	// Access Mode (bottom 2 bits)
-	accMode := flags & unix.O_ACCMODE
+	accMode := flags & 0x3
 	of.ReadOnly = accMode == os.O_RDONLY
 	of.WriteOnly = accMode == os.O_WRONLY
 	of.ReadWrite = accMode == os.O_RDWR
@@ -252,20 +252,20 @@ func ParseOpenFlags(flags int) *OpenFlags {
 	// File Creation Flags
 	of.Create = flags&os.O_CREATE != 0
 	of.Exclusive = flags&os.O_EXCL != 0
-	of.NoCtty = flags&unix.O_NOCTTY != 0
+	// of.NoCtty = flags&unix.O_NOCTTY != 0
 	of.Truncate = flags&os.O_TRUNC != 0
 
 	// File Status Flags
 	of.Append = flags&os.O_APPEND != 0
-	of.Async = flags&unix.O_ASYNC != 0
+	// of.Async = flags&unix.O_ASYNC != 0
 	of.Sync = flags&os.O_SYNC != 0
-	of.NonBlock = flags&unix.O_NONBLOCK != 0
+	// of.NonBlock = flags&unix.O_NONBLOCK != 0
 
 	// Platform-specific flags (these constants might not exist on all platforms)
 	// Using direct syscall numbers where available
-	if flags&unix.O_CLOEXEC != 0 {
-		of.CloseOnExec = true
-	}
+	// if flags&unix.O_CLOEXEC != 0 {
+	// of.CloseOnExec = true
+	// }
 
 	// Check for flags that might be platform-specific
 	checkFlag := func(flag int, name string) bool {
@@ -548,14 +548,4 @@ func ParseFileStat(path string) (*FileMode, error) {
 		return nil, err
 	}
 	return ParseFileMode(info.Mode()), nil
-}
-
-// ParseFileOpenFlags attempts to get the flags from an open file descriptor
-// Note: This uses fcntl and may not work on all platforms
-func ParseFileOpenFlags(f *os.File) (*OpenFlags, error) {
-	flags, err := unix.FcntlInt(f.Fd(), unix.F_GETFL, 0)
-	if err != nil {
-		return nil, err
-	}
-	return ParseOpenFlags(flags), nil
 }
