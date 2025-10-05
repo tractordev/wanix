@@ -1,4 +1,4 @@
-//go:build !windows && !openbsd
+//go:build !windows && !openbsd && !wasm
 
 package localfs
 
@@ -12,6 +12,7 @@ import (
 )
 
 func (fsys *FS) SetXattr(ctx context.Context, name string, attr string, data []byte, flags int) error {
+	fsys.log.Debug("SetXattr", "name", name, "attr", attr, "data", data, "flags", flags)
 	var op func(path string, attr string, data []byte, flags int) (err error)
 	if fs.FollowSymlinks(ctx) {
 		op = unix.Setxattr
@@ -24,6 +25,7 @@ func (fsys *FS) SetXattr(ctx context.Context, name string, attr string, data []b
 }
 
 func (fsys *FS) GetXattr(ctx context.Context, name string, attr string) ([]byte, error) {
+	fsys.log.Debug("GetXattr", "name", name, "attr", attr)
 	var op func(path string, attr string, dest []byte) (sz int, err error)
 	if fs.FollowSymlinks(ctx) {
 		op = unix.Getxattr
@@ -46,6 +48,7 @@ func (fsys *FS) GetXattr(ctx context.Context, name string, attr string) ([]byte,
 }
 
 func (fsys *FS) ListXattrs(ctx context.Context, name string) ([]string, error) {
+	fsys.log.Debug("ListXattrs", "name", name)
 	var op func(path string, dest []byte) (sz int, err error)
 	if fs.FollowSymlinks(ctx) {
 		op = unix.Listxattr
@@ -70,6 +73,7 @@ func (fsys *FS) ListXattrs(ctx context.Context, name string) ([]string, error) {
 }
 
 func (fsys *FS) RemoveXattr(ctx context.Context, name string, attr string) error {
+	fsys.log.Debug("RemoveXattr", "name", name, "attr", attr)
 	var op func(path string, attr string) (err error)
 	if fs.FollowSymlinks(ctx) {
 		op = unix.Removexattr
