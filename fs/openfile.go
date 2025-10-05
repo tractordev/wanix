@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"io"
 	"os"
 )
 
@@ -10,7 +11,7 @@ type OpenFileFS interface {
 }
 
 // OpenFile is a helper that opens a file with the given flag and permissions if supported.
-func OpenFile(fsys FS, name string, flag int, perm FileMode) (File, error) {
+func OpenFile(fsys FS, name string, flag int, perm FileMode) (f File, err error) {
 	if o, ok := fsys.(OpenFileFS); ok {
 		return o.OpenFile(name, flag, perm)
 	}
@@ -29,53 +30,51 @@ func OpenFile(fsys FS, name string, flag int, perm FileMode) (File, error) {
 	// log.Println(name, fsutil.ParseOpenFlags(flag), fsutil.ParseFileMode(perm))
 
 	// Handle write-only and read-write modes
-	if flag&os.O_WRONLY != 0 || flag&os.O_RDWR != 0 {
-		// O_CREATE means create file if it doesn't exist
-		if flag&os.O_CREATE != 0 {
-			f, err := fsys.Open(name)
-			if err != nil {
-				if os.IsNotExist(err) {
-					f, err := Create(fsys, name)
-					if err != nil {
-						return nil, err
-					}
-					if perm != 0 {
-						f.Close()
-						// close and reopen after chmod
-						// since close might clobber the chmod
-						if err := Chmod(fsys, name, perm); err != nil {
-							return nil, err
-						}
-						return fsys.Open(name)
-					}
-					return f, nil
-				}
-				return nil, err
-			}
-			// O_TRUNC means truncate existing file
-			if flag&os.O_TRUNC != 0 {
-				// Close and recreate to truncate
-				f.Close()
-				f, err := Create(fsys, name)
+	if flag&(os.O_WRONLY|os.O_RDWR) != 0 {
+		created := false
+		f, err = fsys.Open(name)
+		if err != nil {
+			// O_CREATE means create file if it doesn't exist
+			if flag&os.O_CREATE != 0 && os.IsNotExist(err) {
+				created = true
+				f, err = Create(fsys, name)
 				if err != nil {
 					return nil, err
 				}
-				if perm != 0 {
-					f.Close()
-					// close and reopen after chmod
-					// since close might clobber the chmod
-					if err := Chmod(fsys, name, perm); err != nil {
-						return nil, err
-					}
-					return fsys.Open(name)
-				}
-				return f, nil
+			} else {
+				return nil, err
 			}
-			return f, nil
 		}
-		// No O_CREATE - file must exist
-		return fsys.Open(name)
+		// O_TRUNC means truncate existing file
+		// but if we created the file, we don't need to truncate
+		if flag&os.O_TRUNC != 0 && !created {
+			// Close and recreate to truncate
+			f.Close()
+			f, err = Create(fsys, name)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if perm != 0 {
+			f.Close()
+			// close and reopen after chmod
+			// since close might clobber the chmod
+			if err := Chmod(fsys, name, perm); err != nil {
+				return nil, err
+			}
+			f, err = fsys.Open(name)
+			if err != nil {
+				return nil, err
+			}
+		}
+		// O_APPEND means append to existing file
+		if flag&os.O_APPEND != 0 {
+			_, err = Seek(f, 0, io.SeekEnd)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return f, nil
 	}
-
 	return fsys.Open(name)
 }
