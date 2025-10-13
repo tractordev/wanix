@@ -18,6 +18,8 @@ type Node struct {
 	modTime time.Time
 	size    int64
 	sys     any
+	uid     int
+	gid     int
 	data    []byte
 
 	reader io.Reader
@@ -30,6 +32,17 @@ func RawNode(attrs ...any) *Node {
 	n := &Node{}
 	for _, m := range attrs {
 		switch v := m.(type) {
+		case *Node:
+			n.name = v.name
+			n.mode = v.mode
+			n.size = v.size
+			n.modTime = v.modTime
+			n.sys = v.sys
+			n.uid = v.uid
+			n.gid = v.gid
+			n.data = v.data
+			n.reader = v.reader
+			n.writer = v.writer
 		case int64:
 			n.size = v
 		case int:
@@ -44,12 +57,18 @@ func RawNode(attrs ...any) *Node {
 			n.name = v
 		case fs.FileMode:
 			n.mode = v
+			if v&fs.ModeDir != 0 && n.size == 0 {
+				n.size = 2 // Set initial size to 2 for "." and ".." entries
+			}
 		case fs.FileInfo:
 			n.name = v.Name()
 			n.mode = v.Mode()
 			n.size = v.Size()
 			n.modTime = v.ModTime()
 			n.sys = v.Sys()
+			if n.mode&fs.ModeDir != 0 && n.size == 0 {
+				n.size = 2 // Set initial size to 2 for "." and ".." entries
+			}
 
 		// these must come after fs.FileInfo since
 		// some of our fs.FileInfo implementations
@@ -112,6 +131,30 @@ func SetName(n *Node, name string) {
 
 func SetData(n *Node, data []byte) {
 	n.data = data
+}
+
+func SetMode(n *Node, mode fs.FileMode) {
+	n.mode = mode
+}
+
+func SetModTime(n *Node, modTime time.Time) {
+	n.modTime = modTime
+}
+
+func SetSize(n *Node, size int64) {
+	n.size = size
+}
+
+func SetSys(n *Node, sys any) {
+	n.sys = sys
+}
+
+func SetUid(n *Node, uid int) {
+	n.uid = uid
+}
+
+func SetGid(n *Node, gid int) {
+	n.gid = gid
 }
 
 // fs.OpenContextFS
