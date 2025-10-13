@@ -18,6 +18,7 @@ func Create(fsys FS, name string) (File, error) {
 	}
 
 	// TODO: implement derived Create using OpenFile?
+	//u.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0o666)
 
 	return nil, opErr(fsys, name, "create", err)
 }
