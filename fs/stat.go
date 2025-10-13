@@ -14,6 +14,7 @@ type StatContextFS interface {
 	StatContext(ctx context.Context, name string) (FileInfo, error)
 }
 
+// TODO: change to StatContext(FS, Context, string)
 func StatContext(ctx context.Context, fsys FS, name string) (FileInfo, error) {
 	ctx = WithOrigin(ctx, fsys, name, "stat")
 

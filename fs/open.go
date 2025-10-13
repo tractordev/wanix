@@ -11,6 +11,7 @@ type OpenContextFS interface {
 
 // OpenContext is a helper that opens a file with the given context and name
 // falling back to Open if context is not supported.
+// TODO: change to OpenContext(FS, Context, string)
 func OpenContext(ctx context.Context, fsys FS, name string) (File, error) {
 	ctx = WithOrigin(ctx, fsys, name, "open")
 
