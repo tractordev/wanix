@@ -39,7 +39,7 @@ func tarfsAllocator() Allocator {
 				} else {
 					reader = resp.Body
 				}
-				return tarfs.Load(tar.NewReader(reader)), nil
+				return tarfs.From(tar.NewReader(reader)), nil
 			case "file":
 				return nil, fmt.Errorf("tarfs: TODO: %s scheme", u.Scheme)
 			default:
