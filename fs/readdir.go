@@ -12,6 +12,7 @@ type ReadDirContextFS interface {
 	ReadDirContext(ctx context.Context, name string) ([]DirEntry, error)
 }
 
+// TODO: change to ReadDirContext(FS, Context, string)
 func ReadDirContext(ctx context.Context, fsys FS, name string) ([]DirEntry, error) {
 	ctx = WithOrigin(ctx, fsys, name, "readdir")
 	ctx = WithReadOnly(ctx)
