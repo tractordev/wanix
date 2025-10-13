@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"hash/fnv"
-	"io"
 	"log"
 	"os"
 	"path"
@@ -548,21 +547,13 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 		seenNames = make(map[string]bool) // Track seen entry names to detect duplicates
 	)
 
-	dirfile, ok := l.file.(fs.ReadDirFile)
-	if !ok {
-		return nil, linux.ENOTDIR
+	entries, err := fs.ReadDir(l.fsys, l.path)
+	if err != nil {
+		return nil, err
 	}
 
-	for len(p9Ents) < int(count) {
-		singleEnt, err := dirfile.ReadDir(1)
-
-		if err == io.EOF {
-			return p9Ents, nil
-		} else if err != nil {
-			return nil, err
-		}
-
-		// we consumed an entry
+	// Use the entries already fetched from fs.ReadDir above
+	for _, e := range entries {
 		cursor++
 
 		// Skip entries before the requested offset
@@ -570,12 +561,10 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 			continue
 		}
 
-		// Stop if we've gone past the requested range
-		if cursor > offset+uint64(count) {
+		// Stop if we've gone past the requested range or filled the output slice
+		if len(p9Ents) >= int(count) || cursor > offset+uint64(count) {
 			break
 		}
-
-		e := singleEnt[0]
 
 		// Detect duplicate entries to prevent infinite loops
 		entryName := e.Name()
@@ -590,6 +579,7 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 		if err != nil {
 			return p9Ents, err
 		}
+
 		p9Ents = append(p9Ents, p9.Dirent{
 			QID:    qid,
 			Type:   qidTypeToDirentType(qid.Type), // holy hell
