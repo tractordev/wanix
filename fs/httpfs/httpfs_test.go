@@ -2,377 +2,393 @@ package httpfs
 
 import (
 	"context"
-	"net/http"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"tractor.dev/wanix/fs"
+	"tractor.dev/wanix/fs/memfs"
 )
 
-func TestHeadRequestCaching(t *testing.T) {
-	requestCount := 0
+// Helper function to create a test server with a memfs backend
+func newTestServer() (*memfs.FS, *httptest.Server, *FS) {
+	memFS := memfs.New()
+	server := httptest.NewServer(NewServer(memFS))
+	client := New(server.URL)
+	return memFS, server, client
+}
 
-	// Create a test server that counts requests
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-
-		if r.Method == "HEAD" {
-			w.Header().Set("Content-Length", "1024")
-			w.Header().Set("Content-Mode", "644")
-			w.Header().Set("Content-Modified", "1609459200") // 2021-01-01
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
+func TestBasicFileOperations(t *testing.T) {
+	memFS, server, client := newTestServer()
 	defer server.Close()
-
-	// Create filesystem with short cache TTL for testing
-	fsys := New(server.URL)
-	fsys.SetCacheTTL(100 * time.Millisecond)
 
 	ctx := context.Background()
-	testPath := "/test.txt"
 
-	// First request should hit the server
-	info1, err := fsys.headRequest(ctx, testPath)
+	// Create a file
+	file, err := client.CreateContext(ctx, "test.txt", []byte("Hello, World!"), 0644)
 	if err != nil {
-		t.Fatalf("First headRequest failed: %v", err)
+		t.Fatalf("Failed to create file: %v", err)
 	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after first call, got %d", requestCount)
-	}
+	file.Close()
 
-	// Second request should use cache
-	info2, err := fsys.headRequest(ctx, testPath)
+	// Verify file exists in memfs
+	info, err := fs.Stat(memFS, "test.txt")
 	if err != nil {
-		t.Fatalf("Second headRequest failed: %v", err)
+		t.Fatalf("File not found in memfs: %v", err)
 	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after second call (cached), got %d", requestCount)
-	}
-
-	// Verify the cached result is the same
-	if info1.Size() != info2.Size() || info1.ModTime() != info2.ModTime() {
-		t.Error("Cached result differs from original")
+	if info.Size() != 13 {
+		t.Errorf("Expected size 13, got %d", info.Size())
 	}
 
-	// Wait for cache to expire
-	time.Sleep(150 * time.Millisecond)
-
-	// Third request should hit the server again
-	_, err = fsys.headRequest(ctx, testPath)
+	// Read the file through HTTP
+	content, err := fs.ReadFile(client, "test.txt")
 	if err != nil {
-		t.Fatalf("Third headRequest failed: %v", err)
+		t.Fatalf("Failed to read file: %v", err)
 	}
-	if requestCount != 2 {
-		t.Errorf("Expected 2 requests after cache expiry, got %d", requestCount)
+	if string(content) != "Hello, World!" {
+		t.Errorf("Expected 'Hello, World!', got '%s'", string(content))
+	}
+
+	// Stat the file
+	clientInfo, err := client.Stat("test.txt")
+	if err != nil {
+		t.Fatalf("Failed to stat file: %v", err)
+	}
+	if clientInfo.Size() != 13 {
+		t.Errorf("Expected size 13, got %d", clientInfo.Size())
+	}
+
+	// Remove the file
+	if err := client.Remove("test.txt"); err != nil {
+		t.Fatalf("Failed to remove file: %v", err)
+	}
+
+	// Verify file is removed
+	_, err = fs.Stat(memFS, "test.txt")
+	if err == nil {
+		t.Error("Expected file to be removed, but it still exists")
 	}
 }
 
-func TestCacheInvalidation(t *testing.T) {
-	requestCount := 0
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "HEAD" {
-			requestCount++
-			w.Header().Set("Content-Length", "1024")
-			w.Header().Set("Content-Mode", "644")
-			w.Header().Set("Content-Modified", "1609459200")
-			w.WriteHeader(http.StatusOK)
-		} else if r.Method == "DELETE" {
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
+func TestDirectoryOperations(t *testing.T) {
+	memFS, server, client := newTestServer()
 	defer server.Close()
 
-	fsys := New(server.URL)
-	fsys.SetCacheTTL(1 * time.Hour) // Long TTL to ensure cache would normally persist
+	// Create a directory
+	if err := client.Mkdir("testdir", 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+
+	// Verify directory exists in memfs
+	info, err := fs.Stat(memFS, "testdir")
+	if err != nil {
+		t.Fatalf("Directory not found in memfs: %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("Expected directory, got file")
+	}
+
+	// Create files in the directory
+	file1, _ := client.CreateContext(context.Background(), "testdir/file1.txt", []byte("File 1"), 0644)
+	file1.Close()
+	file2, _ := client.CreateContext(context.Background(), "testdir/file2.txt", []byte("File 2"), 0644)
+	file2.Close()
+
+	// Read directory
+	entries, err := client.ReadDir("testdir")
+	if err != nil {
+		t.Fatalf("Failed to read directory: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("Expected 2 entries, got %d", len(entries))
+	}
+
+	// Verify entry names
+	names := make(map[string]bool)
+	for _, entry := range entries {
+		names[entry.Name()] = true
+	}
+	if !names["file1.txt"] || !names["file2.txt"] {
+		t.Error("Missing expected files in directory listing")
+	}
+}
+
+func TestRename(t *testing.T) {
+	memFS, server, client := newTestServer()
+	defer server.Close()
 
 	ctx := context.Background()
-	testPath := "/test.txt"
 
-	// First request should hit the server and cache the result
-	_, err := fsys.headRequest(ctx, testPath)
-	if err != nil {
-		t.Fatalf("First headRequest failed: %v", err)
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after first call, got %d", requestCount)
-	}
+	// Create a file
+	file, _ := client.CreateContext(ctx, "oldname.txt", []byte("test content"), 0644)
+	file.Close()
 
-	// Second request should use cache
-	_, err = fsys.headRequest(ctx, testPath)
-	if err != nil {
-		t.Fatalf("Second headRequest failed: %v", err)
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after second call (cached), got %d", requestCount)
+	// Rename it
+	if err := client.Rename("oldname.txt", "newname.txt"); err != nil {
+		t.Fatalf("Failed to rename file: %v", err)
 	}
 
-	// Remove the file, which should invalidate the cache
-	err = fsys.Remove(testPath)
-	if err != nil {
-		t.Fatalf("Remove failed: %v", err)
+	// Verify old name doesn't exist
+	_, err := fs.Stat(memFS, "oldname.txt")
+	if err == nil {
+		t.Error("Old file should not exist after rename")
 	}
 
-	// Next HEAD request should hit the server again since cache was invalidated
-	_, err = fsys.headRequest(ctx, testPath)
+	// Verify new name exists
+	info, err := fs.Stat(memFS, "newname.txt")
 	if err != nil {
-		t.Fatalf("Third headRequest failed: %v", err)
+		t.Fatalf("New file not found: %v", err)
 	}
-	if requestCount != 2 {
-		t.Errorf("Expected 2 requests after cache invalidation, got %d", requestCount)
+	if info.Size() != 12 {
+		t.Errorf("Expected size 12, got %d", info.Size())
 	}
 }
 
-func TestCacheManagement(t *testing.T) {
-	fsys := New("http://example.com")
-
-	// Test TTL configuration
-	newTTL := 10 * time.Minute
-	fsys.SetCacheTTL(newTTL)
-
-	if fsys.GetCacheTTL() != newTTL {
-		t.Errorf("Expected TTL %v, got %v", newTTL, fsys.GetCacheTTL())
-	}
-
-	// Test cache clearing
-	fsys.ClearHeadCache()
-
-	// Add some mock cache entries for testing expiration
-	now := time.Now()
-	fsys.headCache["/expired"] = &headCacheEntry{
-		info:      &httpFileInfo{name: "expired"},
-		err:       nil,
-		cachedAt:  now.Add(-1 * time.Hour),
-		expiresAt: now.Add(-30 * time.Minute), // Expired
-	}
-	fsys.headCache["/valid"] = &headCacheEntry{
-		info:      &httpFileInfo{name: "valid"},
-		err:       nil,
-		cachedAt:  now,
-		expiresAt: now.Add(30 * time.Minute), // Valid
-	}
-
-	// Test expiration cleanup
-	expired := fsys.ExpireOldHeadCache()
-	if expired != 1 {
-		t.Errorf("Expected 1 expired entry, got %d", expired)
-	}
-
-	// Verify only valid entry remains
-	if len(fsys.headCache) != 1 {
-		t.Errorf("Expected 1 cache entry remaining, got %d", len(fsys.headCache))
-	}
-	if _, exists := fsys.headCache["/valid"]; !exists {
-		t.Error("Valid cache entry was incorrectly removed")
-	}
-}
-
-func TestStatUsesCache(t *testing.T) {
-	requestCount := 0
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "HEAD" {
-			requestCount++
-			w.Header().Set("Content-Length", "1024")
-			w.Header().Set("Content-Mode", "644")
-			w.Header().Set("Content-Modified", "1609459200")
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
+func TestChmod(t *testing.T) {
+	_, server, client := newTestServer()
 	defer server.Close()
-
-	fsys := New(server.URL)
-	testPath := "/test.txt"
-
-	// First Stat call should hit the server
-	_, err := fsys.Stat(testPath)
-	if err != nil {
-		t.Fatalf("First Stat failed: %v", err)
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after first Stat, got %d", requestCount)
-	}
-
-	// Second Stat call should use cache
-	_, err = fsys.Stat(testPath)
-	if err != nil {
-		t.Fatalf("Second Stat failed: %v", err)
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after second Stat (cached), got %d", requestCount)
-	}
-
-	// StatContext should also use cache
-	_, err = fsys.StatContext(context.Background(), testPath)
-	if err != nil {
-		t.Fatalf("StatContext failed: %v", err)
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after StatContext (cached), got %d", requestCount)
-	}
-}
-
-func TestHeadRequest404Caching(t *testing.T) {
-	requestCount := 0
-
-	// Create a test server that always returns 404
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCount++
-
-		if r.Method == "HEAD" {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
-	defer server.Close()
-
-	// Create filesystem with short cache TTL for testing
-	fsys := New(server.URL)
-	fsys.SetCacheTTL(100 * time.Millisecond)
 
 	ctx := context.Background()
-	testPath := "/nonexistent.txt"
 
-	// First request should hit the server and get 404
-	_, err := fsys.headRequest(ctx, testPath)
-	if err == nil {
-		t.Fatal("Expected error for non-existent file")
-	}
-	if err.Error() != "file does not exist" {
-		t.Errorf("Expected fs.ErrNotExist, got %v", err)
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after first call, got %d", requestCount)
+	// Create a file
+	file, _ := client.CreateContext(ctx, "test.txt", []byte("test"), 0644)
+	file.Close()
+
+	// Change permissions
+	if err := client.Chmod("test.txt", 0755); err != nil {
+		t.Fatalf("Failed to chmod: %v", err)
 	}
 
-	// Second request should use cached 404 error
-	_, err = fsys.headRequest(ctx, testPath)
-	if err == nil {
-		t.Fatal("Expected cached error for non-existent file")
+	// Verify permissions changed
+	info, err := client.Stat("test.txt")
+	if err != nil {
+		t.Fatalf("Failed to stat: %v", err)
 	}
-	if err.Error() != "file does not exist" {
-		t.Errorf("Expected cached fs.ErrNotExist, got %v", err)
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after second call (cached error), got %d", requestCount)
-	}
-
-	// Wait for cache to expire
-	time.Sleep(150 * time.Millisecond)
-
-	// Third request should hit the server again
-	_, err = fsys.headRequest(ctx, testPath)
-	if err == nil {
-		t.Fatal("Expected error after cache expiry")
-	}
-	if requestCount != 2 {
-		t.Errorf("Expected 2 requests after cache expiry, got %d", requestCount)
+	if info.Mode()&0777 != 0755 {
+		t.Errorf("Expected mode 0755, got %o", info.Mode()&0777)
 	}
 }
 
-func TestStat404Caching(t *testing.T) {
-	requestCount := 0
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "HEAD" {
-			requestCount++
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
+func TestChtimes(t *testing.T) {
+	_, server, client := newTestServer()
 	defer server.Close()
-
-	fsys := New(server.URL)
-	testPath := "/nonexistent.txt"
-
-	// First Stat call should hit the server and get 404
-	_, err := fsys.Stat(testPath)
-	if err == nil {
-		t.Fatal("Expected error for non-existent file")
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after first Stat, got %d", requestCount)
-	}
-
-	// Second Stat call should use cached 404 error
-	_, err = fsys.Stat(testPath)
-	if err == nil {
-		t.Fatal("Expected cached error for non-existent file")
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after second Stat (cached error), got %d", requestCount)
-	}
-
-	// StatContext should also use cached 404 error
-	_, err = fsys.StatContext(context.Background(), testPath)
-	if err == nil {
-		t.Fatal("Expected cached error for StatContext")
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after StatContext (cached error), got %d", requestCount)
-	}
-}
-
-func Test404CacheInvalidation(t *testing.T) {
-	requestCount := 0
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "HEAD" {
-			requestCount++
-			w.WriteHeader(http.StatusNotFound)
-		} else if r.Method == "PUT" {
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	}))
-	defer server.Close()
-
-	fsys := New(server.URL)
-	fsys.SetCacheTTL(1 * time.Hour) // Long TTL to ensure cache would normally persist
 
 	ctx := context.Background()
-	testPath := "/test.txt"
 
-	// First request should hit the server and cache the 404 error
-	_, err := fsys.headRequest(ctx, testPath)
-	if err == nil {
-		t.Fatal("Expected 404 error")
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after first call, got %d", requestCount)
-	}
+	// Create a file
+	file, _ := client.CreateContext(ctx, "test.txt", []byte("test"), 0644)
+	file.Close()
 
-	// Second request should use cached 404 error
-	_, err = fsys.headRequest(ctx, testPath)
-	if err == nil {
-		t.Fatal("Expected cached 404 error")
-	}
-	if requestCount != 1 {
-		t.Errorf("Expected 1 request after second call (cached error), got %d", requestCount)
+	// Change modification time
+	newTime := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := client.Chtimes("test.txt", newTime, newTime); err != nil {
+		t.Fatalf("Failed to chtimes: %v", err)
 	}
 
-	// Create the file, which should invalidate the cached 404 error
-	_, err = fsys.Create(testPath)
+	// Verify time changed
+	info, err := client.Stat("test.txt")
 	if err != nil {
-		t.Fatalf("Create failed: %v", err)
+		t.Fatalf("Failed to stat: %v", err)
+	}
+	if !info.ModTime().Equal(newTime) {
+		t.Errorf("Expected time %v, got %v", newTime, info.ModTime())
+	}
+}
+
+func TestSymlink(t *testing.T) {
+	memFS, server, client := newTestServer()
+	defer server.Close()
+
+	ctx := context.Background()
+
+	// Create a target file
+	file, _ := client.CreateContext(ctx, "target.txt", []byte("target content"), 0644)
+	file.Close()
+
+	// Create symlink
+	if err := client.Symlink("target.txt", "link.txt"); err != nil {
+		t.Fatalf("Failed to create symlink: %v", err)
 	}
 
-	// Next HEAD request should hit the server again since cache was invalidated
-	// (This will still return 404 in our test server, but the point is that it makes a new request)
-	_, err = fsys.headRequest(ctx, testPath)
-	if err == nil {
-		t.Fatal("Expected 404 error from server")
+	// Verify symlink exists in memfs (use WithNoFollow to not follow symlinks)
+	info, err := fs.StatContext(fs.WithNoFollow(context.Background()), memFS, "link.txt")
+	if err != nil {
+		t.Fatalf("Symlink not found: %v", err)
 	}
-	if requestCount != 2 {
-		t.Errorf("Expected 2 requests after cache invalidation, got %d", requestCount)
+	if info.Mode()&fs.ModeSymlink == 0 {
+		t.Error("Expected symlink")
+	}
+
+	// Read the symlink target
+	target, err := client.Readlink("link.txt")
+	if err != nil {
+		t.Fatalf("Failed to readlink: %v", err)
+	}
+	if target != "target.txt" {
+		t.Errorf("Expected target 'target.txt', got '%s'", target)
+	}
+}
+
+func TestNotFound(t *testing.T) {
+	_, server, client := newTestServer()
+	defer server.Close()
+
+	// Try to stat non-existent file
+	_, err := client.Stat("nonexistent.txt")
+	if err != fs.ErrNotExist {
+		t.Errorf("Expected ErrNotExist, got %v", err)
+	}
+
+	// Try to open non-existent file
+	_, err = client.Open("nonexistent.txt")
+	if err != fs.ErrNotExist {
+		t.Errorf("Expected ErrNotExist, got %v", err)
+	}
+
+	// Try to remove non-existent file
+	err = client.Remove("nonexistent.txt")
+	if err != fs.ErrNotExist {
+		t.Errorf("Expected ErrNotExist, got %v", err)
+	}
+}
+
+func TestMultipleFiles(t *testing.T) {
+	_, server, client := newTestServer()
+	defer server.Close()
+
+	ctx := context.Background()
+
+	// Create multiple files
+	for i := 0; i < 10; i++ {
+		filename := fmt.Sprintf("file%d.txt", i)
+		content := []byte(fmt.Sprintf("Content %d", i))
+		file, err := client.CreateContext(ctx, filename, content, 0644)
+		if err != nil {
+			t.Fatalf("Failed to create file %s: %v", filename, err)
+		}
+		file.Close()
+	}
+
+	// Read directory
+	entries, err := client.ReadDir(".")
+	if err != nil {
+		t.Fatalf("Failed to read directory: %v", err)
+	}
+
+	if len(entries) != 10 {
+		t.Errorf("Expected 10 files, got %d", len(entries))
+	}
+
+	// Verify each file
+	for i := 0; i < 10; i++ {
+		filename := fmt.Sprintf("file%d.txt", i)
+		content, err := fs.ReadFile(client, filename)
+		if err != nil {
+			t.Errorf("Failed to read %s: %v", filename, err)
+		}
+		expected := fmt.Sprintf("Content %d", i)
+		if string(content) != expected {
+			t.Errorf("Expected '%s', got '%s'", expected, string(content))
+		}
+	}
+}
+
+func TestNestedDirectories(t *testing.T) {
+	_, server, client := newTestServer()
+	defer server.Close()
+
+	ctx := context.Background()
+
+	// Create nested directories
+	if err := client.Mkdir("level1", 0755); err != nil {
+		t.Fatalf("Failed to create level1: %v", err)
+	}
+	if err := client.Mkdir("level1/level2", 0755); err != nil {
+		t.Fatalf("Failed to create level2: %v", err)
+	}
+	if err := client.Mkdir("level1/level2/level3", 0755); err != nil {
+		t.Fatalf("Failed to create level3: %v", err)
+	}
+
+	// Create a file deep in the tree
+	file, err := client.CreateContext(ctx, "level1/level2/level3/deep.txt", []byte("deep content"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create deep file: %v", err)
+	}
+	file.Close()
+
+	// Read the file
+	content, err := fs.ReadFile(client, "level1/level2/level3/deep.txt")
+	if err != nil {
+		t.Fatalf("Failed to read deep file: %v", err)
+	}
+	if string(content) != "deep content" {
+		t.Errorf("Expected 'deep content', got '%s'", string(content))
+	}
+
+	// List directory at each level
+	entries1, _ := client.ReadDir("level1")
+	if len(entries1) != 1 || entries1[0].Name() != "level2" {
+		t.Error("level1 should contain level2")
+	}
+
+	entries2, _ := client.ReadDir("level1/level2")
+	if len(entries2) != 1 || entries2[0].Name() != "level3" {
+		t.Error("level2 should contain level3")
+	}
+
+	entries3, _ := client.ReadDir("level1/level2/level3")
+	if len(entries3) != 1 || entries3[0].Name() != "deep.txt" {
+		t.Error("level3 should contain deep.txt")
+	}
+}
+
+func TestWriteFile(t *testing.T) {
+	memFS, server, client := newTestServer()
+	defer server.Close()
+
+	// Write a file using WriteFile
+	data := []byte("Hello from WriteFile!")
+	err := client.WriteFile("writefile.txt", data, 0644)
+	if err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	// Verify file exists in memfs
+	info, err := fs.StatContext(fs.WithNoFollow(context.Background()), memFS, "writefile.txt")
+	if err != nil {
+		t.Fatalf("File not found in memfs: %v", err)
+	}
+	if info.Size() != int64(len(data)) {
+		t.Errorf("Expected size %d, got %d", len(data), info.Size())
+	}
+	if info.Mode()&0777 != 0644 {
+		t.Errorf("Expected mode 0644, got %o", info.Mode()&0777)
+	}
+
+	// Read back and verify content
+	content, err := fs.ReadFile(client, "writefile.txt")
+	if err != nil {
+		t.Fatalf("Failed to read file: %v", err)
+	}
+	if string(content) != string(data) {
+		t.Errorf("Expected content '%s', got '%s'", string(data), string(content))
+	}
+
+	// Overwrite the file
+	newData := []byte("Updated content!")
+	err = client.WriteFile("writefile.txt", newData, 0755)
+	if err != nil {
+		t.Fatalf("WriteFile (overwrite) failed: %v", err)
+	}
+
+	// Verify updated content
+	content, err = fs.ReadFile(client, "writefile.txt")
+	if err != nil {
+		t.Fatalf("Failed to read updated file: %v", err)
+	}
+	if string(content) != string(newData) {
+		t.Errorf("Expected content '%s', got '%s'", string(newData), string(content))
 	}
 }

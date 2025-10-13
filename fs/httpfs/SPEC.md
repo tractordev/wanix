@@ -205,6 +205,125 @@ OK
 - Source remains unchanged
 - If destination exists and `Overwrite: F`, returns `412 Precondition Failed`
 
+
+## Protocol Extensions
+
+### Multipart Directory Streaming
+
+The HTTP Filesystem Protocol supports enhanced directory operations through special URL path suffixes that return multipart responses containing detailed metadata for multiple files and directories.
+
+#### Directory Metadata Streaming
+
+**Request:**
+```http
+GET /path/to/directory/: HTTP/1.1
+```
+
+**Response:**
+```http
+HTTP/1.1 200 OK
+Content-Type: multipart/mixed; boundary=----boundary123
+
+------boundary123
+Content-Disposition: attachment; filename="/path/to/directory"
+Content-Type: application/x-directory
+Content-Mode: 16877
+Content-Modified: 1641024000
+Content-Ownership: 1000:1000
+Content-Length: 30
+
+file.txt 33188
+subdir 16877
+
+------boundary123
+Content-Disposition: attachment; filename="/path/to/directory/file.txt"
+Content-Type: application/octet-stream
+Content-Mode: 33188
+Content-Modified: 1641024000
+Content-Ownership: 1000:1000
+Content-Range: bytes 0-0/1024
+
+------boundary123
+Content-Disposition: attachment; filename="/path/to/directory/subdir"
+Content-Type: application/x-directory
+Content-Mode: 16877
+Content-Modified: 1641024000
+Content-Ownership: 1000:1000
+Content-Length: 14
+
+file2.txt 33188
+
+------boundary123--
+```
+
+**Behavior:**
+- The `:` suffix triggers multipart metadata streaming for a directory
+- Returns full metadata for the directory itself and all direct children
+- Each part contains complete headers for one file/directory
+- Content-Disposition header contains the full path
+- **Directory parts include their body** (directory listing content) with Content-Length
+- **File parts have no body** but include size via Content-Range header
+- Content-Range uses `bytes 0-0/SIZE` format to convey file size without content
+- Enables efficient bulk metadata retrieval without transferring file contents
+
+#### Recursive Directory Tree Streaming
+
+**Request:**
+```http
+GET /path/to/directory/... HTTP/1.1
+```
+
+**Response:**
+```http
+HTTP/1.1 200 OK
+Content-Type: multipart/mixed; boundary=----boundary456
+
+------boundary456
+Content-Disposition: attachment; filename="/path/to/directory"
+Content-Type: application/x-directory
+Content-Mode: 16877
+Content-Modified: 1641024000
+Content-Length: 30
+
+file.txt 33188
+subdir 16877
+
+------boundary456
+Content-Disposition: attachment; filename="/path/to/directory/subdir"
+Content-Type: application/x-directory
+Content-Mode: 16877
+Content-Modified: 1641024000
+Content-Length: 14
+
+nested.txt 33188
+
+------boundary456
+Content-Disposition: attachment; filename="/path/to/directory/subdir/nested"
+Content-Type: application/x-directory
+Content-Mode: 16877
+Content-Modified: 1641024000
+Content-Length: 0
+
+
+
+------boundary456--
+```
+
+**Behavior:**
+- The `...` suffix triggers recursive multipart metadata streaming
+- Returns metadata for the directory and all descendant **directories only** (files not included)
+- **All directory parts include their body** (directory listing content) with Content-Length
+- Directory listings contain both files and subdirectories, but only directories appear as separate parts
+- Enables efficient bulk discovery of entire directory trees
+- Useful for synchronization and caching scenarios where you need the complete directory structure
+
+### Caching and Performance
+
+Useful to cache "nodes" of metadata for files and directories plus 
+directory contents. Avoid caching file contents. Use the bulk multipart
+operations to fill and update a node cache. Highly recommend a refresh-ahead
+caching strategy.
+
 ## Filesystem Metadata Headers
 
 ### Content-Mode
@@ -242,6 +361,13 @@ OK
 - **Format**: Decimal string
 - **Required**: Yes for PUT requests
 - **Behavior**: Standard HTTP header
+
+### Content-Range
+- **Purpose**: Conveys file size in multipart responses without transferring content
+- **Format**: `bytes 0-0/SIZE` where SIZE is the file size in bytes
+- **Required**: Used in multipart directory streaming responses for file entries
+- **Example**: `Content-Range: bytes 0-0/1024` (indicates 1024 byte file)
+- **Behavior**: In multipart directory streaming (`:` and `...` suffixes), file entries use Content-Range instead of Content-Length to provide size metadata without including file content in the response body
 
 ### Change-Timestamp
 - **Purpose**: Operation ordering timestamp to prevent lost updates
@@ -425,6 +551,10 @@ Standard HTTP range requests supported for partial file reads:
 - SHOULD support Change-Timestamp header for operation ordering
 - SHOULD support conditional requests
 - SHOULD validate metadata format
+- SHOULD support multipart directory streaming with `:` suffix
+- SHOULD support recursive multipart streaming with `...` suffix
+- MAY implement caching with stale-while-revalidate pattern
+- MAY send Cache-Control-TTL headers for cache guidance
 
 ### Client Requirements
 - MUST set `Content-Type: application/x-directory` for directory operations
@@ -437,6 +567,10 @@ Standard HTTP range requests supported for partial file reads:
 - MUST parse directory listing format correctly
 - SHOULD handle standard HTTP error responses
 - SHOULD support conditional requests
+- MAY use `:` suffix for multipart directory metadata streaming
+- MAY use `...` suffix for recursive multipart tree streaming
+- SHOULD parse multipart responses when using streaming extensions
+- MAY implement caching with respect to Cache-Control-TTL headers
 
 ### Interoperability
 - Metadata header names are case-insensitive (per HTTP)
@@ -479,6 +613,20 @@ HEAD /documents/config.json HTTP/1.1
 # 200 = exists, 404 = doesn't exist
 ```
 
+### Bulk Directory Metadata Retrieval
+```http
+GET /documents/: HTTP/1.1
+
+# Returns multipart response with metadata for all files in /documents/
+```
+
+### Recursive Directory Tree Discovery
+```http
+GET /projects/... HTTP/1.1
+
+# Returns multipart response with metadata for entire /projects/ tree
+```
+
 ## Future Considerations
 
 ### Planned Extensions
@@ -487,8 +635,7 @@ HEAD /documents/config.json HTTP/1.1
 - Bulk operations
 - Directory watching/notifications
 
-### Limitations
+### Current Limitations
 - No atomic multi-file operations
-- No recursive directory operations
 - Access time not currently supported
 - No built-in versioning or conflict resolution
