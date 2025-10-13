@@ -1,7 +1,6 @@
 package fskit
 
 import (
-	"io"
 	"slices"
 	"sort"
 	"strings"
@@ -12,9 +11,8 @@ import (
 // dirFile is a directory fs.File implementing fs.ReadDirFile
 type dirFile struct {
 	fs.FileInfo
-	path    string
-	entries []fs.DirEntry
-	offset  int
+	path string
+	iter *DirIter
 }
 
 func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
@@ -29,7 +27,13 @@ func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
 	entries = slices.DeleteFunc(entries, func(e fs.DirEntry) bool {
 		return strings.HasPrefix(e.Name(), "#")
 	})
-	return &dirFile{FileInfo: info, path: info.name, entries: removeDuplicatesAndSort(entries)}
+	return &dirFile{
+		FileInfo: info,
+		path:     info.name,
+		iter: NewDirIter(func() ([]fs.DirEntry, error) {
+			return removeDuplicatesAndSort(entries), nil
+		}),
+	}
 }
 
 func (d *dirFile) Stat() (fs.FileInfo, error) { return d, nil }
@@ -39,23 +43,7 @@ func (d *dirFile) Read(b []byte) (int, error) {
 }
 
 func (d *dirFile) ReadDir(count int) ([]fs.DirEntry, error) {
-	if count == -1 {
-		defer func() { d.entries = nil }()
-		return d.entries, nil
-	}
-	n := len(d.entries) - d.offset
-	if n == 0 && count > 0 {
-		return nil, io.EOF
-	}
-	if count > 0 && n > count {
-		n = count
-	}
-	list := make([]fs.DirEntry, n)
-	for i := range list {
-		list[i] = d.entries[d.offset+i]
-	}
-	d.offset += n
-	return list, nil
+	return d.iter.ReadDir(count)
 }
 
 func removeDuplicatesAndSort(entries []fs.DirEntry) []fs.DirEntry {
