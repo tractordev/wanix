@@ -7,13 +7,14 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/memfs"
 )
 
 func TestCopyAll_File(t *testing.T) {
 	// Create filesystem with a test file
-	fsys := make(fskit.MemFS)
+	fsys := memfs.New()
 	content := []byte("Hello, World!")
-	fsys["test.txt"] = fskit.Entry("test.txt", 0644, content, time.Now())
+	fsys.SetNode("test.txt", fskit.Entry("test.txt", 0644, content, time.Now()))
 
 	// Test copying a file within the same filesystem
 	err := fs.CopyAll(fsys, "test.txt", "copy.txt")
@@ -50,15 +51,15 @@ func TestCopyAll_File(t *testing.T) {
 
 func TestCopyAll_Directory(t *testing.T) {
 	// Create filesystem with a directory structure
-	fsys := make(fskit.MemFS)
+	fsys := memfs.New()
 	now := time.Now()
 
 	// Create directory structure
-	fsys["dir"] = fskit.Entry("dir", fs.ModeDir|0755, now)
-	fsys["dir/file1.txt"] = fskit.Entry("file1.txt", 0644, []byte("content1"), now)
-	fsys["dir/file2.txt"] = fskit.Entry("file2.txt", 0644, []byte("content2"), now)
-	fsys["dir/subdir"] = fskit.Entry("subdir", fs.ModeDir|0755, now)
-	fsys["dir/subdir/file3.txt"] = fskit.Entry("file3.txt", 0644, []byte("content3"), now)
+	fsys.SetNode("dir", fskit.Entry("dir", fs.ModeDir|0755, now))
+	fsys.SetNode("dir/file1.txt", fskit.Entry("file1.txt", 0644, []byte("content1"), now))
+	fsys.SetNode("dir/file2.txt", fskit.Entry("file2.txt", 0644, []byte("content2"), now))
+	fsys.SetNode("dir/subdir", fskit.Entry("subdir", fs.ModeDir|0755, now))
+	fsys.SetNode("dir/subdir/file3.txt", fskit.Entry("file3.txt", 0644, []byte("content3"), now))
 
 	// Test copying a directory within the same filesystem
 	err := fs.CopyAll(fsys, "dir", "copydir")
@@ -113,12 +114,12 @@ func TestCopyAll_Directory(t *testing.T) {
 
 func TestCopyAll_Symlink(t *testing.T) {
 	// Create filesystem with a symlink
-	fsys := make(fskit.MemFS)
+	fsys := memfs.New()
 	now := time.Now()
 
 	// Create target file and symlink
-	fsys["target.txt"] = fskit.Entry("target.txt", 0644, []byte("target content"), now)
-	fsys["link.txt"] = fskit.RawNode([]byte("target.txt"), fs.ModeSymlink|0777)
+	fsys.SetNode("target.txt", fskit.Entry("target.txt", 0644, []byte("target content"), now))
+	fsys.SetNode("link.txt", fskit.RawNode([]byte("target.txt"), fs.ModeSymlink|0777))
 
 	// Test copying a symlink within the same filesystem
 	err := fs.CopyAll(fsys, "link.txt", "copylink.txt")
@@ -147,11 +148,11 @@ func TestCopyAll_Symlink(t *testing.T) {
 
 func TestCopyAll_OverwriteProtection(t *testing.T) {
 	// Create filesystem with source and destination files
-	fsys := make(fskit.MemFS)
+	fsys := memfs.New()
 	now := time.Now()
 
-	fsys["test.txt"] = fskit.Entry("test.txt", 0644, []byte("source content"), now)
-	fsys["existing.txt"] = fskit.Entry("existing.txt", 0644, []byte("existing content"), now)
+	fsys.SetNode("test.txt", fskit.Entry("test.txt", 0644, []byte("source content"), now))
+	fsys.SetNode("existing.txt", fskit.Entry("existing.txt", 0644, []byte("existing content"), now))
 
 	// Test that CopyAll refuses to overwrite existing files
 	err := fs.CopyAll(fsys, "test.txt", "existing.txt")
@@ -165,13 +166,13 @@ func TestCopyAll_OverwriteProtection(t *testing.T) {
 
 func TestCopyFS_CrossFilesystem(t *testing.T) {
 	// Create separate source and destination filesystems
-	srcFS := make(fskit.MemFS)
-	dstFS := make(fskit.MemFS)
+	srcFS := memfs.New()
+	dstFS := memfs.New()
 	now := time.Now()
 
 	// Create test data in source
 	content := []byte("cross-filesystem content")
-	srcFS["source.txt"] = fskit.Entry("source.txt", 0644, content, now)
+	srcFS.SetNode("source.txt", fskit.Entry("source.txt", 0644, content, now))
 
 	// Test copying between different filesystems
 	err := fs.CopyFS(srcFS, "source.txt", dstFS, "dest.txt")
@@ -198,17 +199,17 @@ func TestCopyFS_CrossFilesystem(t *testing.T) {
 
 func TestCopyNewFS_ModTimeCheck(t *testing.T) {
 	// Create source and destination filesystems
-	srcFS := make(fskit.MemFS)
-	dstFS := make(fskit.MemFS)
+	srcFS := memfs.New()
+	dstFS := memfs.New()
 
 	oldTime := time.Now().Add(-1 * time.Hour)
 	newTime := time.Now()
 
 	// Create source file with newer timestamp
-	srcFS["newer.txt"] = fskit.Entry("newer.txt", 0644, []byte("newer content"), newTime)
+	srcFS.SetNode("newer.txt", fskit.Entry("newer.txt", 0644, []byte("newer content"), newTime))
 
 	// Create destination file with older timestamp
-	dstFS["older.txt"] = fskit.Entry("older.txt", 0644, []byte("older content"), oldTime)
+	dstFS.SetNode("older.txt", fskit.Entry("older.txt", 0644, []byte("older content"), oldTime))
 
 	// Test copying newer file over older file
 	err := fs.CopyNewFS(srcFS, "newer.txt", dstFS, "older.txt")
@@ -236,17 +237,17 @@ func TestCopyNewFS_ModTimeCheck(t *testing.T) {
 
 func TestCopyNewFS_SkipOlderFile(t *testing.T) {
 	// Create source and destination filesystems
-	srcFS := make(fskit.MemFS)
-	dstFS := make(fskit.MemFS)
+	srcFS := memfs.New()
+	dstFS := memfs.New()
 
 	oldTime := time.Now().Add(-1 * time.Hour)
 	newTime := time.Now()
 
 	// Create source file with older timestamp
-	srcFS["older.txt"] = fskit.Entry("older.txt", 0644, []byte("older content"), oldTime)
+	srcFS.SetNode("older.txt", fskit.Entry("older.txt", 0644, []byte("older content"), oldTime))
 
 	// Create destination file with newer timestamp
-	dstFS["newer.txt"] = fskit.Entry("newer.txt", 0644, []byte("newer content"), newTime)
+	dstFS.SetNode("newer.txt", fskit.Entry("newer.txt", 0644, []byte("newer content"), newTime))
 
 	// Test copying older file over newer file (should be skipped)
 	err := fs.CopyNewFS(srcFS, "older.txt", dstFS, "newer.txt")
@@ -274,21 +275,21 @@ func TestCopyNewFS_SkipOlderFile(t *testing.T) {
 
 func TestCopyNewFS_Directory(t *testing.T) {
 	// Create source filesystem with directory structure
-	srcFS := make(fskit.MemFS)
-	dstFS := make(fskit.MemFS)
+	srcFS := memfs.New()
+	dstFS := memfs.New()
 
 	oldTime := time.Now().Add(-1 * time.Hour)
 	newTime := time.Now()
 
 	// Create source directory with mixed file timestamps
-	srcFS["srcdir"] = fskit.Entry("srcdir", fs.ModeDir|0755, newTime)
-	srcFS["srcdir/newer.txt"] = fskit.Entry("newer.txt", 0644, []byte("newer content"), newTime)
-	srcFS["srcdir/older.txt"] = fskit.Entry("older.txt", 0644, []byte("older src content"), oldTime)
+	srcFS.SetNode("srcdir", fskit.Entry("srcdir", fs.ModeDir|0755, newTime))
+	srcFS.SetNode("srcdir/newer.txt", fskit.Entry("newer.txt", 0644, []byte("newer content"), newTime))
+	srcFS.SetNode("srcdir/older.txt", fskit.Entry("older.txt", 0644, []byte("older src content"), oldTime))
 
 	// Create destination directory with existing files
-	dstFS["dstdir"] = fskit.Entry("dstdir", fs.ModeDir|0755, oldTime)
-	dstFS["dstdir/newer.txt"] = fskit.Entry("newer.txt", 0644, []byte("older dst content"), oldTime)
-	dstFS["dstdir/older.txt"] = fskit.Entry("older.txt", 0644, []byte("newer dst content"), newTime)
+	dstFS.SetNode("dstdir", fskit.Entry("dstdir", fs.ModeDir|0755, oldTime))
+	dstFS.SetNode("dstdir/newer.txt", fskit.Entry("newer.txt", 0644, []byte("older dst content"), oldTime))
+	dstFS.SetNode("dstdir/older.txt", fskit.Entry("older.txt", 0644, []byte("newer dst content"), newTime))
 
 	// Test copying directory with CopyNewFS
 	err := fs.CopyNewFS(srcFS, "srcdir", dstFS, "dstdir")
@@ -330,7 +331,7 @@ func TestCopyNewFS_Directory(t *testing.T) {
 }
 
 func TestCopyAll_NonExistentSource(t *testing.T) {
-	fsys := make(fskit.MemFS)
+	fsys := memfs.New()
 
 	err := fs.CopyAll(fsys, "nonexistent.txt", "dest.txt")
 	if err == nil {
@@ -339,11 +340,11 @@ func TestCopyAll_NonExistentSource(t *testing.T) {
 }
 
 func TestCopyAll_InvalidMode(t *testing.T) {
-	fsys := make(fskit.MemFS)
+	fsys := memfs.New()
 	now := time.Now()
 
 	// Create a file with an unsupported mode (e.g., device file)
-	fsys["device"] = fskit.Entry("device", os.ModeDevice|0644, now)
+	fsys.SetNode("device", fskit.Entry("device", os.ModeDevice|0644, now))
 
 	err := fs.CopyAll(fsys, "device", "copy_device")
 	if err == nil {
@@ -355,12 +356,12 @@ func TestCopyAll_InvalidMode(t *testing.T) {
 }
 
 func TestCopyFS_DestinationIsDirectory(t *testing.T) {
-	srcFS := make(fskit.MemFS)
-	dstFS := make(fskit.MemFS)
+	srcFS := memfs.New()
+	dstFS := memfs.New()
 	now := time.Now()
 
-	srcFS["file.txt"] = fskit.Entry("file.txt", 0644, []byte("content"), now)
-	dstFS["existing_dir"] = fskit.Entry("existing_dir", fs.ModeDir|0755, now)
+	srcFS.SetNode("file.txt", fskit.Entry("file.txt", 0644, []byte("content"), now))
+	dstFS.SetNode("existing_dir", fskit.Entry("existing_dir", fs.ModeDir|0755, now))
 
 	// Should succeed when destination is a directory (copies into it)
 	err := fs.CopyFS(srcFS, "file.txt", dstFS, "existing_dir")

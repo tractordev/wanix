@@ -6,6 +6,7 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/memfs"
 	"tractor.dev/wanix/vfs"
 )
 
@@ -25,7 +26,7 @@ func New(nsch <-chan *vfs.NS) *Service {
 			"tarfs":    tarfsAllocator(),
 			"tmpfs": func(r *Resource) (Mounter, error) {
 				return func(_ []string) (fs.FS, error) {
-					return fskit.MemFS{}, nil
+					return memfs.New(), nil
 				}, nil
 			},
 		},

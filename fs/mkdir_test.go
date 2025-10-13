@@ -6,10 +6,11 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/memfs"
 )
 
 func TestMkdir(t *testing.T) {
-	fsys := fskit.MemFS{}
+	fsys := memfs.New()
 	err := fs.Mkdir(fsys, "test", 0755)
 	if err != nil {
 		t.Fatal(err)
@@ -25,7 +26,7 @@ func TestMkdir(t *testing.T) {
 }
 
 func TestMkdirNoParent(t *testing.T) {
-	fsys := fskit.MemFS{}
+	fsys := memfs.New()
 	err := fs.Mkdir(fsys, "test/test2", 0755)
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal(err)
@@ -33,7 +34,7 @@ func TestMkdirNoParent(t *testing.T) {
 }
 
 func TestMkdirAllOnFsysWithoutMkdirAll(t *testing.T) {
-	fsys := fskit.MemFS{}
+	fsys := memfs.New()
 	err := fs.MkdirAll(fsys, "test/test2/test3", 0755)
 	if err != nil {
 		t.Fatal(err)
@@ -58,9 +59,9 @@ func TestMkdirAllOnFsysWithoutMkdirAll(t *testing.T) {
 
 func TestMkdirAllOnLeafFsysWithMkdir(t *testing.T) {
 	fsys := fskit.MapFS{
-		"sub": fskit.MemFS{
+		"sub": memfs.From(fskit.MapFS{
 			"file": fskit.RawNode([]byte("file")),
-		},
+		}),
 	}
 	err := fs.MkdirAll(fsys, "sub/dir1/dir2", 0755)
 	if err != nil {

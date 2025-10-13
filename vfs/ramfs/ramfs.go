@@ -5,6 +5,7 @@ import (
 	"io/fs"
 
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/memfs"
 	"tractor.dev/wanix/vfs"
 )
 
@@ -20,7 +21,7 @@ func (a *Allocator) OpenContext(ctx context.Context, name string) (fs.File, erro
 }
 
 func (a *Allocator) BindAllocFS(name string) (fs.FS, error) {
-	return fskit.MemFS{}, nil
+	return memfs.New(), nil
 }
 
 var _ vfs.BindAllocator = (*Allocator)(nil)

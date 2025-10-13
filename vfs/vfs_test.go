@@ -12,6 +12,7 @@ import (
 	"tractor.dev/wanix/fs"
 
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/memfs"
 )
 
 func TestNamespace(t *testing.T) {
@@ -445,9 +446,9 @@ func TestSynthesizedDirectories(t *testing.T) {
 func TestMkdirOnLeaf(t *testing.T) {
 	ns := New(context.Background())
 
-	memfs := fskit.MemFS{
+	memfs := memfs.From(fskit.MapFS{
 		"file": fskit.RawNode([]byte("content")),
-	}
+	})
 
 	middlefs := fskit.MapFS{
 		"dir": memfs,
@@ -515,7 +516,7 @@ func TestWritableRootOverRootBind(t *testing.T) {
 		"b": fskit.RawNode([]byte("content2")),
 	}
 
-	emptyfs := fskit.MemFS{}
+	emptyfs := memfs.New()
 
 	ns := New(context.Background())
 	if err := ns.Bind(mfs, ".", ".", ModeAfter); err != nil {
@@ -547,7 +548,7 @@ func TestWritableRootOverRootBind(t *testing.T) {
 		t.Fatalf("unexpected number of entries: %v", len(e))
 	}
 
-	n, ok := emptyfs["c"]
+	n, ok := emptyfs.Node("c")
 	if !ok {
 		t.Fatal("c not found in emptyfs")
 	}
