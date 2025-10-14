@@ -107,10 +107,12 @@ func (fsys *FS) Create(name string) (fs.File, error) {
 }
 
 func (fsys *FS) Mkdir(name string, perm fs.FileMode) error {
+	// fsys.log.Debug("Mkdir", "name", name, "perm", perm)
 	return fsys.root.Mkdir(name, perm)
 }
 
 func (fsys *FS) MkdirAll(path string, perm fs.FileMode) error {
+	// fsys.log.Debug("MkdirAll", "path", path, "perm", perm)
 	return fsys.root.MkdirAll(path, perm)
 }
 
@@ -119,6 +121,7 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 }
 
 func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
+	// fsys.log.Debug("Open", "name", name)
 	f, e := fsys.root.Open(name)
 	if f == nil {
 		// while this looks strange, we need to return a bare nil (of type nil) not
@@ -129,6 +132,7 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 }
 
 func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) {
+	// fsys.log.Debug("OpenFile", "name", name, "flag", flag, "perm", perm)
 	f, e := fsys.root.OpenFile(name, flag, perm)
 	if f == nil {
 		// while this looks strange, we need to return a bare nil (of type nil) not
@@ -139,14 +143,17 @@ func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, erro
 }
 
 func (fsys *FS) Remove(name string) error {
+	// fsys.log.Debug("Remove", "name", name)
 	return fsys.root.Remove(name)
 }
 
 func (fsys *FS) RemoveAll(path string) error {
+	// fsys.log.Debug("RemoveAll", "path", path)
 	return fsys.root.RemoveAll(path)
 }
 
 func (fsys *FS) Rename(oldname, newname string) error {
+	// fsys.log.Debug("Rename", "oldname", oldname, "newname", newname)
 	return fsys.root.Rename(oldname, newname)
 }
 
@@ -155,6 +162,7 @@ func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
 }
 
 func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+	// fsys.log.Debug("Stat", "name", name)
 	var fi fs.FileInfo
 	var err error
 
@@ -172,10 +180,12 @@ func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, erro
 }
 
 func (fsys *FS) Chmod(name string, mode fs.FileMode) error {
+	// fsys.log.Debug("Chmod", "name", name, "mode", mode)
 	return fsys.root.Chmod(name, mode)
 }
 
 func (fsys *FS) Chown(name string, uid, gid int) error {
+	// fsys.log.Debug("Chown", "name", name, "uid", uid, "gid", gid)
 	if fsys.virtualizeUidGid {
 		// Store chown data in memory instead of applying to filesystem
 		fsys.chownMutex.Lock()
@@ -187,13 +197,16 @@ func (fsys *FS) Chown(name string, uid, gid int) error {
 }
 
 func (fsys *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	// fsys.log.Debug("Chtimes", "name", name, "atime", atime, "mtime", mtime)
 	return fsys.root.Chtimes(name, atime, mtime)
 }
 
 func (fsys *FS) Symlink(oldname string, newname string) error {
+	// fsys.log.Debug("Symlink", "oldname", oldname, "newname", newname)
 	return fsys.root.Symlink(oldname, newname)
 }
 
 func (fsys *FS) Readlink(name string) (string, error) {
+	// fsys.log.Debug("Readlink", "name", name)
 	return fsys.root.Readlink(name)
 }
