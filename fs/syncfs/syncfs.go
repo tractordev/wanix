@@ -32,24 +32,11 @@ type RemoteFS interface {
 	PatchFS
 }
 
-// call recursive watch on remote
-// triggers initial sync
-// - lock writes
-// - synchronous dir structure (depth first)
-// - unlock writes
-// - async file downloads (breadth first)
-// - per file waitgroup
-// batcher: on batch patch
-// - invalidate+sync
-// - fire watch event
-// - reset polling timer
-
 // SyncFS provides a filesystem that syncs between local and remote filesystems.
-// All read operations go to the local filesystem first, with smart caching of remote entries.
-// Write operations are applied locally immediately and queued for remote processing.
+// All operations are applied to local first, then synced to remote.
 type SyncFS struct {
-	local  fs.FS    // Local filesystem (fast access)
-	remote RemoteFS // Remote filesystem (slower, authoritative)
+	local  fs.FS    // Local filesystem
+	remote RemoteFS // Remote filesystem
 
 	writeLock *sync.WaitGroup
 	changes   map[string]bool
@@ -66,7 +53,6 @@ func New(local fs.FS, remote RemoteFS) *SyncFS {
 		remote: remote,
 		log:    slog.Default(), // for now
 	}
-	// go sfs.syncWorker()
 	return sfs
 }
 
@@ -116,10 +102,15 @@ func (sfs *SyncFS) Sync() error {
 			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
-			if os.IsNotExist(err) || linfo.ModTime().Unix() < rinfo.ModTime().Unix() {
-				if rinfo.ModTime().Unix()-linfo.ModTime().Unix() < 2 {
-					return nil
+			shouldPull := false
+			if os.IsNotExist(err) {
+				shouldPull = true
+			} else if linfo.ModTime().Unix() < rinfo.ModTime().Unix() {
+				if rinfo.ModTime().Unix()-linfo.ModTime().Unix() >= 2 {
+					shouldPull = true
 				}
+			}
+			if shouldPull {
 				if rinfo.IsDir() {
 					pullDirs = append(pullDirs, path)
 				} else {
@@ -131,8 +122,13 @@ func (sfs *SyncFS) Sync() error {
 	}()
 
 	pushScan := make(chan error, 1)
-	if sfs.changes == nil {
+	sfs.mu.Lock()
+	needsScan := sfs.changes == nil
+	if needsScan {
 		sfs.changes = make(map[string]bool)
+	}
+	sfs.mu.Unlock()
+	if needsScan {
 		scanStep.Add(1)
 		go func() {
 			defer scanStep.Done()
@@ -367,25 +363,18 @@ func (sfs *SyncFS) changed(name string, exists bool) {
 
 // Close shuts down the SyncFS and waits for all operations to complete
 func (sfs *SyncFS) Close() error {
-	// sfs.writeLocks.Range(func(key, value interface{}) bool {
-	// 	value.(*sync.WaitGroup).Wait()
-	// 	return true
-	// })
+	// TODO
 	return nil
 }
 
 // Filesystem interface implementations
 
-// Open opens a file for reading, always trying local first
+// Open opens a file for reading from local
 func (sfs *SyncFS) Open(name string) (fs.File, error) {
 	return sfs.OpenContext(context.Background(), name)
 }
 
-// OpenContext opens a file with context, trying local first.
-// if local is found and dircache is expired, trigger async pull.
-// if local is not found, trigger async pull. (should be sync?)
-// todo: if local not found, and dircache is expired, do a sync pull/readdir
-// THEN if not in dircache, return error. if in dircache, wait for local.
+// OpenContext opens a file with context from local
 func (sfs *SyncFS) OpenContext(ctx context.Context, name string) (f fs.File, err error) {
 	name = sfs.clean(name)
 	defer func() {
@@ -395,12 +384,12 @@ func (sfs *SyncFS) OpenContext(ctx context.Context, name string) (f fs.File, err
 	return
 }
 
-// Stat returns file info, trying local first
+// Stat returns file info from local
 func (sfs *SyncFS) Stat(name string) (fs.FileInfo, error) {
 	return sfs.StatContext(context.Background(), name)
 }
 
-// StatContext returns file info with context
+// StatContext returns file info with context from local
 func (sfs *SyncFS) StatContext(ctx context.Context, name string) (info fs.FileInfo, err error) {
 	name = sfs.clean(name)
 	defer func() {
@@ -410,7 +399,7 @@ func (sfs *SyncFS) StatContext(ctx context.Context, name string) (info fs.FileIn
 	return
 }
 
-// ReadDir reads directory entries, with smart caching
+// ReadDir reads directory entries from local
 func (sfs *SyncFS) ReadDir(name string) (entries []fs.DirEntry, err error) {
 	name = sfs.clean(name)
 	defer func() {
@@ -420,7 +409,7 @@ func (sfs *SyncFS) ReadDir(name string) (entries []fs.DirEntry, err error) {
 	return
 }
 
-// Write operations - all apply locally immediately and queue for remote
+// Write operations
 
 // Create creates a new file
 func (sfs *SyncFS) Create(name string) (fs.File, error) {
@@ -438,7 +427,6 @@ func (sfs *SyncFS) Create(name string) (fs.File, error) {
 }
 
 // OpenFile opens a file with flags
-// TODO: move opencontext here and forward?
 func (sfs *SyncFS) OpenFile(name string, flag int, perm fs.FileMode) (f fs.File, err error) {
 	name = sfs.clean(name)
 	sfs.wait()
@@ -547,7 +535,7 @@ func (sfs *SyncFS) Chtimes(name string, atime, mtime time.Time) error {
 	return nil
 }
 
-// syncFile wraps a local fs.File to detect writes and sync to remote on close
+// syncFile wraps a local fs.File to detect writes and mark to sync on close
 type syncFile struct {
 	fs.File
 	sfs       *SyncFS
@@ -559,8 +547,7 @@ type syncFile struct {
 	iter *fskit.DirIter
 }
 
-// newSyncFile creates a wrapped file that syncs changes to remote
-// todo: newLocalSyncFile?
+// newSyncFile creates a wrapped file that marks changes to sync
 func (sfs *SyncFS) newSyncFile(f fs.File, path string) (*syncFile, error) {
 	info, err := f.Stat()
 	if err != nil {
@@ -619,7 +606,7 @@ func (sf *syncFile) Seek(offset int64, whence int) (int64, error) {
 	return 0, fs.ErrPermission
 }
 
-// ReadDir implements fs.ReadDirFile using SyncFS ReadDir with proper cursor management
+// ReadDir implements fs.ReadDirFile using SyncFS ReadDir
 func (sf *syncFile) ReadDir(n int) (entries []fs.DirEntry, err error) {
 	defer func() {
 		sf.sfs.log.Debug("ReadDir", "path", sf.path, "n", n, "entries", len(entries), "err", err)
@@ -634,8 +621,6 @@ func (sf *syncFile) ReadDir(n int) (entries []fs.DirEntry, err error) {
 }
 
 // Close wraps the underlying Close and syncs modified files to remote.
-// if local file gone after close, no need to sync.
-// todo: if local file modtime newer than file, no need to sync?
 func (sf *syncFile) Close() error {
 	// Close the underlying file first
 	err := sf.File.Close()
