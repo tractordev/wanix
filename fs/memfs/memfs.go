@@ -133,9 +133,13 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 	fsys.mu.Lock()
 	n := fsys.nodes[name]
+	if n != nil {
+		// SetName is called here while holding the lock to avoid race conditions
+		// when multiple goroutines access the same node concurrently
+		fskit.SetName(n, name)
+	}
 	fsys.mu.Unlock()
 	if n != nil {
-		fskit.SetName(n, name)
 		if fs.FollowSymlinks(ctx) && fs.IsSymlink(n.Mode()) {
 			target, err := fs.Readlink(fsys, name)
 			if err != nil {
