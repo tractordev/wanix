@@ -10,13 +10,16 @@ import (
 
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
-	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/httpfs"
+	"tractor.dev/wanix/fs/memfs"
+	"tractor.dev/wanix/fs/syncfs"
 	"tractor.dev/wanix/fs/tarfs"
 	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/vfs/ramfs"
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
+	"tractor.dev/wanix/web/fsa"
 	"tractor.dev/wanix/web/runtime"
 	"tractor.dev/wanix/web/virtio9p"
 )
@@ -51,16 +54,31 @@ func main() {
 		b := make([]byte, jsBuf.Length())
 		js.CopyBytesToGo(b, jsBuf)
 		buf := bytes.NewBuffer(b)
-		bundleFS := tarfs.Load(tar.NewReader(buf))
+		bundleFS := tarfs.From(tar.NewReader(buf))
 
 		// ideally we could bind a memfs over bundleFS, but
 		// that still doesn't seem to be working yet
-		rw := fskit.MemFS{}
+		rw := memfs.New()
 		if err := fs.CopyFS(bundleFS, ".", rw, "."); err != nil {
 			log.Fatal(err)
 		}
 		root.Namespace().Bind(rw, ".", "#bundle")
 		// root.Bind("#bundle", "bundle")
+	}
+
+	r2fs := httpfs.New("https://r2fs.proteco.workers.dev/")
+	opfs, err := fsa.OPFS("r2fs")
+	if err != nil {
+		log.Fatal(err)
+	}
+	sfs := syncfs.New(opfs, r2fs)
+	go func() {
+		if err := sfs.Sync(); err != nil {
+			log.Printf("err syncing: %v\n", err)
+		}
+	}()
+	if err := root.Namespace().Bind(sfs, ".", "#data"); err != nil {
+		log.Fatal(err)
 	}
 
 	inst.Set("createPort", js.FuncOf(func(this js.Value, args []js.Value) any {
