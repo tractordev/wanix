@@ -439,7 +439,7 @@ func (fsys *Cacher) ReadlinkContext(ctx context.Context, name string) (string, e
 }
 
 // ============================================================================
-// Write Operations (with invalidation)
+// Write Operations
 // ============================================================================
 
 // WriteFile writes data to the named file, creating it if necessary
@@ -569,7 +569,7 @@ func (fsys *Cacher) ChtimesContext(ctx context.Context, name string, atime time.
 	return fsys.InvalidateNode(name, false, false)
 }
 
-// ApplyPatch applies a tar patch to the filesystem
+// Patch applies a tar patch to the filesystem
 func (fsys *Cacher) Patch(ctx context.Context, name string, tarBuf bytes.Buffer) error {
 	if err := fsys.fs.Patch(ctx, name, tarBuf); err != nil {
 		return err
