@@ -4,9 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"iter"
+	"mime"
 	"net/http"
+	"strings"
 
 	"tractor.dev/wanix/fs"
+	"tractor.dev/wanix/fs/memfs"
 )
 
 // Open opens the named file for reading
@@ -199,4 +203,67 @@ func (fsys *FS) ReadFileContext(ctx context.Context, name string) ([]byte, error
 		return nil, err
 	}
 	return content, nil
+}
+
+func (fsys *FS) Index(ctx context.Context, name string) (fs.FS, error) {
+	index := memfs.New()
+	for n, err := range fsys.streamTree(ctx, name) {
+		if err != nil {
+			return nil, err
+		}
+		index.SetNode(n.Path(), n.ToNode())
+	}
+	return index, nil
+}
+
+// streamTree fetches a directory tree using multipart response
+func (fsys *FS) streamTree(ctx context.Context, name string) iter.Seq2[*Node, error] {
+	return func(yield func(*Node, error) bool) {
+		// Request the directory tree with "..." suffix for streaming recursive multipart response
+		url := fsys.buildURL(name + "/...")
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+
+		req.Header.Set("Accept", "multipart/mixed")
+		resp, err := fsys.doRequest(req)
+		if err != nil {
+			yield(nil, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			yield(nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status))
+			return
+		}
+
+		// Check if response is multipart
+		contentType := resp.Header.Get("Content-Type")
+		mediaType, params, err := mime.ParseMediaType(contentType)
+		if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
+			yield(nil, fmt.Errorf("expected multipart response, got %s", contentType))
+			return
+		}
+
+		boundary := params["boundary"]
+		if boundary == "" {
+			yield(nil, fmt.Errorf("no boundary in multipart response"))
+			return
+		}
+
+		// Parse multipart response
+		for fileNode, err := range parseNodesMultipart(fsys, resp.Body, boundary) {
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			if !yield(fileNode, nil) {
+				return
+			}
+		}
+	}
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"iter"
 	"log/slog"
 	"mime"
 	"net/http"
@@ -43,8 +42,8 @@ func NewCacher(fs *FS) *Cacher {
 	}
 }
 
-func (c *Cacher) unwrap() *FS {
-	return c.fs
+func (fsys *Cacher) unwrap() *FS {
+	return fsys.fs
 }
 
 // normalizePath ensures consistent path format for cache keys
@@ -58,30 +57,30 @@ func normalizePath(p string) string {
 // ============================================================================
 
 // CachedNode retrieves cached node result if valid
-func (c *Cacher) CachedNode(path string) (*Node, error, bool) {
+func (fsys *Cacher) CachedNode(path string) (*Node, error, bool) {
 	path = normalizePath(path)
-	c.cacheMu.RLock()
-	entry, exists := c.nodeCache[path]
-	c.cacheMu.RUnlock()
+	fsys.cacheMu.RLock()
+	entry, exists := fsys.nodeCache[path]
+	fsys.cacheMu.RUnlock()
 	if !exists {
-		c.log.Debug("Node miss", "path", path)
+		fsys.log.Debug("Node miss", "path", path)
 		return nil, nil, false
 	}
 
 	if time.Now().After(entry.expiresAt) {
-		c.log.Debug("Node expired", "path", path, "expired", time.Since(entry.expiresAt))
-		c.cacheMu.Lock()
-		delete(c.nodeCache, path)
-		c.cacheMu.Unlock()
+		fsys.log.Debug("Node expired", "path", path, "expired", time.Since(entry.expiresAt))
+		fsys.cacheMu.Lock()
+		delete(fsys.nodeCache, path)
+		fsys.cacheMu.Unlock()
 		return nil, nil, false
 	}
 
 	if !entry.renewsAt.IsZero() && time.Now().After(entry.renewsAt) {
-		c.log.Debug("Node renew", "path", path)
+		fsys.log.Debug("Node renew", "path", path)
 		if entry.node.IsDir() {
-			go c.PullDir(context.Background(), path)
+			go fsys.PullDir(context.Background(), path)
 		} else {
-			go c.PullMeta(context.Background(), path)
+			go fsys.PullMeta(context.Background(), path)
 		}
 	}
 
@@ -94,56 +93,56 @@ func (c *Cacher) CachedNode(path string) (*Node, error, bool) {
 }
 
 // CacheNode stores node result in cache with appropriate TTL
-func (c *Cacher) CacheNode(node *Node) {
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
+func (fsys *Cacher) CacheNode(node *Node) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
 
 	now := time.Now()
 
-	c.log.Debug("CacheNode", "path", node.Path())
-	c.nodeCache[node.Path()] = &cacheEntry{
+	fsys.log.Debug("CacheNode", "path", node.Path())
+	fsys.nodeCache[node.Path()] = &cacheEntry{
 		node:      node,
 		err:       nil,
 		cachedAt:  now,
-		expiresAt: now.Add(c.ttl),
-		renewsAt:  now.Add(c.ttl / 2),
+		expiresAt: now.Add(fsys.ttl),
+		renewsAt:  now.Add(fsys.ttl / 2),
 	}
 }
 
 // CacheNodeError stores node request error in cache
-func (c *Cacher) CacheNodeError(path string, err error) {
+func (fsys *Cacher) CacheNodeError(path string, err error) {
 	path = normalizePath(path)
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
 
 	now := time.Now()
 	// Use file TTL for errors by default
-	c.nodeCache[path] = &cacheEntry{
+	fsys.nodeCache[path] = &cacheEntry{
 		node:      nil,
 		err:       err,
 		cachedAt:  now,
-		expiresAt: now.Add(c.ttl / 2),
+		expiresAt: now.Add(fsys.ttl / 2),
 	}
 }
 
 // InvalidateNode invalidates a node in the cache
-func (c *Cacher) InvalidateNode(path string, resync, recursive bool) error {
+func (fsys *Cacher) InvalidateNode(path string, resync, recursive bool) error {
 	path = normalizePath(path)
-	c.log.Debug("InvalidateNode", "path", path, "resync", resync, "recursive", recursive)
+	fsys.log.Debug("InvalidateNode", "path", path, "resync", resync, "recursive", recursive)
 
-	c.cacheMu.Lock()
-	entry, exists := c.nodeCache[path]
-	delete(c.nodeCache, path)
-	c.cacheMu.Unlock()
+	fsys.cacheMu.Lock()
+	entry, exists := fsys.nodeCache[path]
+	delete(fsys.nodeCache, path)
+	fsys.cacheMu.Unlock()
 
 	if recursive && exists && entry.node != nil && entry.node.IsDir() {
 		for _, entry := range entry.node.Entries() {
-			c.InvalidateNode(filepath.Join(path, entry.Name()), false, true)
+			fsys.InvalidateNode(filepath.Join(path, entry.Name()), false, true)
 		}
 	}
 
 	if resync {
-		_, err := c.PullDir(context.Background(), filepath.Dir(path))
+		_, err := fsys.PullDir(context.Background(), filepath.Dir(path))
 		return err
 	}
 
@@ -151,35 +150,35 @@ func (c *Cacher) InvalidateNode(path string, resync, recursive bool) error {
 }
 
 // InvalidateAll clears all cached node results
-func (c *Cacher) InvalidateAll(name string) {
+func (fsys *Cacher) InvalidateAll(name string) {
 	name = normalizePath(name)
-	c.log.Debug("InvalidateAll", "name", name)
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
+	fsys.log.Debug("InvalidateAll", "name", name)
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
 	if name == "." || name == "" {
-		c.nodeCache = make(map[string]*cacheEntry)
+		fsys.nodeCache = make(map[string]*cacheEntry)
 	} else {
-		delete(c.nodeCache, name)
-		for key := range c.nodeCache {
+		delete(fsys.nodeCache, name)
+		for key := range fsys.nodeCache {
 			if strings.HasPrefix(key, name+"/") {
-				delete(c.nodeCache, key)
+				delete(fsys.nodeCache, key)
 			}
 		}
 	}
 }
 
 // SetTTL sets the cache TTL for directory nodes
-func (c *Cacher) SetTTL(ttl time.Duration) {
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
-	c.ttl = ttl
+func (fsys *Cacher) SetTTL(ttl time.Duration) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+	fsys.ttl = ttl
 }
 
 // GetTTL returns the current directory cache TTL
-func (c *Cacher) GetTTL() time.Duration {
-	c.cacheMu.RLock()
-	defer c.cacheMu.RUnlock()
-	return c.ttl
+func (fsys *Cacher) GetTTL() time.Duration {
+	fsys.cacheMu.RLock()
+	defer fsys.cacheMu.RUnlock()
+	return fsys.ttl
 }
 
 // ============================================================================
@@ -188,15 +187,15 @@ func (c *Cacher) GetTTL() time.Duration {
 
 // PullNode fetches and caches a node with optional subtree prefetching
 // Called by Open and ReadDir on cache miss.
-func (c *Cacher) PullNode(ctx context.Context, name string, recursivePrefetch bool) (*Node, []byte, error) {
+func (fsys *Cacher) PullNode(ctx context.Context, name string, recursivePrefetch bool) (*Node, []byte, error) {
 	name = normalizePath(name)
-	c.log.Debug("PullNode", "name", name, "rp", recursivePrefetch)
+	fsys.log.Debug("PullNode", "name", name, "rp", recursivePrefetch)
 
 	// Use the underlying FS to open the file
-	file, err := c.fs.OpenContext(ctx, name)
+	file, err := fsys.fs.OpenContext(ctx, name)
 	if err != nil {
 		if err == fs.ErrNotExist {
-			c.CacheNodeError(name, fs.ErrNotExist)
+			fsys.CacheNodeError(name, fs.ErrNotExist)
 		}
 		return nil, nil, err
 	}
@@ -208,7 +207,7 @@ func (c *Cacher) PullNode(ctx context.Context, name string, recursivePrefetch bo
 		return nil, nil, fmt.Errorf("unexpected file type")
 	}
 
-	c.CacheNode(node)
+	fsys.CacheNode(node)
 
 	if !node.IsDir() || !recursivePrefetch {
 		return node, node.content, nil
@@ -218,13 +217,13 @@ func (c *Cacher) PullNode(ctx context.Context, name string, recursivePrefetch bo
 	for _, entry := range node.Entries() {
 		if entry.IsDir() {
 			go func(path string) {
-				for n, err := range c.streamTree(ctx, path) {
+				for n, err := range fsys.fs.streamTree(ctx, path) {
 					if err != nil {
-						c.log.Debug("incomplete prefetch", "path", path, "err", err)
+						fsys.log.Debug("incomplete prefetch", "path", path, "err", err)
 						return
 					}
 					// Cache the directory node
-					c.CacheNode(n)
+					fsys.CacheNode(n)
 				}
 			}(filepath.Join(name, entry.Name()))
 		}
@@ -236,10 +235,10 @@ func (c *Cacher) PullNode(ctx context.Context, name string, recursivePrefetch bo
 // PullDir gets metadata for a directory and its entries using multipart response.
 // Called async on cache lookup w/ renewal, called sync on cache invalidate w/ resync.
 // Called sync on StatContext w/ cache miss.
-func (c *Cacher) PullDir(ctx context.Context, name string) (*Node, error) {
+func (fsys *Cacher) PullDir(ctx context.Context, name string) (*Node, error) {
 	name = normalizePath(name)
-	c.log.Debug("PullDir", "name", name)
-	url := c.fs.buildURL(name)
+	fsys.log.Debug("PullDir", "name", name)
+	url := fsys.fs.buildURL(name)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -247,7 +246,7 @@ func (c *Cacher) PullDir(ctx context.Context, name string) (*Node, error) {
 	}
 
 	req.Header.Set("Accept", "multipart/mixed")
-	resp, err := c.fs.doRequest(req)
+	resp, err := fsys.fs.doRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -271,11 +270,11 @@ func (c *Cacher) PullDir(ctx context.Context, name string) (*Node, error) {
 
 	// Parse multipart response
 	var dirNode *Node
-	for fileNode, err := range parseNodesMultipart(c, resp.Body, boundary) {
+	for fileNode, err := range parseNodesMultipart(fsys, resp.Body, boundary) {
 		if err != nil {
 			return nil, err
 		}
-		c.CacheNode(fileNode)
+		fsys.CacheNode(fileNode)
 		if dirNode == nil {
 			dirNode = fileNode
 		}
@@ -285,15 +284,15 @@ func (c *Cacher) PullDir(ctx context.Context, name string) (*Node, error) {
 
 // PullMeta performs a HEAD request to get metadata.
 // Called async on cache lookup w/ renewal, called sync on StatContext w/ cache miss.
-func (c *Cacher) PullMeta(ctx context.Context, path string) (*Node, error) {
+func (fsys *Cacher) PullMeta(ctx context.Context, path string) (*Node, error) {
 	path = normalizePath(path)
-	c.log.Debug("PullMeta", "path", path)
+	fsys.log.Debug("PullMeta", "path", path)
 
-	node, err := c.fs.StatContext(ctx, path)
+	node, err := fsys.fs.StatContext(ctx, path)
 	if err != nil {
 		if err == fs.ErrNotExist {
 			// Cache the 404 error
-			c.CacheNodeError(path, fs.ErrNotExist)
+			fsys.CacheNodeError(path, fs.ErrNotExist)
 		}
 		return nil, err
 	}
@@ -304,64 +303,9 @@ func (c *Cacher) PullMeta(ctx context.Context, path string) (*Node, error) {
 	}
 
 	// Cache the result
-	c.CacheNode(fileNode)
+	fsys.CacheNode(fileNode)
 
 	return fileNode, nil
-}
-
-// streamTree fetches a directory tree using multipart response
-func (c *Cacher) streamTree(ctx context.Context, name string) iter.Seq2[*Node, error] {
-	return func(yield func(*Node, error) bool) {
-		// Request the directory tree with "..." suffix for streaming recursive multipart response
-		url := c.fs.buildURL(name + "/...")
-
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			yield(nil, err)
-			return
-		}
-
-		req.Header.Set("Accept", "multipart/mixed")
-		resp, err := c.fs.doRequest(req)
-		if err != nil {
-			yield(nil, err)
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			yield(nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status))
-			return
-		}
-
-		// Check if response is multipart
-		contentType := resp.Header.Get("Content-Type")
-		mediaType, params, err := mime.ParseMediaType(contentType)
-		if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
-			yield(nil, fmt.Errorf("expected multipart response, got %s", contentType))
-			return
-		}
-
-		boundary := params["boundary"]
-		if boundary == "" {
-			yield(nil, fmt.Errorf("no boundary in multipart response"))
-			return
-		}
-
-		// Parse multipart response
-		for fileNode, err := range parseNodesMultipart(c, resp.Body, boundary) {
-			if err != nil {
-				yield(nil, err)
-				return
-			}
-			if !fileNode.IsDir() {
-				continue
-			}
-			if !yield(fileNode, nil) {
-				return
-			}
-		}
-	}
 }
 
 // ============================================================================
@@ -369,54 +313,54 @@ func (c *Cacher) streamTree(ctx context.Context, name string) iter.Seq2[*Node, e
 // ============================================================================
 
 // Open opens the named file for reading
-func (c *Cacher) Open(name string) (fs.File, error) {
-	return c.OpenContext(context.Background(), name)
+func (fsys *Cacher) Open(name string) (fs.File, error) {
+	return fsys.OpenContext(context.Background(), name)
 }
 
 // OpenContext opens the named file for reading with context
-func (c *Cacher) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	c.log.Debug("Open", "name", name)
+func (fsys *Cacher) OpenContext(ctx context.Context, name string) (fs.File, error) {
+	fsys.log.Debug("Open", "name", name)
 	// Always get a fresh file handle from the underlying FS
 	// Don't use PullNode here because it closes the file after caching
 	// We need an unclosed file handle for read/write operations
-	file, err := c.fs.OpenContext(ctx, name)
+	file, err := fsys.fs.OpenContext(ctx, name)
 	if err != nil {
 		if err == fs.ErrNotExist {
-			c.CacheNodeError(name, fs.ErrNotExist)
+			fsys.CacheNodeError(name, fs.ErrNotExist)
 		}
 		return nil, err
 	}
 
 	// Cache the node metadata for future Stat calls, but return the open file
 	if node, ok := file.(*Node); ok {
-		node.fs = c
-		c.CacheNode(node)
+		node.fs = fsys
+		fsys.CacheNode(node)
 	}
 
 	return file, nil
 }
 
 // Stat returns file information
-func (c *Cacher) Stat(name string) (fs.FileInfo, error) {
-	return c.StatContext(context.Background(), name)
+func (fsys *Cacher) Stat(name string) (fs.FileInfo, error) {
+	return fsys.StatContext(context.Background(), name)
 }
 
 // StatContext performs a HEAD request to get file metadata if not cached
-func (c *Cacher) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
-	if cachedNode, cachedErr, found := c.CachedNode(name); found {
-		c.log.Debug("Stat", "name", name, "cached", found)
+func (fsys *Cacher) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+	if cachedNode, cachedErr, found := fsys.CachedNode(name); found {
+		fsys.log.Debug("Stat", "name", name, "cached", found)
 		if cachedErr != nil {
 			return nil, cachedErr
 		}
 		return cachedNode, nil
 	}
-	c.log.Debug("Stat", "name", name, "cached", false)
+	fsys.log.Debug("Stat", "name", name, "cached", false)
 
 	var isDir bool
 	if name == "." {
 		isDir = true
 	} else {
-		if parent, _, exists := c.CachedNode(filepath.Dir(name)); exists {
+		if parent, _, exists := fsys.CachedNode(filepath.Dir(name)); exists {
 			for _, entry := range parent.Entries() {
 				if entry.Name() == filepath.Base(name) {
 					isDir = entry.Type().IsDir()
@@ -427,31 +371,31 @@ func (c *Cacher) StatContext(ctx context.Context, name string) (fs.FileInfo, err
 	}
 
 	if isDir {
-		return c.PullDir(ctx, name)
+		return fsys.PullDir(ctx, name)
 	} else {
-		n, err := c.PullMeta(ctx, name)
+		n, err := fsys.PullMeta(ctx, name)
 		if err != nil {
 			return nil, err
 		}
 		if n.IsDir() {
 			// path and parent path expired, so had to
 			// pull meta to know its a directory
-			return c.PullDir(ctx, name)
+			return fsys.PullDir(ctx, name)
 		}
 		return n, nil
 	}
 }
 
 // ReadDir reads the named directory and returns a list of directory entries
-func (c *Cacher) ReadDir(name string) ([]fs.DirEntry, error) {
-	return c.ReadDirContext(context.Background(), name)
+func (fsys *Cacher) ReadDir(name string) ([]fs.DirEntry, error) {
+	return fsys.ReadDirContext(context.Background(), name)
 }
 
 // ReadDirContext reads the named directory with context
-func (c *Cacher) ReadDirContext(ctx context.Context, name string) ([]fs.DirEntry, error) {
+func (fsys *Cacher) ReadDirContext(ctx context.Context, name string) ([]fs.DirEntry, error) {
 	// check if we have a cached directory node
-	if cachedNode, cachedErr, found := c.CachedNode(name); found {
-		c.log.Debug("ReadDir", "name", name, "cached", found)
+	if cachedNode, cachedErr, found := fsys.CachedNode(name); found {
+		fsys.log.Debug("ReadDir", "name", name, "cached", found)
 		if cachedErr != nil {
 			return nil, cachedErr
 		}
@@ -465,9 +409,9 @@ func (c *Cacher) ReadDirContext(ctx context.Context, name string) ([]fs.DirEntry
 		}
 		return entries, nil
 	}
-	c.log.Debug("ReadDir", "name", name, "cached", false)
+	fsys.log.Debug("ReadDir", "name", name, "cached", false)
 
-	node, _, err := c.PullNode(ctx, name, true)
+	node, _, err := fsys.PullNode(ctx, name, true)
 	if err != nil {
 		return nil, err
 	}
@@ -485,13 +429,13 @@ func (c *Cacher) ReadDirContext(ctx context.Context, name string) ([]fs.DirEntry
 }
 
 // Readlink reads the value of a symbolic link
-func (c *Cacher) Readlink(name string) (string, error) {
-	return c.ReadlinkContext(context.Background(), name)
+func (fsys *Cacher) Readlink(name string) (string, error) {
+	return fsys.ReadlinkContext(context.Background(), name)
 }
 
 // ReadlinkContext reads the value of a symbolic link with context
-func (c *Cacher) ReadlinkContext(ctx context.Context, name string) (string, error) {
-	return c.fs.ReadlinkContext(ctx, name)
+func (fsys *Cacher) ReadlinkContext(ctx context.Context, name string) (string, error) {
+	return fsys.fs.ReadlinkContext(ctx, name)
 }
 
 // ============================================================================
@@ -499,31 +443,31 @@ func (c *Cacher) ReadlinkContext(ctx context.Context, name string) (string, erro
 // ============================================================================
 
 // WriteFile writes data to the named file, creating it if necessary
-func (c *Cacher) WriteFile(name string, data []byte, perm fs.FileMode) error {
-	return c.WriteFileContext(context.Background(), name, data, perm, time.Now())
+func (fsys *Cacher) WriteFile(name string, data []byte, perm fs.FileMode) error {
+	return fsys.WriteFileContext(context.Background(), name, data, perm, time.Now())
 }
 
 // WriteFileContext writes data to the named file with context
-func (c *Cacher) WriteFileContext(ctx context.Context, name string, data []byte, perm fs.FileMode, modTime time.Time) error {
-	if err := c.fs.WriteFileContext(ctx, name, data, perm, modTime); err != nil {
+func (fsys *Cacher) WriteFileContext(ctx context.Context, name string, data []byte, perm fs.FileMode, modTime time.Time) error {
+	if err := fsys.fs.WriteFileContext(ctx, name, data, perm, modTime); err != nil {
 		return err
 	}
-	return c.InvalidateNode(name, true, false)
+	return fsys.InvalidateNode(name, true, false)
 }
 
 // Create creates or truncates the named file
-func (c *Cacher) Create(name string) (fs.File, error) {
-	return c.CreateContext(context.Background(), name, nil, 0644)
+func (fsys *Cacher) Create(name string) (fs.File, error) {
+	return fsys.CreateContext(context.Background(), name, nil, 0644)
 }
 
 // CreateContext is a helper for creating files with content and mode
-func (c *Cacher) CreateContext(ctx context.Context, name string, content []byte, mode fs.FileMode) (fs.File, error) {
-	file, err := c.fs.CreateContext(ctx, name, content, mode)
+func (fsys *Cacher) CreateContext(ctx context.Context, name string, content []byte, mode fs.FileMode) (fs.File, error) {
+	file, err := fsys.fs.CreateContext(ctx, name, content, mode)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := c.InvalidateNode(name, true, false); err != nil {
+	if err := fsys.InvalidateNode(name, true, false); err != nil {
 		return nil, err
 	}
 
@@ -531,105 +475,105 @@ func (c *Cacher) CreateContext(ctx context.Context, name string, content []byte,
 }
 
 // Symlink creates a symbolic link
-func (c *Cacher) Symlink(oldname, newname string) error {
-	return c.SymlinkContext(context.Background(), oldname, newname)
+func (fsys *Cacher) Symlink(oldname, newname string) error {
+	return fsys.SymlinkContext(context.Background(), oldname, newname)
 }
 
 // SymlinkContext creates a symbolic link with context
-func (c *Cacher) SymlinkContext(ctx context.Context, oldname, newname string) error {
-	if err := c.fs.SymlinkContext(ctx, oldname, newname); err != nil {
+func (fsys *Cacher) SymlinkContext(ctx context.Context, oldname, newname string) error {
+	if err := fsys.fs.SymlinkContext(ctx, oldname, newname); err != nil {
 		return err
 	}
-	return c.InvalidateNode(newname, true, false)
+	return fsys.InvalidateNode(newname, true, false)
 }
 
 // Rename renames a file or directory
-func (c *Cacher) Rename(oldname, newname string) error {
-	return c.RenameContext(context.Background(), oldname, newname)
+func (fsys *Cacher) Rename(oldname, newname string) error {
+	return fsys.RenameContext(context.Background(), oldname, newname)
 }
 
 // RenameContext renames a file or directory with context
-func (c *Cacher) RenameContext(ctx context.Context, oldname, newname string) error {
-	if err := c.fs.RenameContext(ctx, oldname, newname); err != nil {
+func (fsys *Cacher) RenameContext(ctx context.Context, oldname, newname string) error {
+	if err := fsys.fs.RenameContext(ctx, oldname, newname); err != nil {
 		return err
 	}
 
-	if err := c.InvalidateNode(newname, true, false); err != nil {
+	if err := fsys.InvalidateNode(newname, true, false); err != nil {
 		return err
 	}
-	return c.InvalidateNode(oldname, true, true)
+	return fsys.InvalidateNode(oldname, true, true)
 }
 
 // Mkdir creates a directory
-func (c *Cacher) Mkdir(name string, perm fs.FileMode) error {
-	return c.MkdirContext(context.Background(), name, perm)
+func (fsys *Cacher) Mkdir(name string, perm fs.FileMode) error {
+	return fsys.MkdirContext(context.Background(), name, perm)
 }
 
 // MkdirContext creates a directory with context
-func (c *Cacher) MkdirContext(ctx context.Context, name string, perm fs.FileMode) error {
-	if err := c.fs.MkdirContext(ctx, name, perm); err != nil {
+func (fsys *Cacher) MkdirContext(ctx context.Context, name string, perm fs.FileMode) error {
+	if err := fsys.fs.MkdirContext(ctx, name, perm); err != nil {
 		return err
 	}
-	return c.InvalidateNode(name, true, false)
+	return fsys.InvalidateNode(name, true, false)
 }
 
 // Remove removes a file or empty directory
-func (c *Cacher) Remove(name string) error {
-	return c.RemoveContext(context.Background(), name)
+func (fsys *Cacher) Remove(name string) error {
+	return fsys.RemoveContext(context.Background(), name)
 }
 
 // RemoveContext removes a file or directory with context
-func (c *Cacher) RemoveContext(ctx context.Context, name string) error {
-	if err := c.fs.RemoveContext(ctx, name); err != nil {
+func (fsys *Cacher) RemoveContext(ctx context.Context, name string) error {
+	if err := fsys.fs.RemoveContext(ctx, name); err != nil {
 		return err
 	}
-	return c.InvalidateNode(name, true, true)
+	return fsys.InvalidateNode(name, true, true)
 }
 
 // Chmod changes the mode of the named file
-func (c *Cacher) Chmod(name string, mode fs.FileMode) error {
-	return c.ChmodContext(context.Background(), name, mode)
+func (fsys *Cacher) Chmod(name string, mode fs.FileMode) error {
+	return fsys.ChmodContext(context.Background(), name, mode)
 }
 
 // ChmodContext changes file mode with context
-func (c *Cacher) ChmodContext(ctx context.Context, name string, mode fs.FileMode) error {
-	if err := c.fs.ChmodContext(ctx, name, mode); err != nil {
+func (fsys *Cacher) ChmodContext(ctx context.Context, name string, mode fs.FileMode) error {
+	if err := fsys.fs.ChmodContext(ctx, name, mode); err != nil {
 		return err
 	}
-	return c.InvalidateNode(name, false, false)
+	return fsys.InvalidateNode(name, false, false)
 }
 
 // Chown changes the numeric uid and gid of the named file
-func (c *Cacher) Chown(name string, uid, gid int) error {
-	return c.ChownContect(context.Background(), name, uid, gid)
+func (fsys *Cacher) Chown(name string, uid, gid int) error {
+	return fsys.ChownContect(context.Background(), name, uid, gid)
 }
 
 // ChownContect changes ownership with context
-func (c *Cacher) ChownContect(ctx context.Context, name string, uid, gid int) error {
-	if err := c.fs.ChownContect(ctx, name, uid, gid); err != nil {
+func (fsys *Cacher) ChownContect(ctx context.Context, name string, uid, gid int) error {
+	if err := fsys.fs.ChownContect(ctx, name, uid, gid); err != nil {
 		return err
 	}
-	return c.InvalidateNode(name, false, false)
+	return fsys.InvalidateNode(name, false, false)
 }
 
 // Chtimes changes the access and modification times of the named file
-func (c *Cacher) Chtimes(name string, atime time.Time, mtime time.Time) error {
-	return c.ChtimesContext(context.Background(), name, atime, mtime)
+func (fsys *Cacher) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	return fsys.ChtimesContext(context.Background(), name, atime, mtime)
 }
 
 // ChtimesContext changes times with context
-func (c *Cacher) ChtimesContext(ctx context.Context, name string, atime time.Time, mtime time.Time) error {
-	if err := c.fs.ChtimesContext(ctx, name, atime, mtime); err != nil {
+func (fsys *Cacher) ChtimesContext(ctx context.Context, name string, atime time.Time, mtime time.Time) error {
+	if err := fsys.fs.ChtimesContext(ctx, name, atime, mtime); err != nil {
 		return err
 	}
-	return c.InvalidateNode(name, false, false)
+	return fsys.InvalidateNode(name, false, false)
 }
 
 // ApplyPatch applies a tar patch to the filesystem
-func (c *Cacher) ApplyPatch(name string, tarBuf bytes.Buffer) error {
-	if err := c.fs.ApplyPatch(name, tarBuf); err != nil {
+func (fsys *Cacher) Patch(ctx context.Context, name string, tarBuf bytes.Buffer) error {
+	if err := fsys.fs.Patch(ctx, name, tarBuf); err != nil {
 		return err
 	}
-	c.InvalidateAll(name)
+	fsys.InvalidateAll(name)
 	return nil
 }

@@ -13,8 +13,8 @@ import (
 	"tractor.dev/wanix/fs"
 )
 
-func (fsys *FS) ApplyPatch(name string, tarBuf bytes.Buffer) error {
-	fsys.log.Debug("ApplyPatch", "name", name)
+func (fsys *FS) Patch(ctx context.Context, name string, tarBuf bytes.Buffer) error {
+	fsys.log.Debug("Patch", "name", name)
 	url := fsys.buildURL(name)
 	req, err := http.NewRequestWithContext(context.Background(), "PATCH", url, &tarBuf)
 	if err != nil {

@@ -2,6 +2,7 @@ package httpfs
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"iter"
@@ -28,13 +29,14 @@ type wrappedFS interface {
 	unwrap() *FS
 }
 
-type ApplyPatchFS interface {
-	ApplyPatch(name string, tarBuf bytes.Buffer) error
+type PatchFS interface {
+	fs.FS
+	Patch(ctx context.Context, name string, tarBuf bytes.Buffer) error
 }
 
-func ApplyPatch(fsys fs.FS, name string, tarBuf bytes.Buffer) error {
-	if fsys, ok := fsys.(ApplyPatchFS); ok {
-		return fsys.ApplyPatch(name, tarBuf)
+func Patch(ctx context.Context, fsys fs.FS, name string, tarBuf bytes.Buffer) error {
+	if fsys, ok := fsys.(PatchFS); ok {
+		return fsys.Patch(ctx, name, tarBuf)
 	}
 	return fs.ErrNotSupported
 }

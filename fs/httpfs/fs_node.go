@@ -96,6 +96,11 @@ func ParseNode(fsys wrappedFS, path string, headers http.Header, content []byte)
 	}, nil
 }
 
+func (n *Node) ToNode() *fskit.Node {
+	var info fs.FileInfo = n
+	return fskit.RawNode(info)
+}
+
 // fs.FileInfo interface implementation
 func (n *Node) Name() string       { return filepath.Base(n.Path()) }
 func (n *Node) Size() int64        { return n.size }
