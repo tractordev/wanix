@@ -1,8 +1,11 @@
 package syncfs
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
-	"fmt"
+	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -14,39 +17,19 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 )
 
-type OpType string
+type IndexFS interface {
+	fs.FS
+	Index(ctx context.Context, name string) (fs.FS, error)
+}
 
-const (
-	OpWrite       OpType = "write"
-	OpCreate      OpType = "create"
-	OpRename      OpType = "rename"
-	OpMkdir       OpType = "mkdir"
-	OpRemove      OpType = "remove"
-	OpChmod       OpType = "chmod"
-	OpChown       OpType = "chown"
-	OpChtimes     OpType = "chtimes"
-	OpSymlink     OpType = "symlink"
-	OpBatchRemove OpType = "remove:batch"
-)
+type PatchFS interface {
+	fs.FS
+	Patch(ctx context.Context, name string, tarBuf bytes.Buffer) error
+}
 
-// WriteOp represents a write operation to be processed by the write worker
-type WriteOp struct {
-	Type      OpType      // "create", "write", "mkdir", "remove", "rename", "chmod", "chown", "chtimes", "symlink"
-	Path      string      // Target path
-	Data      []byte      // Data for write operations
-	Mode      fs.FileMode // File mode for creates and chmod
-	Oldpath   string      // For rename operations (also used as target for symlink)
-	Uid       int         // For chown operations
-	Gid       int         // For chown operations
-	Atime     time.Time   // For chtimes operations
-	Mtime     time.Time   // For chtimes operations
-	Batch     []WriteOp   // For batch operations
-	Done      chan error  // Completion notification
-	Err       error       // Error returned by operation
-	QueuedAt  time.Time
-	OpTime    time.Duration
-	TotalTime time.Duration
-	OnFinish  func(op *WriteOp)
+type RemoteFS interface {
+	IndexFS
+	PatchFS
 }
 
 // call recursive watch on remote
@@ -65,139 +48,289 @@ type WriteOp struct {
 // All read operations go to the local filesystem first, with smart caching of remote entries.
 // Write operations are applied locally immediately and queued for remote processing.
 type SyncFS struct {
-	local  fs.FS // Local filesystem (fast access)
-	remote fs.FS // Remote filesystem (slower, authoritative)
+	local  fs.FS    // Local filesystem (fast access)
+	remote RemoteFS // Remote filesystem (slower, authoritative)
 
-	remoteQueue chan WriteOp // Buffered channel for write operations
-	writeLocks  sync.Map     // Path -> sync.WaitGroup
+	writeLock *sync.WaitGroup
+	changes   map[string]bool
+	debounce  *time.Timer
+	mu        sync.Mutex
 
 	log *slog.Logger
 }
 
 // New creates a new SyncFS with the given local and remote filesystems
-func New(local fs.FS, remote fs.WatchFS) *SyncFS {
+func New(local fs.FS, remote RemoteFS) *SyncFS {
 	sfs := &SyncFS{
-		local:       local,
-		remote:      remote,
-		remoteQueue: make(chan WriteOp, 1024), // Buffered channel
-		log:         slog.Default(),           // for now
+		local:  local,
+		remote: remote,
+		log:    slog.Default(), // for now
 	}
-	go sfs.writeWorker()
 	// go sfs.syncWorker()
 	return sfs
 }
 
-func (sfs *SyncFS) syncWorker() {
-	ctx := context.Background()
-	events, err := fs.Watch(sfs.remote, ctx, "...")
-	if err != nil {
-		sfs.log.Error("Watch", "err", err)
-		return
-	}
-	var (
-		debounceTimer *time.Timer
-		debounceMu    sync.Mutex
-	)
-	debounceSync := func() {
-		debounceMu.Lock()
-		defer debounceMu.Unlock()
-		if debounceTimer != nil {
-			debounceTimer.Stop()
-		}
-		debounceTimer = time.AfterFunc(500*time.Millisecond, func() {
-			sfs.sync()
-		})
-	}
-	debounceSync() // initial sync
-	for event := range events {
-		sfs.log.Debug("Watch", "event", event)
-		debounceSync()
-	}
-}
+func (sfs *SyncFS) Sync() error {
+	sfs.log.Debug("Sync:start")
+	startTime := time.Now()
+	sfs.writeLock = &sync.WaitGroup{}
+	sfs.writeLock.Add(1)
+	defer func() {
+		sfs.writeLock.Done()
+		sfs.writeLock = nil
+		sfs.log.Debug("Sync:finish", "dur", time.Since(startTime))
+	}()
 
-func (sfs *SyncFS) sync() {
-	sfs.log.Debug("Sync")
-	sfs.acquireLock(".")
-	err := fs.WalkDir(sfs.remote, ".", func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if path == "." {
-			return nil
-		}
-		if entry.IsDir() {
-			info, err := entry.Info()
+	rindex, err := sfs.remote.Index(context.Background(), ".")
+	if err != nil {
+		return err
+	}
+
+	var scanStep sync.WaitGroup
+	var pullDirs []string
+	var pullFiles []string
+
+	pullScan := make(chan error, 1)
+	scanStep.Add(1)
+	go func() {
+		defer scanStep.Done()
+		pullScan <- fs.WalkDir(rindex, ".", func(path string, entry fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if err := fs.MkdirAll(sfs.local, path, info.Mode().Perm()); err != nil {
+			if path == "." {
+				return nil
+			}
+			sfs.mu.Lock()
+			exists, ok := sfs.changes[path]
+			sfs.mu.Unlock()
+			if ok && !exists {
+				// tombstoned
+				return nil
+			}
+			rinfo, err := entry.Info()
+			if err != nil {
 				return err
 			}
-		}
-		return nil
-	})
-	if err != nil {
-		sfs.releaseLock(".")
-		sfs.log.Error("Sync:Walk", "err", err)
-		return
-	}
-	sfs.releaseLock(".")
-	sfs.syncDir(".", true)
-}
-
-func (sfs *SyncFS) syncDir(path string, recursive bool) {
-	sfs.acquireLock(path)
-	entries, err := fs.ReadDir(sfs.remote, path)
-	if err != nil {
-		sfs.releaseLock(path)
-		sfs.log.Error("ReadDir:remote", "err", err, "path", path)
-		return
-	}
-	var dirs []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			dirs = append(dirs, filepath.Join(path, entry.Name()))
-		} else {
-			go func() {
-				if err := sfs.copyFileIfNewer(filepath.Join(path, entry.Name())); err != nil {
-					sfs.log.Error("copyFileIfNewer", "err", err, "path", filepath.Join(path, entry.Name()))
+			linfo, err := fs.Stat(sfs.local, path)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if os.IsNotExist(err) || linfo.ModTime().Unix() < rinfo.ModTime().Unix() {
+				if rinfo.ModTime().Unix()-linfo.ModTime().Unix() < 2 {
+					return nil
 				}
-			}()
-		}
+				if rinfo.IsDir() {
+					pullDirs = append(pullDirs, path)
+				} else {
+					pullFiles = append(pullFiles, path)
+				}
+			}
+			return nil
+		})
+	}()
+
+	pushScan := make(chan error, 1)
+	if sfs.changes == nil {
+		sfs.changes = make(map[string]bool)
+		scanStep.Add(1)
+		go func() {
+			defer scanStep.Done()
+			pushScan <- fs.WalkDir(sfs.local, ".", func(path string, entry fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if path == "." {
+					return nil
+				}
+				linfo, err := entry.Info()
+				if err != nil {
+					return err
+				}
+				rinfo, err := fs.Stat(rindex, path)
+				if err != nil && !errors.Is(err, fs.ErrNotExist) {
+					return err
+				}
+				if errors.Is(err, fs.ErrNotExist) || rinfo.ModTime().Unix() < linfo.ModTime().Unix() {
+					sfs.changes[path] = true
+				}
+				return nil
+			})
+		}()
+	} else {
+		pushScan <- nil
 	}
-	entries, err = fs.ReadDir(sfs.local, path)
-	if err != nil {
-		sfs.releaseLock(path)
-		sfs.log.Error("ReadDir:local", "err", err, "path", path)
-		return
+
+	scanStep.Wait()
+	if err := <-pullScan; err != nil {
+		return err
 	}
-	for _, entry := range entries {
-		exists, err := fs.Exists(sfs.remote, filepath.Join(path, entry.Name()))
-		if err != nil {
-			sfs.releaseLock(path)
-			sfs.log.Error("Exists", "err", err, "path", filepath.Join(path, entry.Name()))
-			return
-		}
-		if !exists {
-			sfs.log.Debug("Removing local file", "path", filepath.Join(path, entry.Name()))
-			if err := fs.Remove(sfs.local, filepath.Join(path, entry.Name())); err != nil {
-				sfs.releaseLock(path)
-				sfs.log.Error("Remove", "err", err, "path", filepath.Join(path, entry.Name()))
+	if err := <-pushScan; err != nil {
+		return err
+	}
+
+	sfs.log.Debug("Sync:remote-diff", "dirs", len(pullDirs), "files", len(pullFiles))
+	sfs.log.Debug("Sync:local-diff", "changes", len(sfs.changes))
+
+	var syncStep sync.WaitGroup
+
+	pushSync := make(chan error, 1)
+	if len(sfs.changes) > 0 {
+		syncStep.Add(1)
+		go func() {
+			defer syncStep.Done()
+			var tarBuf bytes.Buffer
+			tw := tar.NewWriter(&tarBuf)
+			for path, exists := range sfs.changes {
+				if !exists {
+					header := &tar.Header{
+						Name: path,
+						Mode: 0,
+						Size: 0,
+					}
+					header.PAXRecords = make(map[string]string)
+					header.PAXRecords["delete"] = ""
+					if err := tw.WriteHeader(header); err != nil {
+						pushSync <- err
+						return
+					}
+					continue
+				}
+
+				info, err := fs.Stat(sfs.local, path)
+				if err != nil {
+					pushSync <- err
+					return
+				}
+
+				header, err := tar.FileInfoHeader(info, "")
+				if err != nil {
+					pushSync <- err
+					return
+				}
+				header.Name = path
+
+				// Handle symlinks
+				if info.Mode()&fs.ModeSymlink != 0 {
+					link, err := fs.Readlink(sfs.local, path)
+					if err != nil {
+						pushSync <- err
+						return
+					}
+					header.Linkname = link
+				}
+
+				if err := tw.WriteHeader(header); err != nil {
+					pushSync <- err
+					return
+				}
+
+				if !info.Mode().IsRegular() {
+					continue
+				}
+
+				f, err := sfs.local.Open(path)
+				if err != nil {
+					pushSync <- err
+					return
+				}
+				defer f.Close()
+
+				_, err = io.Copy(tw, f)
+				if err != nil {
+					pushSync <- err
+					return
+				}
+			}
+			tw.Close()
+			if err := sfs.remote.Patch(context.Background(), ".", tarBuf); err != nil {
+				pushSync <- err
+				return
+			}
+			sfs.mu.Lock()
+			sfs.changes = make(map[string]bool)
+			sfs.mu.Unlock()
+			pushSync <- nil
+		}()
+	} else {
+		pushSync <- nil
+	}
+
+	workers := 32
+	pullSync := make(chan error, workers)
+	syncStep.Add(1)
+	go func() {
+		defer syncStep.Done()
+		for _, path := range pullDirs {
+			info, err := fs.Stat(rindex, path)
+			if err != nil {
+				pullSync <- err
+				return
+			}
+			if err := fs.MkdirAll(sfs.local, path, info.Mode().Perm()); err != nil {
+				pullSync <- err
 				return
 			}
 		}
-	}
-	sfs.releaseLock(path)
-
-	if recursive {
-		for _, dir := range dirs {
-			sfs.syncDir(dir, recursive)
+		worker := func(paths chan string, wg *sync.WaitGroup) {
+			defer wg.Done()
+			for path := range paths {
+				if err := fs.CopyFS(sfs.remote, path, sfs.local, path); err != nil {
+					sfs.log.Error("CopyFS", "err", err, "path", path)
+					pullSync <- err
+					return
+				}
+				info, err := fs.Stat(rindex, path)
+				if err != nil {
+					pullSync <- err
+					return
+				}
+				if err := fs.Chtimes(sfs.local, path, info.ModTime(), info.ModTime()); err != nil {
+					pullSync <- err
+					return
+				}
+			}
 		}
+		paths := make(chan string)
+		var wg sync.WaitGroup
+		for i := 1; i <= workers; i++ {
+			wg.Add(1)
+			go worker(paths, &wg)
+		}
+		go func() {
+			for _, path := range pullFiles {
+				paths <- path
+			}
+			close(paths)
+		}()
+		wg.Wait()
+		for _, path := range pullDirs {
+			info, err := fs.Stat(rindex, path)
+			if err != nil {
+				pullSync <- err
+				return
+			}
+			if err := fs.Chtimes(sfs.local, path, info.ModTime(), info.ModTime()); err != nil {
+				pullSync <- err
+				return
+			}
+		}
+		pullSync <- nil
+	}()
+
+	syncStep.Wait()
+
+	if err := <-pullSync; err != nil {
+		return err
+	}
+	if err := <-pushSync; err != nil {
+		return err
 	}
 
+	return nil
 }
 
-func (sfs *SyncFS) cleanPath(path string) string {
+func (sfs *SyncFS) clean(path string) string {
 	cleanPath := strings.TrimPrefix(filepath.Clean(path), "/")
 	if cleanPath == "" {
 		cleanPath = "."
@@ -205,117 +338,39 @@ func (sfs *SyncFS) cleanPath(path string) string {
 	return cleanPath
 }
 
-func (sfs *SyncFS) wait(name string) {
-	wg, ok := sfs.writeLocks.Load(name)
-	if !ok {
+func (sfs *SyncFS) wait() {
+	sfs.mu.Lock()
+	lock := sfs.writeLock
+	sfs.mu.Unlock()
+	if lock == nil {
 		return
 	}
-	wg.(*sync.WaitGroup).Wait()
+	lock.Wait()
 }
 
-func (sfs *SyncFS) writeWait(name string, dir bool) {
-	sfs.wait(".")
-	if dir {
-		sfs.wait(filepath.Dir(name))
-	}
-	sfs.wait(name)
-}
-
-func (sfs *SyncFS) acquireLock(name string) {
-	sfs.wait(name)
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	sfs.writeLocks.Store(name, wg)
-}
-
-func (sfs *SyncFS) releaseLock(name string) {
-	wg, ok := sfs.writeLocks.LoadAndDelete(name)
-	if !ok {
+func (sfs *SyncFS) changed(name string, exists bool) {
+	sfs.mu.Lock()
+	defer sfs.mu.Unlock()
+	didExist, ok := sfs.changes[name]
+	if ok && didExist && !exists {
+		delete(sfs.changes, name)
 		return
 	}
-	wg.(*sync.WaitGroup).Done()
-}
-
-// writeWorker processes write operations in order
-func (sfs *SyncFS) writeWorker() {
-	for op := range sfs.remoteQueue {
-		err := sfs.performWrite(op)
-		if err != nil {
-			sfs.log.Error("writeWorker", "err", err, "op", op.Type, "path", op.Path)
-		}
+	sfs.changes[name] = exists
+	if sfs.debounce != nil {
+		sfs.debounce.Stop()
 	}
-}
-
-// performWrite executes a single write operation on the remote filesystem
-func (sfs *SyncFS) performWrite(op WriteOp) error {
-	sfs.log.Debug("WriteOp:start", "op", op.Type, "path", op.Path)
-	startTime := time.Now()
-	defer func() {
-		sfs.log.Debug("WriteOp:end", "op", op.Type, "path", op.Path, "dur", time.Since(startTime))
-	}()
-	switch op.Type {
-	case "create":
-		f, err := fs.Create(sfs.remote, op.Path)
-		if err != nil {
-			return err
-		}
-		return f.Close()
-	case "write":
-		return fs.WriteFile(sfs.remote, op.Path, op.Data, op.Mode)
-	case "mkdir":
-		return fs.Mkdir(sfs.remote, op.Path, op.Mode)
-	case "remove":
-		return fs.Remove(sfs.remote, op.Path)
-	case "rename":
-		return fs.Rename(sfs.remote, op.Oldpath, op.Path)
-	case "chmod":
-		return fs.Chmod(sfs.remote, op.Path, op.Mode)
-	case "chown":
-		return fs.Chown(sfs.remote, op.Path, op.Uid, op.Gid)
-	case "chtimes":
-		return fs.Chtimes(sfs.remote, op.Path, op.Atime, op.Mtime)
-	case "symlink":
-		return fs.Symlink(sfs.remote, op.Oldpath, op.Path)
-	default:
-		return fmt.Errorf("unknown write operation: %s", op.Type)
-	}
-}
-
-// queueWrite queues a write operation and optionally waits for completion
-func (sfs *SyncFS) queueWrite(op WriteOp) error {
-	// sfs.log.Debug("WriteOp:queued", "op", op.Type, "path", op.Path)
-	op.QueuedAt = time.Now()
-	sfs.remoteQueue <- op
-	return nil
-}
-
-// copyFileIfNewer copies a file from remote to local if it's newer or doesn't exist
-func (sfs *SyncFS) copyFileIfNewer(path string) error {
-	// Check if local file exists and get its info
-	localInfo, localErr := fs.Stat(sfs.local, path)
-
-	// Get remote file info
-	remoteInfo, remoteErr := fs.Stat(sfs.remote, path)
-	if remoteErr != nil {
-		return remoteErr
-	}
-
-	// Copy if local doesn't exist or remote is newer
-	if localErr != nil || remoteInfo.ModTime().After(localInfo.ModTime()) {
-		sfs.log.Debug("CopyFile", "path", path)
-		return fs.CopyFS(sfs.remote, path, sfs.local, path)
-	}
-
-	return nil
+	sfs.debounce = time.AfterFunc(3*time.Second, func() {
+		sfs.Sync()
+	})
 }
 
 // Close shuts down the SyncFS and waits for all operations to complete
 func (sfs *SyncFS) Close() error {
-	sfs.writeLocks.Range(func(key, value interface{}) bool {
-		value.(*sync.WaitGroup).Wait()
-		return true
-	})
-	close(sfs.remoteQueue)
+	// sfs.writeLocks.Range(func(key, value interface{}) bool {
+	// 	value.(*sync.WaitGroup).Wait()
+	// 	return true
+	// })
 	return nil
 }
 
@@ -332,7 +387,7 @@ func (sfs *SyncFS) Open(name string) (fs.File, error) {
 // todo: if local not found, and dircache is expired, do a sync pull/readdir
 // THEN if not in dircache, return error. if in dircache, wait for local.
 func (sfs *SyncFS) OpenContext(ctx context.Context, name string) (f fs.File, err error) {
-	name = sfs.cleanPath(name)
+	name = sfs.clean(name)
 	defer func() {
 		sfs.log.Debug("Open", "name", name, "err", err)
 	}()
@@ -347,9 +402,9 @@ func (sfs *SyncFS) Stat(name string) (fs.FileInfo, error) {
 
 // StatContext returns file info with context
 func (sfs *SyncFS) StatContext(ctx context.Context, name string) (info fs.FileInfo, err error) {
-	name = sfs.cleanPath(name)
+	name = sfs.clean(name)
 	defer func() {
-		sfs.log.Debug("Stat", "name", name, "err", err, "notexists", os.IsNotExist(err))
+		sfs.log.Debug("Stat", "name", name, "err", err)
 	}()
 	info, err = fs.StatContext(ctx, sfs.local, name)
 	return
@@ -357,7 +412,7 @@ func (sfs *SyncFS) StatContext(ctx context.Context, name string) (info fs.FileIn
 
 // ReadDir reads directory entries, with smart caching
 func (sfs *SyncFS) ReadDir(name string) (entries []fs.DirEntry, err error) {
-	name = sfs.cleanPath(name)
+	name = sfs.clean(name)
 	defer func() {
 		sfs.log.Debug("ReadDir", "name", name, "entries", len(entries), "err", err)
 	}()
@@ -369,8 +424,9 @@ func (sfs *SyncFS) ReadDir(name string) (entries []fs.DirEntry, err error) {
 
 // Create creates a new file
 func (sfs *SyncFS) Create(name string) (fs.File, error) {
-	name = sfs.cleanPath(name)
-	sfs.writeWait(name, true)
+	name = sfs.clean(name)
+	sfs.wait()
+	defer sfs.changed(name, true)
 	sfs.log.Debug("Create", "name", name)
 
 	f, err := fs.Create(sfs.local, name)
@@ -378,19 +434,14 @@ func (sfs *SyncFS) Create(name string) (fs.File, error) {
 		return nil, err
 	}
 
-	sfs.queueWrite(WriteOp{
-		Type: "create",
-		Path: name,
-	})
-
 	return sfs.newSyncFile(f, name)
 }
 
 // OpenFile opens a file with flags
 // TODO: move opencontext here and forward?
 func (sfs *SyncFS) OpenFile(name string, flag int, perm fs.FileMode) (f fs.File, err error) {
-	name = sfs.cleanPath(name)
-	sfs.writeWait(name, true)
+	name = sfs.clean(name)
+	sfs.wait()
 	defer func() {
 		sfs.log.Debug("OpenFile", "name", name, "flag", flag, "perm", perm, "err", err)
 	}()
@@ -402,11 +453,7 @@ func (sfs *SyncFS) OpenFile(name string, flag int, perm fs.FileMode) (f fs.File,
 
 	if flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC) != 0 {
 		if flag&os.O_CREATE != 0 {
-			sfs.queueWrite(WriteOp{
-				Type: "create",
-				Path: name,
-				Mode: perm,
-			})
+			defer sfs.changed(name, true)
 		}
 	}
 
@@ -415,8 +462,9 @@ func (sfs *SyncFS) OpenFile(name string, flag int, perm fs.FileMode) (f fs.File,
 
 // Mkdir creates a directory
 func (sfs *SyncFS) Mkdir(name string, perm fs.FileMode) error {
-	name = sfs.cleanPath(name)
-	sfs.writeWait(name, true)
+	name = sfs.clean(name)
+	sfs.wait()
+	defer sfs.changed(name, true)
 	sfs.log.Debug("Mkdir", "name", name, "perm", perm)
 
 	err := fs.Mkdir(sfs.local, name, perm)
@@ -424,18 +472,13 @@ func (sfs *SyncFS) Mkdir(name string, perm fs.FileMode) error {
 		return err
 	}
 
-	sfs.queueWrite(WriteOp{
-		Type: "mkdir",
-		Path: name,
-		Mode: perm,
-	})
-
 	return nil
 }
 
 func (sfs *SyncFS) Remove(name string) error {
-	name = sfs.cleanPath(name)
-	sfs.writeWait(name, true)
+	name = sfs.clean(name)
+	sfs.wait()
+	defer sfs.changed(name, false)
 	sfs.log.Debug("Remove", "name", name)
 
 	err := fs.Remove(sfs.local, name)
@@ -443,18 +486,15 @@ func (sfs *SyncFS) Remove(name string) error {
 		return err
 	}
 
-	sfs.queueWrite(WriteOp{
-		Type: "remove",
-		Path: name,
-	})
-
 	return nil
 }
 
 func (sfs *SyncFS) Rename(oldname, newname string) error {
-	newname = sfs.cleanPath(newname)
-	oldname = sfs.cleanPath(oldname)
-	sfs.writeWait(newname, true)
+	newname = sfs.clean(newname)
+	oldname = sfs.clean(oldname)
+	sfs.wait()
+	defer sfs.changed(newname, true)
+	defer sfs.changed(oldname, false)
 	sfs.log.Debug("Rename", "oldname", oldname, "newname", newname)
 
 	err := fs.Rename(sfs.local, oldname, newname)
@@ -462,18 +502,13 @@ func (sfs *SyncFS) Rename(oldname, newname string) error {
 		return err
 	}
 
-	sfs.queueWrite(WriteOp{
-		Type:    "rename",
-		Oldpath: oldname,
-		Path:    newname,
-	})
-
 	return nil
 }
 
 func (sfs *SyncFS) Chmod(name string, mode fs.FileMode) error {
-	name = sfs.cleanPath(name)
-	sfs.writeWait(name, false)
+	name = sfs.clean(name)
+	sfs.wait()
+	defer sfs.changed(name, true)
 	sfs.log.Debug("Chmod", "name", name, "mode", mode)
 
 	err := fs.Chmod(sfs.local, name, mode)
@@ -481,18 +516,13 @@ func (sfs *SyncFS) Chmod(name string, mode fs.FileMode) error {
 		return err
 	}
 
-	sfs.queueWrite(WriteOp{
-		Type: "chmod",
-		Path: name,
-		Mode: mode,
-	})
-
 	return nil
 }
 
 func (sfs *SyncFS) Chown(name string, uid, gid int) error {
-	name = sfs.cleanPath(name)
-	sfs.writeWait(name, false)
+	name = sfs.clean(name)
+	sfs.wait()
+	defer sfs.changed(name, true)
 	sfs.log.Debug("Chown", "name", name, "uid", uid, "gid", gid)
 
 	err := fs.Chown(sfs.local, name, uid, gid)
@@ -500,32 +530,19 @@ func (sfs *SyncFS) Chown(name string, uid, gid int) error {
 		return err
 	}
 
-	sfs.queueWrite(WriteOp{
-		Type: "chown",
-		Path: name,
-		Uid:  uid,
-		Gid:  gid,
-	})
-
 	return nil
 }
 
 func (sfs *SyncFS) Chtimes(name string, atime, mtime time.Time) error {
-	name = sfs.cleanPath(name)
-	sfs.writeWait(name, false)
+	name = sfs.clean(name)
+	sfs.wait()
+	defer sfs.changed(name, true)
 	sfs.log.Debug("Chtimes", "name", name, "atime", atime, "mtime", mtime)
 
 	err := fs.Chtimes(sfs.local, name, atime, mtime)
 	if err != nil {
 		return err
 	}
-
-	sfs.queueWrite(WriteOp{
-		Type:  "chtimes",
-		Path:  name,
-		Atime: atime,
-		Mtime: mtime,
-	})
 
 	return nil
 }
@@ -553,7 +570,7 @@ func (sfs *SyncFS) newSyncFile(f fs.File, path string) (*syncFile, error) {
 	return &syncFile{
 		File:     f,
 		sfs:      sfs,
-		path:     sfs.cleanPath(path),
+		path:     sfs.clean(path),
 		modified: false,
 		isDir:    info.IsDir(),
 	}, nil
@@ -593,6 +610,15 @@ func (sf *syncFile) WriteAt(p []byte, off int64) (int, error) {
 	return 0, fs.ErrPermission
 }
 
+func (sf *syncFile) Seek(offset int64, whence int) (int64, error) {
+	if s, ok := sf.File.(interface {
+		Seek(int64, int) (int64, error)
+	}); ok {
+		return s.Seek(offset, whence)
+	}
+	return 0, fs.ErrPermission
+}
+
 // ReadDir implements fs.ReadDirFile using SyncFS ReadDir with proper cursor management
 func (sf *syncFile) ReadDir(n int) (entries []fs.DirEntry, err error) {
 	defer func() {
@@ -616,33 +642,7 @@ func (sf *syncFile) Close() error {
 
 	// If file was modified, sync to remote
 	if sf.modified && !sf.isDir {
-		// Read the entire file content to sync
-		data, readErr := fs.ReadFile(sf.sfs.local, sf.path)
-		if readErr != nil {
-			return readErr
-		}
-		// Get file info for mode
-		info, statErr := fs.Stat(sf.sfs.local, sf.path)
-		if statErr != nil {
-			return statErr
-		}
-
-		// Queue write operation for remote
-		sf.sfs.queueWrite(WriteOp{
-			Type: "write",
-			Path: sf.path,
-			Data: data,
-			Mode: info.Mode(),
-		})
-
-		// Queue chtimes operation to set accurate modification time
-		// Use the write time we captured, not the current time
-		sf.sfs.queueWrite(WriteOp{
-			Type:  "chtimes",
-			Path:  sf.path,
-			Atime: sf.writeTime, // Use write time for both atime and mtime
-			Mtime: sf.writeTime,
-		})
+		sf.sfs.changed(sf.path, true)
 	}
 	return err
 }
@@ -659,21 +659,16 @@ func (sfs *SyncFS) Readlink(name string) (string, error) {
 
 // Symlink creates a symbolic link
 func (sfs *SyncFS) Symlink(oldname, newname string) error {
-	newname = sfs.cleanPath(newname)
-	oldname = sfs.cleanPath(oldname)
-	sfs.writeWait(newname, true)
+	newname = sfs.clean(newname)
+	oldname = sfs.clean(oldname)
+	sfs.wait()
+	defer sfs.changed(newname, true)
 	sfs.log.Debug("Symlink", "oldname", oldname, "newname", newname)
 
 	err := fs.Symlink(sfs.local, oldname, newname)
 	if err != nil {
 		return err
 	}
-
-	sfs.queueWrite(WriteOp{
-		Type:    "symlink",
-		Oldpath: oldname, // symlink target
-		Path:    newname, // symlink path
-	})
 
 	return nil
 }
