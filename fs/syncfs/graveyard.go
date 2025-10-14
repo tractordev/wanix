@@ -10,6 +10,41 @@ import (
 	"tractor.dev/wanix/fs"
 )
 
+type OpType string
+
+const (
+	OpWrite       OpType = "write"
+	OpCreate      OpType = "create"
+	OpRename      OpType = "rename"
+	OpMkdir       OpType = "mkdir"
+	OpRemove      OpType = "remove"
+	OpChmod       OpType = "chmod"
+	OpChown       OpType = "chown"
+	OpChtimes     OpType = "chtimes"
+	OpSymlink     OpType = "symlink"
+	OpBatchRemove OpType = "remove:batch"
+)
+
+// WriteOp represents a write operation to be processed by the write worker
+type WriteOp struct {
+	Type      OpType      // "create", "write", "mkdir", "remove", "rename", "chmod", "chown", "chtimes", "symlink"
+	Path      string      // Target path
+	Data      []byte      // Data for write operations
+	Mode      fs.FileMode // File mode for creates and chmod
+	Oldpath   string      // For rename operations (also used as target for symlink)
+	Uid       int         // For chown operations
+	Gid       int         // For chown operations
+	Atime     time.Time   // For chtimes operations
+	Mtime     time.Time   // For chtimes operations
+	Batch     []WriteOp   // For batch operations
+	Done      chan error  // Completion notification
+	Err       error       // Error returned by operation
+	QueuedAt  time.Time
+	OpTime    time.Duration
+	TotalTime time.Duration
+	OnFinish  func(op *WriteOp)
+}
+
 // CachedDir represents cached information about a remote directory
 type CachedDir struct {
 	entries   []fs.DirEntry // Cached directory entries
@@ -311,4 +346,109 @@ func (sfs *SyncFS) pendingWritesIncr(dirpath string, n int) bool {
 		sfs.log.Error("!! NO CACHE FOR PENDING", "path", dirpath, "n", n)
 	}
 	return true
+}
+
+// writeWorker processes write operations in order
+func (sfs *SyncFS) writeWorker() {
+	for op := range sfs.remoteQueue {
+		err := sfs.performWrite(op)
+		if err != nil {
+			sfs.log.Error("writeWorker", "err", err, "op", op.Type, "path", op.Path)
+		}
+	}
+}
+
+// performWrite executes a single write operation on the remote filesystem
+func (sfs *SyncFS) performWrite(op WriteOp) error {
+	sfs.log.Debug("WriteOp:start", "op", op.Type, "path", op.Path)
+	startTime := time.Now()
+	defer func() {
+		sfs.log.Debug("WriteOp:end", "op", op.Type, "path", op.Path, "dur", time.Since(startTime))
+	}()
+	switch op.Type {
+	case "create":
+		f, err := fs.Create(sfs.remote, op.Path)
+		if err != nil {
+			return err
+		}
+		return f.Close()
+	case "write":
+		return fs.WriteFile(sfs.remote, op.Path, op.Data, op.Mode)
+	case "mkdir":
+		return fs.Mkdir(sfs.remote, op.Path, op.Mode)
+	case "remove":
+		return fs.Remove(sfs.remote, op.Path)
+	case "rename":
+		return fs.Rename(sfs.remote, op.Oldpath, op.Path)
+	case "chmod":
+		return fs.Chmod(sfs.remote, op.Path, op.Mode)
+	case "chown":
+		return fs.Chown(sfs.remote, op.Path, op.Uid, op.Gid)
+	case "chtimes":
+		return fs.Chtimes(sfs.remote, op.Path, op.Atime, op.Mtime)
+	case "symlink":
+		return fs.Symlink(sfs.remote, op.Oldpath, op.Path)
+	default:
+		return fmt.Errorf("unknown write operation: %s", op.Type)
+	}
+}
+
+// queueWrite queues a write operation and optionally waits for completion
+func (sfs *SyncFS) queueWrite(op WriteOp) error {
+	// sfs.log.Debug("WriteOp:queued", "op", op.Type, "path", op.Path)
+	op.QueuedAt = time.Now()
+	sfs.remoteQueue <- op
+	return nil
+}
+
+func (sfs *SyncFS) syncDir(path string, recursive bool) {
+	sfs.acquireLock(path)
+	entries, err := fs.ReadDir(sfs.remote, path)
+	if err != nil {
+		sfs.releaseLock(path)
+		sfs.log.Error("ReadDir:remote", "err", err, "path", path)
+		return
+	}
+	var dirs []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			dirs = append(dirs, filepath.Join(path, entry.Name()))
+		} else {
+			go func() {
+				if err := sfs.copyFileIfNewer(filepath.Join(path, entry.Name())); err != nil {
+					sfs.log.Error("copyFileIfNewer", "err", err, "path", filepath.Join(path, entry.Name()))
+				}
+			}()
+		}
+	}
+	entries, err = fs.ReadDir(sfs.local, path)
+	if err != nil {
+		sfs.releaseLock(path)
+		sfs.log.Error("ReadDir:local", "err", err, "path", path)
+		return
+	}
+	for _, entry := range entries {
+		exists, err := fs.Exists(sfs.remote, filepath.Join(path, entry.Name()))
+		if err != nil {
+			sfs.releaseLock(path)
+			sfs.log.Error("Exists", "err", err, "path", filepath.Join(path, entry.Name()))
+			return
+		}
+		if !exists {
+			sfs.log.Debug("Removing local file", "path", filepath.Join(path, entry.Name()))
+			if err := fs.Remove(sfs.local, filepath.Join(path, entry.Name())); err != nil {
+				sfs.releaseLock(path)
+				sfs.log.Error("Remove", "err", err, "path", filepath.Join(path, entry.Name()))
+				return
+			}
+		}
+	}
+	sfs.releaseLock(path)
+
+	if recursive {
+		for _, dir := range dirs {
+			sfs.syncDir(dir, recursive)
+		}
+	}
+
 }
