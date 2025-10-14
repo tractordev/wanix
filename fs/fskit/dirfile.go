@@ -16,11 +16,13 @@ type dirFile struct {
 }
 
 func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
-	if !info.IsDir() {
-		info.mode |= fs.ModeDir
+	// Create a copy of the node to avoid modifying the original
+	nodeCopy := *info
+	if !nodeCopy.IsDir() {
+		nodeCopy.mode |= fs.ModeDir
 	}
-	if info.size == 0 {
-		info.size = int64(2 + len(entries))
+	if nodeCopy.size == 0 {
+		nodeCopy.size = int64(2 + len(entries))
 	}
 	// not sure a better place to do this,
 	// but we'll filter entries starting with # to "hide" them
@@ -28,8 +30,8 @@ func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
 		return strings.HasPrefix(e.Name(), "#")
 	})
 	return &dirFile{
-		FileInfo: info,
-		path:     info.name,
+		FileInfo: &nodeCopy,
+		path:     nodeCopy.name,
 		iter: NewDirIter(func() ([]fs.DirEntry, error) {
 			return removeDuplicatesAndSort(entries), nil
 		}),

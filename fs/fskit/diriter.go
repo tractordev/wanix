@@ -17,10 +17,6 @@ func NewDirIter(fn func() ([]fs.DirEntry, error)) *DirIter {
 }
 
 func (rdi *DirIter) ReadDir(n int) ([]fs.DirEntry, error) {
-	if n <= 0 {
-		return rdi.fn()
-	}
-
 	// Initialize directory entries on first call
 	if rdi.entries == nil {
 		entries, err := rdi.fn()
@@ -31,18 +27,19 @@ func (rdi *DirIter) ReadDir(n int) ([]fs.DirEntry, error) {
 		rdi.cursor = 0
 	}
 
-	// Check if we've reached the end
-	if rdi.cursor >= len(rdi.entries) {
-		rdi.entries = nil
-		return nil, io.EOF
-	}
-
 	// Handle the count parameter
 	if n <= 0 {
 		// Return all remaining entries
+		// Per io/fs spec: when n <= 0, return all entries and nil (not EOF)
 		result := rdi.entries[rdi.cursor:]
 		rdi.cursor = len(rdi.entries) // Mark as consumed
 		return result, nil
+	}
+
+	// For n > 0, check if we've reached the end
+	if rdi.cursor >= len(rdi.entries) {
+		rdi.entries = nil
+		return nil, io.EOF
 	}
 
 	// Return up to n entries
@@ -53,6 +50,11 @@ func (rdi *DirIter) ReadDir(n int) ([]fs.DirEntry, error) {
 
 	result := rdi.entries[rdi.cursor:end]
 	rdi.cursor = end
+
+	// If we've read to the end with n > 0, return EOF on next call
+	if rdi.cursor >= len(rdi.entries) {
+		// Don't return EOF yet, just mark for next time
+	}
 
 	return result, nil
 }

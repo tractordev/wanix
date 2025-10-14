@@ -55,12 +55,19 @@ func (fsys MapFS) StatContext(ctx context.Context, name string) (fs.FileInfo, er
 	// which could lead to stack overflow when there is a cycle.
 
 	if name == "." {
-		return Entry(name, fs.ModeDir|0555), nil
+		// Check if there's an explicit "." entry in the map
+		if subfs, found := fsys["."]; found {
+			return fs.StatContext(ctx, subfs, ".")
+		} else {
+			return Entry(name, fs.ModeDir|0555), nil
+		}
 	}
 
 	subfs, found := fsys[name]
 	if found {
-		return fs.StatContext(ctx, subfs, ".")
+		// Use NamedFS to ensure the proper name is used
+		namedFS := NamedFS(subfs, path.Base(name))
+		return fs.StatContext(ctx, namedFS, ".")
 	}
 
 	file, err := fs.OpenContext(ctx, fsys, name)
@@ -165,7 +172,17 @@ func (fsys MapFS) OpenContext(ctx context.Context, name string) (fs.File, error)
 	})
 
 	if n == nil {
-		n = RawNode(name, fs.ModeDir|0555)
+		// Check if there's an explicit entry for this directory
+		if dirSubfs, found := fsys[name]; found {
+			if dirNode, ok := dirSubfs.(*Node); ok && dirNode.IsDir() {
+				n = dirNode
+				n.name = name
+			} else {
+				n = RawNode(name, fs.ModeDir|0555)
+			}
+		} else {
+			n = RawNode(name, fs.ModeDir|0555)
+		}
 	} else {
 		n.name = name
 	}

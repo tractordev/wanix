@@ -20,7 +20,11 @@ type FS struct {
 }
 
 func New() *FS {
-	return &FS{nodes: make(map[string]*fskit.Node)}
+	fsys := &FS{nodes: make(map[string]*fskit.Node)}
+	// Always ensure "." exists as the root directory
+	fsys.nodes["."] = fskit.RawNode(".", fs.ModeDir|0755)
+	fskit.SetSize(fsys.nodes["."], 2) // "." and ".."
+	return fsys
 }
 
 func From(m fskit.MapFS) *FS {
@@ -42,12 +46,21 @@ func From(m fskit.MapFS) *FS {
 		if node.IsDir() {
 			// Count direct children
 			count := 0
-			prefix := name + "/"
-			for p := range fsys.nodes {
-				if strings.HasPrefix(p, prefix) {
-					rest := p[len(prefix):]
-					if !strings.Contains(rest, "/") {
+			if name == "." {
+				// For root directory, count top-level entries
+				for p := range fsys.nodes {
+					if p != "." && !strings.Contains(p, "/") {
 						count++
+					}
+				}
+			} else {
+				prefix := name + "/"
+				for p := range fsys.nodes {
+					if strings.HasPrefix(p, prefix) {
+						rest := p[len(prefix):]
+						if !strings.Contains(rest, "/") {
+							count++
+						}
 					}
 				}
 			}
@@ -62,6 +75,9 @@ func (fsys *FS) Clear() {
 	fsys.mu.Lock()
 	defer fsys.mu.Unlock()
 	fsys.nodes = make(map[string]*fskit.Node)
+	// Always ensure "." exists as the root directory
+	fsys.nodes["."] = fskit.RawNode(".", fs.ModeDir|0755)
+	fskit.SetSize(fsys.nodes["."], 2) // "." and ".."
 }
 
 func (fsys *FS) SetNode(name string, node *fskit.Node) {
@@ -79,23 +95,52 @@ func (fsys *FS) Node(name string) (*fskit.Node, bool) {
 	return node, ok
 }
 
+// updateDirSize updates the size of a directory based on its children.
+// Must be called with fsys.mu held.
+func (fsys *FS) updateDirSize(dir string) {
+	node, ok := fsys.nodes[dir]
+	if !ok || !node.IsDir() {
+		return
+	}
+	count := 0
+	if dir == "." {
+		// For root directory, count top-level entries
+		for p := range fsys.nodes {
+			if p != "." && !strings.Contains(p, "/") {
+				count++
+			}
+		}
+	} else {
+		prefix := dir + "/"
+		for p := range fsys.nodes {
+			if strings.HasPrefix(p, prefix) {
+				rest := p[len(prefix):]
+				if !strings.Contains(rest, "/") {
+					count++
+				}
+			}
+		}
+	}
+	// Set size to include "." and ".." plus actual entries
+	fskit.SetSize(node, int64(2+count))
+}
+
 func (fsys *FS) Open(name string) (fs.File, error) {
-	name = path.Clean(name)
 	return fsys.OpenContext(context.Background(), name)
 }
 
 func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
-	name = path.Clean(name)
 	return fsys.StatContext(context.Background(), name)
 }
 
 func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
-	name = path.Clean(name)
 	f, err := fsys.OpenContext(fs.WithNoFollow(ctx), name)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
+	// Clean name after opening, for use in symlink resolution
+	name = path.Clean(name)
 	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
@@ -126,10 +171,12 @@ func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, erro
 }
 
 func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	name = path.Clean(name)
+	// Check validity before cleaning - paths like "./." and "file/." are invalid per fs.ValidPath
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
+
+	name = path.Clean(name)
 
 	fsys.mu.Lock()
 	n := fsys.nodes[name]
@@ -238,7 +285,8 @@ func (fsys *FS) Create(name string) (fs.File, error) {
 	}
 
 	// Check if parent directory exists
-	if dir := path.Dir(name); dir != "." {
+	dir := path.Dir(name)
+	if dir != "." {
 		ok, err := fs.Exists(fsys, dir)
 		if err != nil {
 			return nil, err
@@ -251,6 +299,8 @@ func (fsys *FS) Create(name string) (fs.File, error) {
 	fsys.mu.Lock()
 	defer fsys.mu.Unlock()
 	fsys.nodes[name] = fskit.Entry(name, fs.FileMode(0644), time.Now())
+	// Update parent directory size
+	fsys.updateDirSize(dir)
 	return fsys.nodes[name].Open(".")
 }
 
@@ -268,7 +318,8 @@ func (fsys *FS) Mkdir(name string, perm fs.FileMode) error {
 		return &fs.PathError{Op: "mkdir", Path: name, Err: fs.ErrExist}
 	}
 
-	ok, err = fs.Exists(fsys, path.Dir(name))
+	dir := path.Dir(name)
+	ok, err = fs.Exists(fsys, dir)
 	if err != nil {
 		return err
 	}
@@ -281,6 +332,8 @@ func (fsys *FS) Mkdir(name string, perm fs.FileMode) error {
 	node := fskit.Entry(name, perm|fs.ModeDir, time.Now())
 	fskit.SetSize(node, 2) // Set initial size to 2 for "." and ".." entries
 	fsys.nodes[name] = node
+	// Update parent directory size
+	fsys.updateDirSize(dir)
 	return nil
 }
 
@@ -352,6 +405,11 @@ func (fsys *FS) Remove(name string) error {
 		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotExist}
 	}
 
+	// Prevent removing the root directory
+	if name == "." {
+		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
+	}
+
 	ok, err := fs.Exists(fsys, name)
 	if err != nil {
 		return err
@@ -374,9 +432,12 @@ func (fsys *FS) Remove(name string) error {
 
 	// TODO: RemoveAll, gets into synthesized directories
 
+	dir := path.Dir(name)
 	fsys.mu.Lock()
 	defer fsys.mu.Unlock()
 	delete(fsys.nodes, name)
+	// Update parent directory size
+	fsys.updateDirSize(dir)
 	return nil
 }
 
@@ -455,6 +516,14 @@ func (fsys *FS) Rename(oldpath, newpath string) error {
 		delete(fsys.nodes, oldpath)
 	}
 
+	// Update parent directory sizes
+	oldDir := path.Dir(oldpath)
+	newDir := path.Dir(newpath)
+	fsys.updateDirSize(oldDir)
+	if oldDir != newDir {
+		fsys.updateDirSize(newDir)
+	}
+
 	return nil
 }
 
@@ -465,7 +534,8 @@ func (fsys *FS) Symlink(oldname, newname string) error {
 	}
 
 	// Check if parent directory exists
-	if dir := path.Dir(newname); dir != "." {
+	dir := path.Dir(newname)
+	if dir != "." {
 		ok, err := fs.Exists(fsys, dir)
 		if err != nil {
 			return err
@@ -479,6 +549,8 @@ func (fsys *FS) Symlink(oldname, newname string) error {
 	defer fsys.mu.Unlock()
 	// symlinks don't care if target exists so we can just create it
 	fsys.nodes[newname] = fskit.RawNode([]byte(oldname), fs.FileMode(0777)|fs.ModeSymlink)
+	// Update parent directory size
+	fsys.updateDirSize(dir)
 	return nil
 }
 
