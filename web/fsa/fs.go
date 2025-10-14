@@ -11,161 +11,298 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/fxamacker/cbor/v2"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/web/jsutil"
 )
 
-type FS js.Value
-
-type Stat struct {
-	Name  string
-	Size  uint64
-	Mode  fs.FileMode
-	Atime time.Time
-	Mtime time.Time
+// statCacheEntry represents a cached stat result (similar to httpfs headCacheEntry)
+type statCacheEntry struct {
+	info      fs.FileInfo
+	err       error // cached errors (e.g., fs.ErrNotExist)
+	cachedAt  time.Time
+	expiresAt time.Time
 }
 
-func (s Stat) Info() fs.FileInfo {
-	return fskit.Entry(path.Base(s.Name), s.Mode, s.Size, s.Mtime)
+// FS implements a filesystem interface for the browser's File System Access API.
+// It provides access to both user-selected directories and the Origin Private File System (OPFS).
+type FS struct {
+	handle    js.Value
+	statCache map[string]*statCacheEntry // Similar to httpfs headCache
+	cacheTTL  time.Duration              // Similar to httpfs cacheTTL
+	cacheMu   sync.RWMutex               // Similar to httpfs cacheMu
+	opfsRoot  *FS                        // Reference to OPFS root
 }
 
-var statCache sync.Map
+// NewFS creates a new FS instance from a JavaScript directory handle
+func NewFS(handle js.Value) *FS {
+	return &FS{
+		handle:    handle,
+		statCache: make(map[string]*statCacheEntry),
+		cacheTTL:  500 * time.Millisecond, // Similar to httpfs default
+	}
+}
 
-// todo: clean all this up!
-func statStore(fsys FS, name string, stat Stat) {
-	statCache.Store(name, stat)
-	go func() {
-		var stats []Stat
-		statCache.Range(func(key, value any) bool {
-			stats = append(stats, value.(Stat))
-			return true
-		})
-		b, err := cbor.Marshal(stats)
+// getCachedStat retrieves cached stat result if valid (similar to httpfs getCachedHead)
+func (fsys *FS) getCachedStat(path string) (fs.FileInfo, error, bool) {
+	fsys.cacheMu.RLock()
+	defer fsys.cacheMu.RUnlock()
+
+	entry, exists := fsys.statCache[path]
+	if !exists {
+		return nil, nil, false
+	}
+
+	if time.Now().After(entry.expiresAt) {
+		// Entry expired, but don't clean it up here to avoid lock upgrade
+		return nil, nil, false
+	}
+
+	// If this is a cached error, return it
+	if entry.err != nil {
+		return nil, entry.err, true
+	}
+
+	return entry.info, nil, true
+}
+
+// setCachedStat stores stat result in cache (similar to httpfs setCachedHead)
+func (fsys *FS) setCachedStat(path string, info fs.FileInfo) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+
+	now := time.Now()
+	fsys.statCache[path] = &statCacheEntry{
+		info:      info,
+		err:       nil,
+		cachedAt:  now,
+		expiresAt: now.Add(fsys.cacheTTL),
+	}
+}
+
+// setCachedStatError stores stat error in cache (similar to httpfs setCachedHeadError)
+func (fsys *FS) setCachedStatError(path string, err error) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+
+	now := time.Now()
+	fsys.statCache[path] = &statCacheEntry{
+		info:      nil,
+		err:       err,
+		cachedAt:  now,
+		expiresAt: now.Add(fsys.cacheTTL),
+	}
+}
+
+// invalidateCachedStat removes cached stat result (similar to httpfs invalidateCachedHead)
+func (fsys *FS) invalidateCachedStat(path string) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+	delete(fsys.statCache, path)
+}
+
+// SetCacheTTL sets the cache TTL for stat requests (similar to httpfs)
+func (fsys *FS) SetCacheTTL(ttl time.Duration) {
+	fsys.cacheMu.Lock()
+	defer fsys.cacheMu.Unlock()
+	fsys.cacheTTL = ttl
+}
+
+// buildFileInfo constructs fs.FileInfo from JS API + metadata store
+func (fsys *FS) buildFileInfo(path string, jsHandle js.Value) (fs.FileInfo, error) {
+	// Get JS API data (always fresh)
+	var name string
+	var size int64
+	var isDir bool
+	var jsMtime time.Time
+
+	if jsHandle.Get("kind").String() == "directory" {
+		isDir = true
+		name = jsHandle.Get("name").String()
+		size = 0
+		// Directories don't have lastModified in JS API
+		jsMtime = time.Now()
+	} else {
+		// Get file data
+		file, err := jsutil.AwaitErr(jsHandle.Call("getFile"))
 		if err != nil {
-			log.Println("fsa: statstore: marshal:", err)
-			return
+			return nil, err
 		}
-		if err := fs.WriteFile(fsys, "#stat", b, 0755); err != nil {
-			log.Println("fsa: statstore: write:", err)
+		name = jsHandle.Get("name").String()
+		size = int64(file.Get("size").Int())
+		jsMtime = time.UnixMilli(int64(file.Get("lastModified").Int()))
+	}
+
+	// Get metadata from global store
+	metadata, hasMetadata := GetMetadataStore().GetMetadata(path)
+
+	var mode fs.FileMode
+	var mtime, atime time.Time
+
+	if hasMetadata {
+		// Use stored metadata
+		mode = metadata.Mode
+		mtime = metadata.Mtime // We manage mtime, ignore JS mtime
+		atime = metadata.Atime
+	} else {
+		// Use defaults for new files
+		if isDir {
+			mode = DefaultDirMode | fs.ModeDir
+		} else {
+			mode = DefaultFileMode
 		}
-	}()
+		mtime = jsMtime // Use JS mtime for new files
+		atime = time.Now()
+
+		// Store initial metadata
+		GetMetadataStore().SetMetadata(path, FileMetadata{
+			Mode:  mode,
+			Mtime: mtime,
+			Atime: atime,
+		})
+	}
+
+	// Ensure directory bit is set correctly
+	if isDir {
+		mode |= fs.ModeDir
+	}
+
+	return fskit.Entry(name, mode, size, mtime), nil
 }
 
-func (fsys FS) walkDir(path string) (js.Value, error) {
+func (fsys *FS) walkDir(path string) (js.Value, error) {
 	if path == "." {
-		return js.Value(fsys), nil
+		return fsys.handle, nil
 	}
 	path = strings.Trim(path, "/")
 	parts := strings.Split(path, "/")
-	cur := js.Value(fsys)
+	cur := fsys.handle
 	var err error
 	for i := 0; i < len(parts); i++ {
 		cur, err = jsutil.AwaitErr(cur.Call("getDirectoryHandle", parts[i], map[string]any{"create": false}))
 		if err != nil {
-			return js.Undefined(), err
+			return js.Undefined(), &fs.PathError{Op: "walkdir", Path: path, Err: err}
 		}
 	}
 	return cur, nil
 }
 
-func (fsys FS) Symlink(oldname, newname string) error {
+func (fsys *FS) Symlink(oldname, newname string) error {
 	if !fs.ValidPath(newname) {
 		return &fs.PathError{Op: "symlink", Path: newname, Err: fs.ErrInvalid}
 	}
 
 	err := fs.WriteFile(fsys, newname, []byte(oldname), 0777)
 	if err != nil {
-		return err
+		return &fs.PathError{Op: "symlink", Path: newname, Err: err}
 	}
 
-	v, ok := statCache.Load(newname)
-	if ok {
-		stat := v.(Stat)
-		stat.Mode = fs.FileMode(0777) | fs.ModeSymlink
-		statStore(fsys, newname, stat)
-	} else {
-		statStore(fsys, newname, Stat{Name: newname, Mode: fs.FileMode(0777) | fs.ModeSymlink})
-	}
+	// Update metadata store with symlink mode
+	GetMetadataStore().SetMode(newname, fs.FileMode(0777)|fs.ModeSymlink)
+
+	// Invalidate stat cache
+	fsys.invalidateCachedStat(newname)
 
 	return nil
 }
 
-func (fsys FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
+func (fsys *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "chtimes", Path: name, Err: fs.ErrInvalid}
 	}
 
-	v, ok := statCache.Load(name)
-	if ok {
-		stat := v.(Stat)
-		// stat.atime = atime
-		stat.Mtime = mtime
-		statStore(fsys, name, stat)
-		return nil
-	}
-	statStore(fsys, name, Stat{Name: name, Atime: atime, Mtime: mtime})
+	// Update metadata store
+	GetMetadataStore().SetTimes(name, atime, mtime)
+
+	// Invalidate stat cache
+	fsys.invalidateCachedStat(name)
 
 	return nil
 }
 
-func (fsys FS) Chmod(name string, mode fs.FileMode) error {
+func (fsys *FS) Chmod(name string, mode fs.FileMode) error {
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "chmod", Path: name, Err: fs.ErrInvalid}
 	}
 
-	v, ok := statCache.Load(name)
-	if ok {
-		stat := v.(Stat)
-		// Keep the file type bits and update only the permission bits
-		stat.Mode = (stat.Mode & fs.ModeType) | (mode & fs.ModePerm)
-		statStore(fsys, name, stat)
-		return nil
-	}
-	statStore(fsys, name, Stat{Name: name, Mode: mode & fs.ModePerm})
+	// Update metadata store
+	GetMetadataStore().SetMode(name, mode)
+
+	// Invalidate stat cache
+	fsys.invalidateCachedStat(name)
+
 	return nil
 }
 
-func (fsys FS) Stat(name string) (fs.FileInfo, error) {
+func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
 	return fsys.StatContext(context.Background(), name)
 }
 
-func (fsys FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+	// Check cache first
+	if info, err, found := fsys.getCachedStat(name); found {
+		if err != nil {
+			return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
+		}
+		return info, nil
+	}
+
+	// Open file to get JS handle, then build stat info
 	f, err := fsys.OpenContext(fs.WithNoFollow(ctx), name)
 	if err != nil {
-		return nil, err
+		// Cache the error
+		fsys.setCachedStatError(name, err)
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
 	}
 	defer f.Close()
-	return f.Stat()
+
+	// Get the JS handle from the file
+	var jsHandle js.Value
+	if fileHandle, ok := f.(*FileHandle); ok {
+		jsHandle = fileHandle.Value
+	} else {
+		// Fallback to regular Stat for directories or other file types
+		return f.Stat()
+	}
+
+	// Build file info from JS API + metadata store
+	info, err := fsys.buildFileInfo(name, jsHandle)
+	if err != nil {
+		fsys.setCachedStatError(name, err)
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: err}
+	}
+
+	// Cache the result
+	fsys.setCachedStat(name, info)
+	return info, nil
 }
 
-func (fsys FS) Open(name string) (fs.File, error) {
+func (fsys *FS) Open(name string) (fs.File, error) {
 	return fsys.OpenContext(context.Background(), name)
 }
 
-func (fsys FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 
 	if name == "." {
-		return DirHandleFile(fsys, name, js.Value(fsys)), nil
+		return fsys.openDirectory(".", fsys.handle), nil
 	}
 
 	dirHandle, err := fsys.walkDir(path.Dir(name))
 	if err != nil {
 		return nil, fs.ErrNotExist
+		//return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
 
 	file, err := jsutil.AwaitErr(dirHandle.Call("getFileHandle", path.Base(name), map[string]any{"create": false}))
 	if err == nil {
-		v, ok := statCache.Load(name)
-		if ok && fs.FollowSymlinks(ctx) && fs.IsSymlink(v.(Stat).Mode) {
+		if cached, _, ok := fsys.getCachedStat(name); ok && fs.FollowSymlinks(ctx) && fs.IsSymlink(cached.Mode()) {
 			if origin, fullname, ok := fs.Origin(ctx); ok {
 				target, err := fs.Readlink(fsys, name)
 				if err != nil {
-					return nil, err
+					return nil, &fs.PathError{Op: "open", Path: name, Err: err}
 				}
 				if strings.HasPrefix(target, "/") {
 					target = target[1:]
@@ -175,63 +312,77 @@ func (fsys FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 				return fs.OpenContext(ctx, origin, target)
 			} else {
 				log.Println("fsa: opencontext: no origin for symlink:", name)
-				return nil, fs.ErrInvalid
+				return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 			}
 		}
-		return NewFileHandle(name, file, true), nil
+		return fsys.openFile(name, file, true), nil
 	}
 
 	dir, err := jsutil.AwaitErr(dirHandle.Call("getDirectoryHandle", path.Base(name), map[string]any{"create": false}))
 	if err == nil {
-		return DirHandleFile(fsys, name, dir), nil
+		return fsys.openDirectory(name, dir), nil
 	}
 
 	return nil, fs.ErrNotExist
+	//return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 }
 
-func (fsys FS) Truncate(name string, size int64) error {
+func (fsys *FS) Truncate(name string, size int64) error {
 	if !fs.ValidPath(name) {
-		return &fs.PathError{Op: "truncate", Path: name, Err: fs.ErrNotExist}
+		return &fs.PathError{Op: "truncate", Path: name, Err: fs.ErrInvalid}
 	}
 
 	dirHandle, err := fsys.walkDir(path.Dir(name))
 	if err != nil {
-		return fs.ErrNotExist
+		return &fs.PathError{Op: "truncate", Path: name, Err: fs.ErrNotExist}
 	}
 
 	file, err := jsutil.AwaitErr(dirHandle.Call("getFileHandle", path.Base(name), map[string]any{"create": false}))
 	if err == nil {
-		return NewFileHandle(name, file, false).Truncate(size)
+		handle := fsys.openFile(name, file, false)
+		err := handle.Truncate(size)
+		if err != nil {
+			return &fs.PathError{Op: "truncate", Path: name, Err: err}
+		}
+		err = handle.Close()
+		if err != nil {
+			return &fs.PathError{Op: "truncate", Path: name, Err: err}
+		}
+		return err
 	}
 
-	return fs.ErrNotExist
+	return &fs.PathError{Op: "truncate", Path: name, Err: fs.ErrNotExist}
 }
 
-func (fsys FS) Create(name string) (fs.File, error) {
+func (fsys *FS) Create(name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
-		return nil, &fs.PathError{Op: "create", Path: name, Err: fs.ErrNotExist}
+		return nil, &fs.PathError{Op: "create", Path: name, Err: fs.ErrInvalid}
 	}
 
 	dirHandle, err := fsys.walkDir(path.Dir(name))
 	if err != nil {
-		return nil, fs.ErrNotExist
+		return nil, &fs.PathError{Op: "create", Path: name, Err: fs.ErrNotExist}
 	}
 
 	handle, err := jsutil.AwaitErr(dirHandle.Call("getFileHandle", path.Base(name), map[string]any{"create": true}))
 	if err != nil {
-		return nil, err
+		return nil, &fs.PathError{Op: "create", Path: name, Err: err}
 	}
-	return NewFileHandle(name, handle, false), nil
+
+	// Invalidate stat cache since we created/truncated a file
+	fsys.invalidateCachedStat(name)
+
+	return fsys.openFile(name, handle, false), nil
 }
 
-func (fsys FS) Mkdir(name string, perm fs.FileMode) error {
+func (fsys *FS) Mkdir(name string, perm fs.FileMode) error {
 	if !fs.ValidPath(name) {
-		return &fs.PathError{Op: "mkdir", Path: name, Err: fs.ErrNotExist}
+		return &fs.PathError{Op: "mkdir", Path: name, Err: fs.ErrInvalid}
 	}
 
 	ok, err := fs.Exists(fsys, name)
 	if err != nil {
-		return err
+		return &fs.PathError{Op: "mkdir", Path: name, Err: err}
 	}
 	if ok {
 		return &fs.PathError{Op: "mkdir", Path: name, Err: fs.ErrExist}
@@ -243,28 +394,37 @@ func (fsys FS) Mkdir(name string, perm fs.FileMode) error {
 	}
 
 	_, err = jsutil.AwaitErr(dirHandle.Call("getDirectoryHandle", path.Base(name), map[string]any{"create": true}))
-	return err
+	if err != nil {
+		return &fs.PathError{Op: "mkdir", Path: name, Err: err}
+	}
+
+	// todo: set perms
+
+	// Invalidate stat cache since we created a directory
+	fsys.invalidateCachedStat(name)
+
+	return nil
 }
 
-func (fsys FS) Remove(name string) error {
+func (fsys *FS) Remove(name string) error {
 	if !fs.ValidPath(name) {
-		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotExist}
+		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrInvalid}
 	}
 
 	ok, err := fs.Exists(fsys, name)
 	if err != nil {
-		return err
+		return &fs.PathError{Op: "remove", Path: name, Err: err}
 	}
 	if !ok {
 		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotExist}
 	}
 
 	if isDir, err := fs.IsDir(fsys, name); err != nil {
-		return err
+		return &fs.PathError{Op: "remove", Path: name, Err: err}
 	} else if isDir {
 		empty, err := fs.IsEmpty(fsys, name)
 		if err != nil {
-			return err
+			return &fs.PathError{Op: "remove", Path: name, Err: err}
 		}
 		if !empty {
 			return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotEmpty}
@@ -278,20 +438,24 @@ func (fsys FS) Remove(name string) error {
 
 	_, err = jsutil.AwaitErr(dirHandle.Call("removeEntry", path.Base(name)))
 	if err != nil {
-		return err
+		return &fs.PathError{Op: "remove", Path: name, Err: err}
 	}
-	statCache.Delete(name)
+
+	// Clean up metadata and cache
+	GetMetadataStore().DeleteMetadata(name)
+	fsys.invalidateCachedStat(name)
+
 	return nil
 }
 
-func (fsys FS) Rename(oldname, newname string) error {
+func (fsys *FS) Rename(oldname, newname string) error {
 	if !fs.ValidPath(oldname) || !fs.ValidPath(newname) {
-		return &fs.PathError{Op: "rename", Path: oldname, Err: fs.ErrNotExist}
+		return &fs.PathError{Op: "rename", Path: oldname, Err: fs.ErrInvalid}
 	}
 
 	ok, err := fs.Exists(fsys, oldname)
 	if err != nil {
-		return err
+		return &fs.PathError{Op: "rename", Path: oldname, Err: err}
 	}
 	if !ok {
 		return &fs.PathError{Op: "rename", Path: oldname, Err: fs.ErrNotExist}
@@ -299,7 +463,7 @@ func (fsys FS) Rename(oldname, newname string) error {
 
 	ok, err = fs.Exists(fsys, newname)
 	if err != nil {
-		return err
+		return &fs.PathError{Op: "rename", Path: newname, Err: err}
 	}
 	if ok {
 		return &fs.PathError{Op: "rename", Path: newname, Err: fs.ErrExist}
@@ -316,16 +480,75 @@ func (fsys FS) Rename(oldname, newname string) error {
 	}
 
 	if err := fs.CopyAll(fsys, oldname, newname); err != nil {
-		return err
+		return &fs.PathError{Op: "rename", Path: oldname, Err: err}
 	}
 
 	_, err = jsutil.AwaitErr(oldDirHandle.Call("removeEntry", path.Base(oldname), map[string]any{"recursive": true}))
 	if err != nil {
 		// Try to clean up the copy if delete fails
 		newDirHandle.Call("removeEntry", path.Base(newname), map[string]any{"recursive": true})
-		return err
+		return &fs.PathError{Op: "rename", Path: oldname, Err: err}
 	}
 
-	statCache.Delete(oldname)
+	// Handle metadata for rename: copy metadata from old to new path, then delete old
+	if metadata, exists := GetMetadataStore().GetMetadata(oldname); exists {
+		GetMetadataStore().SetMetadata(newname, metadata)
+	}
+	GetMetadataStore().DeleteMetadata(oldname)
+
+	// Invalidate both paths in cache
+	fsys.invalidateCachedStat(oldname)
+	fsys.invalidateCachedStat(newname)
+
 	return nil
+}
+
+// openDirectory creates a directory file handle with lazy loading
+func (fsys *FS) openDirectory(dirPath string, handle js.Value) fs.File {
+	// log.Println("fsa: opendirectory:", dirPath)
+	var entries []fs.DirEntry
+	err := jsutil.AsyncIter(handle.Call("values"), func(e js.Value) error {
+		entryName := e.Get("name").String()
+		isDir := e.Get("kind").String() == "directory"
+
+		// Construct full path for cache lookup
+		var entryPath string
+		if dirPath == "." {
+			entryPath = entryName
+		} else {
+			entryPath = dirPath + "/" + entryName
+		}
+
+		var mode fs.FileMode
+		var size int64
+
+		// Get metadata from global store
+		if metadata, hasMetadata := GetMetadataStore().GetMetadata(entryPath); hasMetadata {
+			mode = metadata.Mode
+			size = 0 // Size will be loaded lazily when needed
+		} else {
+			// Set default modes for new entries
+			if isDir {
+				mode = DefaultDirMode | fs.ModeDir
+				size = 0
+			} else {
+				mode = DefaultFileMode
+				size = 0
+			}
+		}
+
+		entries = append(entries, fskit.Entry(entryName, mode, size))
+		return nil
+	})
+
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return fskit.DirFile(fskit.Entry(dirPath, 0755|fs.ModeDir), entries...)
+}
+
+// openFile creates a file handle for the given JavaScript file handle
+func (fsys *FS) openFile(path string, handle js.Value, append bool) *FileHandle {
+	return &FileHandle{Value: handle, path: path, append: append, fsys: fsys}
 }

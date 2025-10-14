@@ -4,82 +4,83 @@
 package fsa
 
 import (
-	"cmp"
-	"errors"
-	"log"
+	"strings"
 	"syscall/js"
 
-	"github.com/fxamacker/cbor/v2"
 	"tractor.dev/wanix/fs"
-	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/web/jsutil"
 )
 
 // user selected directory
 func ShowDirectoryPicker() fs.FS {
 	dir := jsutil.Await(js.Global().Get("window").Call("showDirectoryPicker"))
-	return FS(dir)
+	return NewFS(dir)
 }
 
 // origin private file system
-func OPFS() (fs.FS, error) {
-	dir, err := jsutil.AwaitErr(js.Global().Get("navigator").Get("storage").Call("getDirectory"))
+// OPFS returns a filesystem for the Origin Private File System.
+// It can take optional path arguments to return a subdirectory:
+//
+//	OPFS() - returns root OPFS
+//	OPFS("path/to/dir") - returns subdirectory at path
+//	OPFS("path", "to", "dir") - returns subdirectory using path parts
+func OPFS(pathParts ...string) (fs.FS, error) {
+	rootDir, err := jsutil.AwaitErr(js.Global().Get("navigator").Get("storage").Call("getDirectory"))
 	if err != nil {
 		return nil, err
 	}
-	fsys := FS(dir)
-	go func() {
-		b, err := fs.ReadFile(fsys, "#stat")
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return
+
+	// Create the root FS instance
+	rootFS := NewFS(rootDir)
+
+	// Navigate to subdirectory if path parts provided
+	targetDir := rootDir
+	if len(pathParts) > 0 {
+		// Join path parts and split by "/"
+		var allParts []string
+		for _, part := range pathParts {
+			if part != "" {
+				parts := strings.Split(strings.Trim(part, "/"), "/")
+				for _, p := range parts {
+					if p != "" {
+						allParts = append(allParts, p)
+					}
+				}
 			}
-			log.Println("fsa: opfs: read #stat:", err)
-			return
-		}
-		statCache.Clear()
-		var stats []Stat
-		if err := cbor.Unmarshal(b, &stats); err != nil {
-			log.Println("fsa: opfs: unmarshal #stat:", err)
-			return
-		}
-		for _, s := range stats {
-			statCache.Store(s.Name, s)
-		}
-	}()
-	return fsys, nil
-}
-
-func DirHandleFile(fsys FS, name string, v js.Value) fs.File {
-	var entries []fs.DirEntry
-	err := jsutil.AsyncIter(v.Call("values"), func(e js.Value) error {
-		var mode fs.FileMode
-		var size int64
-		name := e.Get("name").String()
-
-		v, cached := statCache.Load(name)
-		if cached {
-			mode = v.(Stat).Mode
 		}
 
-		isDir := e.Get("kind").String() == "directory"
-		if isDir {
-			if mode&0777 == 0 {
-				mode |= DefaultDirMode
+		// Navigate to the target directory
+		current := rootDir
+		for _, part := range allParts {
+			current, err = jsutil.AwaitErr(current.Call("getDirectoryHandle", part, map[string]any{"create": true}))
+			if err != nil {
+				return nil, err
 			}
-			mode |= fs.ModeDir
-		} else {
-			if mode&0777 == 0 {
-				mode |= DefaultFileMode
-			}
-			size = int64(jsutil.Await(e.Call("getFile")).Get("size").Int())
 		}
-		entries = append(entries, fskit.Entry(name, mode, size))
-		return nil
-	})
-	if err != nil {
-		log.Panic(err)
+		targetDir = current
 	}
-	fname := cmp.Or(v.Get("name").String(), ".")
-	return fskit.DirFile(fskit.Entry(fname, 0755|fs.ModeDir), entries...)
+
+	// Create the target FS instance
+	var fsys *FS
+	if targetDir.Equal(rootDir) {
+		// Target is root - use the root FS and set opfsRoot to itself
+		fsys = rootFS
+		fsys.opfsRoot = rootFS
+
+		// Initialize global metadata store with this root
+		if err := GetMetadataStore().Initialize(fsys); err != nil {
+			return nil, err
+		}
+	} else {
+		// Target is subdirectory - create new FS with root reference
+		fsys = NewFS(targetDir)
+		fsys.opfsRoot = rootFS
+
+		// Initialize global metadata store with root
+		if err := GetMetadataStore().Initialize(rootFS); err != nil {
+			return nil, err
+		}
+	}
+
+	return fsys, nil
 }
