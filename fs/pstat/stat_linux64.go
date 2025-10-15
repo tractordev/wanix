@@ -1,6 +1,6 @@
-//go:build (linux || dragonfly || solaris) && (amd64 || arm64)
+//go:build (linux || dragonfly || solaris) && amd64
 // +build linux dragonfly solaris
-// +build amd64 arm64
+// +build amd64
 
 package pstat
 

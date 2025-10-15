@@ -1,5 +1,6 @@
-//go:build c
-// +build c
+//go:build (linux || dragonfly || solaris) && (arm64 || arm || 386)
+// +build linux dragonfly solaris
+// +build arm64 arm 386
 
 package pstat
 
