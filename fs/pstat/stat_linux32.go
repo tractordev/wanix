@@ -1,5 +1,5 @@
-//go:build linux || dragonfly || solaris
-// +build linux dragonfly solaris
+//go:build c
+// +build c
 
 package pstat
 
@@ -33,13 +33,13 @@ func StatToSys(stat *Stat) any {
 	return &syscall.Stat_t{
 		Dev:     stat.Dev,
 		Ino:     stat.Ino,
-		Nlink:   stat.Nlink,
+		Nlink:   uint32(stat.Nlink),
 		Mode:    stat.Mode,
 		Uid:     stat.Uid,
 		Gid:     stat.Gid,
 		Rdev:    stat.Rdev,
 		Size:    stat.Size,
-		Blksize: stat.Blksize,
+		Blksize: int32(stat.Blksize),
 		Blocks:  stat.Blocks,
 		Atim:    syscall.NsecToTimespec(stat.Atim.Nsec),
 		Mtim:    syscall.NsecToTimespec(stat.Mtim.Nsec),
