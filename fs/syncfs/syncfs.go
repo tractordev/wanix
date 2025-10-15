@@ -112,7 +112,7 @@ func (sfs *SyncFS) Sync() error {
 			if err != nil {
 				return err
 			}
-			linfo, err := fs.Stat(sfs.local, path)
+			linfo, err := fs.Lstat(sfs.local, path)
 			if err != nil && !os.IsNotExist(err) {
 				return err
 			}
@@ -157,7 +157,7 @@ func (sfs *SyncFS) Sync() error {
 				if err != nil {
 					return err
 				}
-				rinfo, err := fs.Stat(rindex, path)
+				rinfo, err := fs.Lstat(rindex, path)
 				if err != nil && !errors.Is(err, fs.ErrNotExist) {
 					return err
 				}
@@ -209,7 +209,7 @@ func (sfs *SyncFS) Sync() error {
 					continue
 				}
 
-				info, err := fs.Stat(sfs.local, path)
+				info, err := fs.Lstat(sfs.local, path)
 				if err != nil {
 					pushSync <- err
 					return
@@ -291,7 +291,7 @@ func (sfs *SyncFS) Sync() error {
 					sfs.log.Error("CopyFS", "err", err, "path", path)
 					continue
 				}
-				info, err := fs.Stat(rindex, path)
+				info, err := fs.Lstat(rindex, path)
 				if err != nil {
 					pullSync <- err
 					return
@@ -316,7 +316,7 @@ func (sfs *SyncFS) Sync() error {
 		}()
 		wg.Wait()
 		for _, path := range pullDirs {
-			info, err := fs.Stat(rindex, path)
+			info, err := fs.Lstat(rindex, path)
 			if err != nil {
 				pullSync <- err
 				return
