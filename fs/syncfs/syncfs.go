@@ -273,8 +273,7 @@ func (sfs *SyncFS) Sync() error {
 			for path := range paths {
 				if err := fs.CopyFS(sfs.remote, path, sfs.local, path); err != nil {
 					sfs.log.Error("CopyFS", "err", err, "path", path)
-					pullSync <- err
-					return
+					continue
 				}
 				info, err := fs.Stat(rindex, path)
 				if err != nil {
