@@ -8,9 +8,9 @@ import (
 	"iter"
 	"log"
 	"log/slog"
-	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -71,6 +71,11 @@ func New(baseURL string) *FS {
 // 		refreshing: make(map[string]bool),
 // 	}
 // }
+
+func (fsys *FS) baseURLPath() string {
+	u, _ := url.Parse(fsys.baseURL)
+	return strings.TrimSuffix(u.Path, "/")
+}
 
 // normalizeHTTPPath ensures proper HTTP path formatting
 func (fsys *FS) normalizeHTTPPath(name string) string {
@@ -192,25 +197,6 @@ func parseOwnership(ownerStr string) (uid, gid int) {
 	return uid, gid
 }
 
-// parseContentDisposition extracts filename from Content-Disposition header
-func parseContentDisposition(disposition string) (string, error) {
-	if disposition == "" {
-		return "", fmt.Errorf("empty Content-Disposition header")
-	}
-
-	_, params, err := mime.ParseMediaType(disposition)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse Content-Disposition: %w", err)
-	}
-
-	filename := params["filename"]
-	if filename == "" {
-		return "", fmt.Errorf("no filename in Content-Disposition")
-	}
-
-	return filename, nil
-}
-
 // parseNodesMultipart parses a multipart response containing directory listings
 func parseNodesMultipart(fsys wrappedFS, body io.Reader, boundary string) iter.Seq2[*Node, error] {
 	return func(yield func(*Node, error) bool) {
@@ -228,24 +214,13 @@ func parseNodesMultipart(fsys wrappedFS, body io.Reader, boundary string) iter.S
 			}
 
 			// Extract path from Content-Location header,
-			// but also parse Content-Disposition for backward compatibility
-			var path string
-			disposition := part.Header.Get("Content-Disposition")
-			if disposition == "" {
-				path = part.Header.Get("Content-Location")
-				if path == "" {
-					log.Printf("httpfs: missing Content-Location header")
-					part.Close()
-					continue
-				}
-			} else {
-				path, err = parseContentDisposition(disposition)
-				if err != nil {
-					log.Printf("httpfs: failed to parse Content-Disposition: %v", err)
-					part.Close()
-					continue
-				}
+			path := part.Header.Get("Content-Location")
+			if path == "" {
+				log.Printf("httpfs: missing Content-Location header")
+				part.Close()
+				continue
 			}
+			path = strings.TrimPrefix(path, fsys.unwrap().baseURLPath())
 
 			// Read part content
 			content, err := io.ReadAll(part)
