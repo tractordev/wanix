@@ -35,6 +35,7 @@ type RemoteFS interface {
 // TODO:
 // - max changing time before forced sync
 // - regular sync interface. adaptive?
+// - limit patch size, multi-patch or direct op
 // - ignore paths
 
 // SyncFS provides a filesystem that syncs between local and remote filesystems.
@@ -98,12 +99,15 @@ func (sfs *SyncFS) Sync() error {
 				return nil
 			}
 			sfs.mu.Lock()
-			exists, ok := sfs.changes[path]
-			sfs.mu.Unlock()
-			if ok && !exists {
-				// tombstoned
-				return nil
+			if sfs.changes != nil {
+				exists, ok := sfs.changes[path]
+				if ok && !exists {
+					sfs.log.Debug("Sync:tombstoned", "path", path)
+					sfs.mu.Unlock()
+					return nil
+				}
 			}
+			sfs.mu.Unlock()
 			rinfo, err := entry.Info()
 			if err != nil {
 				return err
@@ -158,7 +162,9 @@ func (sfs *SyncFS) Sync() error {
 					return err
 				}
 				if errors.Is(err, fs.ErrNotExist) || rinfo.ModTime().Unix() < linfo.ModTime().Unix() {
+					sfs.mu.Lock()
 					sfs.changes[path] = true
+					sfs.mu.Unlock()
 				}
 				return nil
 			})
@@ -502,14 +508,34 @@ func (sfs *SyncFS) Rename(oldname, newname string) error {
 	sfs.wait()
 	sfs.log.Debug("Rename", "oldname", oldname, "newname", newname)
 
-	err := fs.Rename(sfs.local, oldname, newname)
+	isDir, err := fs.IsDir(sfs.local, oldname)
+	if err != nil {
+		return err
+	}
+	if !isDir {
+		err := fs.Rename(sfs.local, oldname, newname)
+		if err != nil {
+			return err
+		}
+		sfs.changed(newname, true)
+		sfs.changed(oldname, false)
+		return nil
+	}
+
+	err = sfs.Sync()
+	if err != nil {
+		return err
+	}
+	err = fs.Rename(sfs.remote, oldname, newname)
+	if err != nil {
+		return err
+	}
+	err = fs.Rename(sfs.local, oldname, newname)
 	if err != nil {
 		return err
 	}
 
-	sfs.changed(newname, true)
-	sfs.changed(oldname, false)
-	return nil
+	return sfs.Sync()
 }
 
 func (sfs *SyncFS) Chmod(name string, mode fs.FileMode) error {
