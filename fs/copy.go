@@ -18,11 +18,11 @@ func CopyAll(fsys FS, src, dst string) error {
 }
 
 func CopyFS(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
-	srcInfo, srcErr := Stat(srcFS, srcPath)
+	srcInfo, srcErr := Lstat(srcFS, srcPath)
 	if srcErr != nil {
 		return srcErr
 	}
-	dstInfo, dstErr := Stat(dstFS, dstPath)
+	dstInfo, dstErr := Lstat(dstFS, dstPath)
 	if dstErr == nil && !dstInfo.IsDir() {
 		return fmt.Errorf("will not overwrite %q", dstPath)
 	}
@@ -40,11 +40,11 @@ func CopyFS(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
 
 // CopyNewFS copies from srcFS/srcPath to dstFS/dstPath, overwriting files if src is newer.
 func CopyNewFS(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
-	srcInfo, srcErr := Stat(srcFS, srcPath)
+	srcInfo, srcErr := Lstat(srcFS, srcPath)
 	if srcErr != nil {
 		return srcErr
 	}
-	dstInfo, dstErr := Stat(dstFS, dstPath)
+	dstInfo, dstErr := Lstat(dstFS, dstPath)
 
 	// If destination exists and is a file, check mod time
 	if dstErr == nil && !dstInfo.IsDir() {

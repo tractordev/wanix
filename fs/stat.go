@@ -9,6 +9,10 @@ func Stat(fsys FS, name string) (FileInfo, error) {
 	return StatContext(ContextFor(fsys), fsys, name)
 }
 
+func Lstat(fsys FS, name string) (FileInfo, error) {
+	return StatContext(WithNoFollow(ContextFor(fsys)), fsys, name)
+}
+
 type StatContextFS interface {
 	FS
 	StatContext(ctx context.Context, name string) (FileInfo, error)
