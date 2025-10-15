@@ -32,6 +32,11 @@ type RemoteFS interface {
 	PatchFS
 }
 
+// TODO:
+// - max changing time before forced sync
+// - regular sync interface. adaptive?
+// - ignore paths
+
 // SyncFS provides a filesystem that syncs between local and remote filesystems.
 // All operations are applied to local first, then synced to remote.
 type SyncFS struct {
@@ -39,6 +44,7 @@ type SyncFS struct {
 	remote RemoteFS // Remote filesystem
 
 	debounce  *time.Timer
+	delay     time.Duration
 	syncLock  sync.Mutex
 	writeLock *sync.WaitGroup
 	changes   map[string]bool
@@ -48,10 +54,11 @@ type SyncFS struct {
 }
 
 // New creates a new SyncFS with the given local and remote filesystems
-func New(local fs.FS, remote RemoteFS) *SyncFS {
+func New(local fs.FS, remote RemoteFS, delay time.Duration) *SyncFS {
 	sfs := &SyncFS{
 		local:  local,
 		remote: remote,
+		delay:  delay,
 		log:    slog.Default(), // for now
 	}
 	return sfs
@@ -358,7 +365,7 @@ func (sfs *SyncFS) changed(name string, exists bool) {
 	if sfs.debounce != nil {
 		sfs.debounce.Stop()
 	}
-	sfs.debounce = time.AfterFunc(3*time.Second, func() {
+	sfs.debounce = time.AfterFunc(sfs.delay, func() {
 		sfs.Sync()
 	})
 }

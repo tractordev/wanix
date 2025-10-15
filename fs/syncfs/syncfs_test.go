@@ -105,7 +105,7 @@ func (m *mockRemoteFS) Patch(ctx context.Context, name string, tarBuf bytes.Buff
 func setupTestFS(t *testing.T) (*SyncFS, *memfs.FS, *mockRemoteFS) {
 	local := memfs.New()
 	remote := newMockRemoteFS()
-	sfs := New(local, remote)
+	sfs := New(local, remote, 1*time.Second)
 	return sfs, local, remote
 }
 
@@ -1050,7 +1050,7 @@ func TestSyncFS_WriteOperationsBlockDuringSync(t *testing.T) {
 	// Create a slow remote that takes time to sync
 	local := memfs.New()
 	remote := newSlowMockRemoteFS(200*time.Millisecond, 100*time.Millisecond)
-	sfs := New(local, remote)
+	sfs := New(local, remote, 1*time.Second)
 
 	// Add some files to remote to make sync take time
 	writeFile(t, remote.FS, "remote1.txt", "content1")
@@ -1204,7 +1204,7 @@ func TestSyncFS_WriteOperationsBlockDuringSync(t *testing.T) {
 func TestSyncFS_MultipleWriteOperationsBlockAndUnblock(t *testing.T) {
 	local := memfs.New()
 	remote := newSlowMockRemoteFS(300*time.Millisecond, 0)
-	sfs := New(local, remote)
+	sfs := New(local, remote, 1*time.Second)
 
 	// Initialize with some content
 	if err := sfs.Sync(); err != nil {

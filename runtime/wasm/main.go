@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"log"
 	"syscall/js"
+	"time"
 
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
@@ -71,7 +72,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	sfs := syncfs.New(opfs, r2fs)
+	sfs := syncfs.New(opfs, r2fs, 3*time.Second)
 	go func() {
 		if err := sfs.Sync(); err != nil {
 			log.Printf("err syncing: %v\n", err)
