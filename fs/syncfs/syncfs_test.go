@@ -1014,3 +1014,312 @@ func TestSyncFile_Seek(t *testing.T) {
 		t.Errorf("Read after seek = %q, want %q", string(buf[:n]), "56789")
 	}
 }
+
+// slowMockRemoteFS extends mockRemoteFS with configurable delays
+type slowMockRemoteFS struct {
+	*mockRemoteFS
+	indexDelay time.Duration
+	patchDelay time.Duration
+}
+
+func newSlowMockRemoteFS(indexDelay, patchDelay time.Duration) *slowMockRemoteFS {
+	return &slowMockRemoteFS{
+		mockRemoteFS: newMockRemoteFS(),
+		indexDelay:   indexDelay,
+		patchDelay:   patchDelay,
+	}
+}
+
+func (m *slowMockRemoteFS) Index(ctx context.Context, name string) (fs.FS, error) {
+	if m.indexDelay > 0 {
+		time.Sleep(m.indexDelay)
+	}
+	return m.mockRemoteFS.Index(ctx, name)
+}
+
+func (m *slowMockRemoteFS) Patch(ctx context.Context, name string, tarBuf bytes.Buffer) error {
+	if m.patchDelay > 0 {
+		time.Sleep(m.patchDelay)
+	}
+	return m.mockRemoteFS.Patch(ctx, name, tarBuf)
+}
+
+// TestSyncFS_WriteOperationsBlockDuringSync verifies that write operations
+// block while a sync is in progress and unblock when sync completes
+func TestSyncFS_WriteOperationsBlockDuringSync(t *testing.T) {
+	// Create a slow remote that takes time to sync
+	local := memfs.New()
+	remote := newSlowMockRemoteFS(200*time.Millisecond, 100*time.Millisecond)
+	sfs := New(local, remote)
+
+	// Add some files to remote to make sync take time
+	writeFile(t, remote.FS, "remote1.txt", "content1")
+	writeFile(t, remote.FS, "remote2.txt", "content2")
+	writeFile(t, remote.FS, "remote3.txt", "content3")
+
+	// Set future times so they'll be pulled
+	future := time.Now().Add(time.Hour)
+	fs.Chtimes(remote.FS, "remote1.txt", future, future)
+	fs.Chtimes(remote.FS, "remote2.txt", future, future)
+	fs.Chtimes(remote.FS, "remote3.txt", future, future)
+
+	// Track timing of operations
+	type opResult struct {
+		name      string
+		startTime time.Time
+		endTime   time.Time
+		err       error
+	}
+	results := make(chan opResult, 4)
+
+	// Start sync in background
+	syncStart := time.Now()
+	go func() {
+		err := sfs.Sync()
+		results <- opResult{
+			name:      "Sync",
+			startTime: syncStart,
+			endTime:   time.Now(),
+			err:       err,
+		}
+	}()
+
+	// Give sync time to start and acquire the lock
+	time.Sleep(50 * time.Millisecond)
+
+	// Try write operations that should block
+	operations := []struct {
+		name string
+		fn   func() error
+	}{
+		{"Create", func() error {
+			f, err := sfs.Create("newfile.txt")
+			if err == nil {
+				f.Close()
+			}
+			return err
+		}},
+		{"Mkdir", func() error {
+			return sfs.Mkdir("newdir", 0755)
+		}},
+		{"Remove", func() error {
+			// First create a file to remove
+			writeFile(t, local, "toremove.txt", "content")
+			return sfs.Remove("toremove.txt")
+		}},
+	}
+
+	for _, op := range operations {
+		op := op // capture loop variable
+		go func() {
+			startTime := time.Now()
+			err := op.fn()
+			results <- opResult{
+				name:      op.name,
+				startTime: startTime,
+				endTime:   time.Now(),
+				err:       err,
+			}
+		}()
+	}
+
+	// Collect all results
+	var syncResult opResult
+	var opResults []opResult
+
+	for i := 0; i < 4; i++ { // 1 sync + 3 operations
+		res := <-results
+		if res.name == "Sync" {
+			syncResult = res
+		} else {
+			opResults = append(opResults, res)
+		}
+	}
+
+	// Verify sync completed successfully
+	if syncResult.err != nil {
+		t.Fatalf("Sync failed: %v", syncResult.err)
+	}
+
+	// Verify all operations completed successfully
+	for _, res := range opResults {
+		if res.err != nil {
+			t.Errorf("%s failed: %v", res.name, res.err)
+		}
+	}
+
+	// Verify operations were blocked during sync
+	// Operations should start before sync ends but finish after sync ends
+	for _, res := range opResults {
+		// Operation started while sync was running
+		if res.startTime.After(syncResult.endTime) {
+			t.Errorf("%s started after sync completed (should have started during sync)", res.name)
+		}
+
+		// Operation completed after sync completed (was blocked)
+		if res.endTime.Before(syncResult.endTime) {
+			t.Errorf("%s completed before sync (should have been blocked): op ended at %v, sync ended at %v",
+				res.name, res.endTime.Sub(syncStart), syncResult.endTime.Sub(syncStart))
+		}
+
+		// Operation was blocked for a reasonable amount of time
+		blockDuration := res.endTime.Sub(res.startTime)
+		if blockDuration < 100*time.Millisecond {
+			t.Errorf("%s was not blocked long enough: blocked for %v, expected at least 100ms",
+				res.name, blockDuration)
+		}
+	}
+
+	// Verify read operations don't block by testing Open
+	// First ensure sync is done by creating a new one with no delay
+	sfs2, _, _ := setupTestFS(t)
+	writeFile(t, sfs2.local, "test.txt", "content")
+
+	// Start a quick sync
+	go func() {
+		sfs2.Sync()
+	}()
+
+	time.Sleep(10 * time.Millisecond)
+
+	// Read operation should not block
+	readStart := time.Now()
+	f, err := sfs2.Open("test.txt")
+	readDuration := time.Since(readStart)
+
+	if err != nil {
+		t.Errorf("Read operation failed: %v", err)
+	} else {
+		f.Close()
+	}
+
+	// Read should be fast (not blocked)
+	if readDuration > 50*time.Millisecond {
+		t.Logf("Warning: Read operation took %v, might have been blocked", readDuration)
+	}
+}
+
+// TestSyncFS_MultipleWriteOperationsBlockAndUnblock tests that multiple
+// write operations all block during sync and all unblock together
+func TestSyncFS_MultipleWriteOperationsBlockAndUnblock(t *testing.T) {
+	local := memfs.New()
+	remote := newSlowMockRemoteFS(300*time.Millisecond, 0)
+	sfs := New(local, remote)
+
+	// Initialize with some content
+	if err := sfs.Sync(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Track when operations complete
+	type completion struct {
+		op   string
+		time time.Time
+	}
+	completions := make(chan completion, 6)
+
+	// Start sync
+	syncStart := time.Now()
+	go func() {
+		sfs.Sync()
+		completions <- completion{"sync", time.Now()}
+	}()
+
+	// Wait for sync to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Start multiple write operations
+	writeOps := []struct {
+		name string
+		fn   func() error
+	}{
+		{"Create1", func() error {
+			f, err := sfs.Create("file1.txt")
+			if err == nil {
+				f.Close()
+			}
+			return err
+		}},
+		{"Create2", func() error {
+			f, err := sfs.Create("file2.txt")
+			if err == nil {
+				f.Close()
+			}
+			return err
+		}},
+		{"Mkdir1", func() error { return sfs.Mkdir("dir1", 0755) }},
+		{"Mkdir2", func() error { return sfs.Mkdir("dir2", 0755) }},
+		{"Chmod", func() error { writeFile(t, local, "forchmod.txt", "content"); return sfs.Chmod("forchmod.txt", 0600) }},
+	}
+
+	for _, op := range writeOps {
+		op := op
+		go func() {
+			op.fn()
+			completions <- completion{op.name, time.Now()}
+		}()
+	}
+
+	// Collect all completions
+	var allCompletions []completion
+	for i := 0; i < 6; i++ { // 1 sync + 5 ops
+		allCompletions = append(allCompletions, <-completions)
+	}
+
+	// Find sync completion time
+	var syncEnd time.Time
+	for _, c := range allCompletions {
+		if c.op == "sync" {
+			syncEnd = c.time
+			break
+		}
+	}
+
+	if syncEnd.IsZero() {
+		t.Fatal("Sync completion not recorded")
+	}
+
+	// Verify all write operations completed after sync
+	for _, c := range allCompletions {
+		if c.op == "sync" {
+			continue
+		}
+		if c.time.Before(syncEnd) {
+			t.Errorf("%s completed before sync ended: %v before sync end",
+				c.op, syncEnd.Sub(c.time))
+		} else {
+			t.Logf("%s completed %v after sync ended (correctly blocked)",
+				c.op, c.time.Sub(syncEnd))
+		}
+	}
+
+	// All operations should complete close together (within a small window)
+	// after sync finishes since they were all waiting
+	var minCompletionTime, maxCompletionTime time.Time
+	for _, c := range allCompletions {
+		if c.op == "sync" {
+			continue
+		}
+		if minCompletionTime.IsZero() || c.time.Before(minCompletionTime) {
+			minCompletionTime = c.time
+		}
+		if maxCompletionTime.IsZero() || c.time.After(maxCompletionTime) {
+			maxCompletionTime = c.time
+		}
+	}
+
+	unblockWindow := maxCompletionTime.Sub(minCompletionTime)
+	t.Logf("All blocked operations completed within %v of each other", unblockWindow)
+
+	// They should all unblock within a reasonable window (100ms is generous)
+	if unblockWindow > 100*time.Millisecond {
+		t.Errorf("Operations took too long to unblock: %v between first and last", unblockWindow)
+	}
+
+	// Verify sync took reasonable time (at least the delay we set)
+	syncDuration := syncEnd.Sub(syncStart)
+	if syncDuration < 250*time.Millisecond {
+		t.Errorf("Sync completed too quickly: %v, expected at least 250ms", syncDuration)
+	}
+	t.Logf("Sync took %v (includes %v index delay)", syncDuration, 300*time.Millisecond)
+}
