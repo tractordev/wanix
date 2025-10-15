@@ -15,7 +15,7 @@ import (
 func newTestServer() (*memfs.FS, *httptest.Server, *FS) {
 	memFS := memfs.New()
 	server := httptest.NewServer(NewServer(memFS))
-	client := New(server.URL)
+	client := New(server.URL, nil)
 	return memFS, server, client
 }
 

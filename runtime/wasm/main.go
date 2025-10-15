@@ -67,7 +67,7 @@ func main() {
 		// root.Bind("#bundle", "bundle")
 	}
 
-	r2fs := httpfs.New("https://r2fs.proteco.workers.dev/")
+	r2fs := httpfs.New("https://r2fs.proteco.workers.dev/", nil)
 	opfs, err := fsa.OPFS("r2fs")
 	if err != nil {
 		log.Fatal(err)

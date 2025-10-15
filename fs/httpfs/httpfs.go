@@ -53,24 +53,16 @@ func (fsys *FS) unwrap() *FS {
 }
 
 // New creates a new HTTP filesystem with the given base URL
-func New(baseURL string) *FS {
+func New(baseURL string, client *http.Client) *FS {
+	if client == nil {
+		client = &http.Client{}
+	}
 	return &FS{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
-		client:  &http.Client{},
+		client:  client,
 		log:     slog.Default(), // for now
 	}
 }
-
-// NewWithClient creates a new HTTP filesystem with a custom HTTP client
-// func NewWithClient(baseURL string, client *http.Client) *FS {
-// 	return &FS{
-// 		baseURL:    strings.TrimSuffix(baseURL, "/"),
-// 		client:     client,
-// 		nodeCache:  make(map[string]*cacheEntry),
-// 		dirTTL:     8 * time.Second,
-// 		refreshing: make(map[string]bool),
-// 	}
-// }
 
 func (fsys *FS) baseURLPath() string {
 	u, _ := url.Parse(fsys.baseURL)

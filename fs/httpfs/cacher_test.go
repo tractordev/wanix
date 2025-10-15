@@ -13,7 +13,7 @@ import (
 func newTestServerWithCache() (*memfs.FS, *httptest.Server, *Cacher) {
 	memFS := memfs.New()
 	server := httptest.NewServer(NewServer(memFS))
-	client := NewCacher(New(server.URL))
+	client := NewCacher(New(server.URL, nil))
 	return memFS, server, client
 }
 
