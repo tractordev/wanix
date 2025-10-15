@@ -409,6 +409,16 @@ func (sfs *SyncFS) ReadDir(name string) (entries []fs.DirEntry, err error) {
 	return
 }
 
+// Readlink reads the target of a symbolic link
+func (sfs *SyncFS) Readlink(name string) (string, error) {
+	target, err := fs.Readlink(sfs.local, name)
+	if err == nil {
+		return target, nil
+	}
+
+	return "", err
+}
+
 // Write operations
 
 // Create creates a new file
@@ -452,7 +462,6 @@ func (sfs *SyncFS) OpenFile(name string, flag int, perm fs.FileMode) (f fs.File,
 func (sfs *SyncFS) Mkdir(name string, perm fs.FileMode) error {
 	name = sfs.clean(name)
 	sfs.wait()
-	defer sfs.changed(name, true)
 	sfs.log.Debug("Mkdir", "name", name, "perm", perm)
 
 	err := fs.Mkdir(sfs.local, name, perm)
@@ -460,13 +469,13 @@ func (sfs *SyncFS) Mkdir(name string, perm fs.FileMode) error {
 		return err
 	}
 
+	sfs.changed(name, true)
 	return nil
 }
 
 func (sfs *SyncFS) Remove(name string) error {
 	name = sfs.clean(name)
 	sfs.wait()
-	defer sfs.changed(name, false)
 	sfs.log.Debug("Remove", "name", name)
 
 	err := fs.Remove(sfs.local, name)
@@ -474,6 +483,7 @@ func (sfs *SyncFS) Remove(name string) error {
 		return err
 	}
 
+	sfs.changed(name, false)
 	return nil
 }
 
@@ -481,8 +491,6 @@ func (sfs *SyncFS) Rename(oldname, newname string) error {
 	newname = sfs.clean(newname)
 	oldname = sfs.clean(oldname)
 	sfs.wait()
-	defer sfs.changed(newname, true)
-	defer sfs.changed(oldname, false)
 	sfs.log.Debug("Rename", "oldname", oldname, "newname", newname)
 
 	err := fs.Rename(sfs.local, oldname, newname)
@@ -490,13 +498,14 @@ func (sfs *SyncFS) Rename(oldname, newname string) error {
 		return err
 	}
 
+	sfs.changed(newname, true)
+	sfs.changed(oldname, false)
 	return nil
 }
 
 func (sfs *SyncFS) Chmod(name string, mode fs.FileMode) error {
 	name = sfs.clean(name)
 	sfs.wait()
-	defer sfs.changed(name, true)
 	sfs.log.Debug("Chmod", "name", name, "mode", mode)
 
 	err := fs.Chmod(sfs.local, name, mode)
@@ -504,13 +513,13 @@ func (sfs *SyncFS) Chmod(name string, mode fs.FileMode) error {
 		return err
 	}
 
+	sfs.changed(name, true)
 	return nil
 }
 
 func (sfs *SyncFS) Chown(name string, uid, gid int) error {
 	name = sfs.clean(name)
 	sfs.wait()
-	defer sfs.changed(name, true)
 	sfs.log.Debug("Chown", "name", name, "uid", uid, "gid", gid)
 
 	err := fs.Chown(sfs.local, name, uid, gid)
@@ -518,13 +527,13 @@ func (sfs *SyncFS) Chown(name string, uid, gid int) error {
 		return err
 	}
 
+	sfs.changed(name, true)
 	return nil
 }
 
 func (sfs *SyncFS) Chtimes(name string, atime, mtime time.Time) error {
 	name = sfs.clean(name)
 	sfs.wait()
-	defer sfs.changed(name, true)
 	sfs.log.Debug("Chtimes", "name", name, "atime", atime, "mtime", mtime)
 
 	err := fs.Chtimes(sfs.local, name, atime, mtime)
@@ -532,6 +541,23 @@ func (sfs *SyncFS) Chtimes(name string, atime, mtime time.Time) error {
 		return err
 	}
 
+	sfs.changed(name, true)
+	return nil
+}
+
+// Symlink creates a symbolic link
+func (sfs *SyncFS) Symlink(oldname, newname string) error {
+	newname = sfs.clean(newname)
+	oldname = sfs.clean(oldname)
+	sfs.wait()
+	sfs.log.Debug("Symlink", "oldname", oldname, "newname", newname)
+
+	err := fs.Symlink(sfs.local, oldname, newname)
+	if err != nil {
+		return err
+	}
+
+	sfs.changed(newname, true)
 	return nil
 }
 
@@ -630,30 +656,4 @@ func (sf *syncFile) Close() error {
 		sf.sfs.changed(sf.path, true)
 	}
 	return err
-}
-
-// Readlink reads the target of a symbolic link
-func (sfs *SyncFS) Readlink(name string) (string, error) {
-	target, err := fs.Readlink(sfs.local, name)
-	if err == nil {
-		return target, nil
-	}
-
-	return "", err
-}
-
-// Symlink creates a symbolic link
-func (sfs *SyncFS) Symlink(oldname, newname string) error {
-	newname = sfs.clean(newname)
-	oldname = sfs.clean(oldname)
-	sfs.wait()
-	defer sfs.changed(newname, true)
-	sfs.log.Debug("Symlink", "oldname", oldname, "newname", newname)
-
-	err := fs.Symlink(sfs.local, oldname, newname)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
