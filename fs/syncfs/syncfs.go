@@ -38,9 +38,10 @@ type SyncFS struct {
 	local  fs.FS    // Local filesystem
 	remote RemoteFS // Remote filesystem
 
+	debounce  *time.Timer
+	syncLock  sync.Mutex
 	writeLock *sync.WaitGroup
 	changes   map[string]bool
-	debounce  *time.Timer
 	mu        sync.Mutex
 
 	log *slog.Logger
@@ -57,6 +58,8 @@ func New(local fs.FS, remote RemoteFS) *SyncFS {
 }
 
 func (sfs *SyncFS) Sync() error {
+	sfs.syncLock.Lock()
+	defer sfs.syncLock.Unlock()
 	sfs.log.Debug("Sync:start")
 	startTime := time.Now()
 	sfs.writeLock = &sync.WaitGroup{}
