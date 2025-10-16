@@ -6,4 +6,3 @@ assets/wanix.wasm
 assets/wanix.tinygo.wasm
 assets/wanix.go.wasm
 assets/wanix.debug.wasm
-wasi/worker/lib.js
