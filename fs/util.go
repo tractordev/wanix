@@ -40,7 +40,7 @@ func IsSymlink(mode FileMode) bool {
 }
 
 func Exists(fsys FS, path string) (bool, error) {
-	_, err := Stat(fsys, path)
+	_, err := Lstat(fsys, path)
 	if err == nil {
 		return true, nil
 	}
