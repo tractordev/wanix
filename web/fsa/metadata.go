@@ -26,6 +26,7 @@ type MetadataStore struct {
 	dirty        bool         // Needs flush to disk
 	writePending bool         // Write is scheduled
 	mu           sync.RWMutex // Protects dirty and writePending flags
+	fileMu       sync.Mutex   // Protects file operations
 }
 
 var globalMetadata *MetadataStore
@@ -140,6 +141,8 @@ func (ms *MetadataStore) flushToDisk() {
 			return
 		}
 
+		ms.fileMu.Lock()
+		defer ms.fileMu.Unlock()
 		if err := fs.WriteFile(ms.opfsRoot, "#stat", b, 0755); err != nil {
 			log.Println("fsa: metadata: write:", err)
 		}
@@ -152,6 +155,8 @@ func (ms *MetadataStore) loadFromDisk() error {
 		return nil // Not initialized yet
 	}
 
+	ms.fileMu.Lock()
+	defer ms.fileMu.Unlock()
 	b, err := fs.ReadFile(ms.opfsRoot, "#stat")
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
