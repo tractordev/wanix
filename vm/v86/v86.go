@@ -10,6 +10,8 @@ import (
 	"path"
 	"syscall/js"
 
+	_ "embed"
+
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
@@ -18,6 +20,9 @@ import (
 	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/web/runtime"
 )
+
+//go:embed v86.worker.min.js
+var v86Bundle []byte
 
 type VM struct {
 	id     string
@@ -110,7 +115,9 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 }
 
 func makeVM(id string, options map[string]any) (js.Value, js.Value) {
-	worker := js.Global().Get("Worker").New("/runtime/assets/v86.js", js.ValueOf(map[string]any{"type": "module"})) //js.ValueOf(map[string]any{"type": "module"})
+	blob := js.Global().Get("Blob").New(js.ValueOf([]any{string(v86Bundle)}), js.ValueOf(map[string]any{"type": "text/javascript"}))
+	url := js.Global().Get("URL").Call("createObjectURL", blob)
+	worker := js.Global().Get("Worker").New(url) //js.ValueOf(map[string]any{"type": "module"})
 	worker.Set("onerror", js.FuncOf(func(this js.Value, args []js.Value) any {
 		js.Global().Get("console").Call("error", args[0])
 		return nil
