@@ -235,27 +235,30 @@ func (q *qemuAdapter) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func (q *qemuAdapter) Write(p []byte) (int, error) {
+func (q *qemuAdapter) Write(p []byte) (n int, err error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
 	q.writeBuffer = append(q.writeBuffer, p...)
 
-	if len(q.writeBuffer) < 4 {
-		return len(p), nil
+	for {
+		if len(q.writeBuffer) < 4 {
+			break
+		}
+
+		length := binary.BigEndian.Uint32(q.writeBuffer[:4])
+		if len(q.writeBuffer) < int(length)+4 {
+			break
+		}
+
+		err := q.WriteMessage(websocket.BinaryMessage, q.writeBuffer[4:4+length])
+		if err != nil {
+			return 0, err
+		}
+
+		q.writeBuffer = q.writeBuffer[4+length:]
 	}
 
-	length := binary.BigEndian.Uint32(q.writeBuffer[:4])
-	if len(q.writeBuffer) < int(length)+4 {
-		return len(p), nil
-	}
-
-	err := q.WriteMessage(websocket.BinaryMessage, q.writeBuffer[4:4+length])
-	if err != nil {
-		return 0, err
-	}
-
-	q.writeBuffer = q.writeBuffer[4+length:]
 	return len(p), nil
 }
 
