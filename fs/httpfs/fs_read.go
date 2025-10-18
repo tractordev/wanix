@@ -20,6 +20,9 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 
 // OpenContext opens the named file for reading with context
 func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
+	if fsys.shouldIgnore(name) {
+		return nil, fs.ErrNotExist
+	}
 	fsys.log.Debug("Open", "name", name)
 	url := fsys.buildURL(name)
 
@@ -61,6 +64,9 @@ func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
 
 // StatContext performs a HEAD request to get file metadata
 func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+	if fsys.shouldIgnore(name) {
+		return nil, fs.ErrNotExist
+	}
 	fsys.log.Debug("Stat", "name", name)
 	url := fsys.buildURL(name)
 
@@ -145,6 +151,9 @@ func (fsys *FS) Readlink(name string) (string, error) {
 }
 
 func (fsys *FS) ReadlinkContext(ctx context.Context, name string) (string, error) {
+	if fsys.shouldIgnore(name) {
+		return "", fs.ErrNotExist
+	}
 	fsys.log.Debug("Readlink", "name", name)
 
 	url := fsys.buildURL(name)
@@ -181,6 +190,9 @@ func (fsys *FS) ReadFile(name string) ([]byte, error) {
 }
 
 func (fsys *FS) ReadFileContext(ctx context.Context, name string) ([]byte, error) {
+	if fsys.shouldIgnore(name) {
+		return nil, fs.ErrNotExist
+	}
 	fsys.log.Debug("ReadFile", "name", name)
 
 	url := fsys.buildURL(name)

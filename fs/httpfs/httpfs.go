@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"tractor.dev/wanix/fs"
@@ -43,9 +44,11 @@ func Patch(ctx context.Context, fsys fs.FS, name string, tarBuf bytes.Buffer) er
 
 // FS implements an HTTP-backed filesystem following the design specification
 type FS struct {
-	baseURL string
-	client  *http.Client
-	log     *slog.Logger
+	baseURL   string
+	client    *http.Client
+	log       *slog.Logger
+	ignores   []string
+	ignoresMu sync.Mutex
 }
 
 func (fsys *FS) unwrap() *FS {
@@ -62,6 +65,23 @@ func New(baseURL string, client *http.Client) *FS {
 		client:  client,
 		log:     slog.Default(), // for now
 	}
+}
+
+func (fsys *FS) Ignore(name string) {
+	fsys.ignoresMu.Lock()
+	defer fsys.ignoresMu.Unlock()
+	fsys.ignores = append(fsys.ignores, name)
+}
+
+func (fsys *FS) shouldIgnore(name string) bool {
+	fsys.ignoresMu.Lock()
+	defer fsys.ignoresMu.Unlock()
+	for _, ignore := range fsys.ignores {
+		if strings.HasSuffix(name, ignore) {
+			return true
+		}
+	}
+	return false
 }
 
 func (fsys *FS) baseURLPath() string {
