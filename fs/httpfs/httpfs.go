@@ -67,10 +67,10 @@ func New(baseURL string, client *http.Client) *FS {
 	}
 }
 
-func (fsys *FS) Ignore(name string) {
+func (fsys *FS) Ignore(names ...string) {
 	fsys.ignoresMu.Lock()
 	defer fsys.ignoresMu.Unlock()
-	fsys.ignores = append(fsys.ignores, name)
+	fsys.ignores = append(fsys.ignores, names...)
 }
 
 func (fsys *FS) shouldIgnore(name string) bool {
