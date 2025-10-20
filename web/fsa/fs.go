@@ -167,6 +167,8 @@ func (fsys *FS) buildFileInfo(path string, jsHandle js.Value) (fs.FileInfo, erro
 		mode |= fs.ModeDir
 	}
 
+	// log.Println("buildFileInfo", path, hasMetadata, mode, isDir, mode&fs.ModeDir != 0)
+
 	return fskit.Entry(name, mode, size, mtime), nil
 }
 
@@ -535,6 +537,10 @@ func (fsys *FS) openDirectory(dirPath string, handle js.Value) fs.File {
 				mode = DefaultFileMode
 				size = 0
 			}
+		}
+
+		if isDir {
+			mode |= fs.ModeDir
 		}
 
 		entries = append(entries, fskit.Entry(entryName, mode, size))
