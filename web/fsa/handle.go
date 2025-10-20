@@ -42,6 +42,9 @@ func (h *FileHandle) tryCreateWritable() (err error) {
 	if !h.writer.IsUndefined() {
 		return nil
 	}
+	if h.Value.Get("createWritable").IsUndefined() {
+		return fs.ErrNotSupported
+	}
 	h.writer, err = jsutil.AwaitErr(h.Value.Call("createWritable", map[string]any{"keepExistingData": h.append}))
 	return
 }
