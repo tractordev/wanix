@@ -8,7 +8,7 @@ import (
 )
 
 func IsDir(fsys FS, path string) (bool, error) {
-	fi, err := Stat(fsys, path)
+	fi, err := Lstat(fsys, path)
 	if err != nil {
 		return false, err
 	}
@@ -19,7 +19,7 @@ func IsEmpty(fsys FS, path string) (bool, error) {
 	if b, _ := Exists(fsys, path); !b {
 		return false, fmt.Errorf("path does not exist: %q", path)
 	}
-	fi, err := Stat(fsys, path)
+	fi, err := Lstat(fsys, path)
 	if err != nil {
 		return false, err
 	}
@@ -51,7 +51,7 @@ func Exists(fsys FS, path string) (bool, error) {
 }
 
 func DirExists(fsys FS, path string) (bool, error) {
-	fi, err := Stat(fsys, path)
+	fi, err := Lstat(fsys, path)
 	if err == nil && fi.IsDir() {
 		return true, nil
 	}

@@ -13,6 +13,11 @@ func Lstat(fsys FS, name string) (FileInfo, error) {
 	return StatContext(WithNoFollow(ContextFor(fsys)), fsys, name)
 }
 
+// TODO: change to StatContext(FS, Context, string)
+func LstatContext(ctx context.Context, fsys FS, name string) (FileInfo, error) {
+	return StatContext(WithNoFollow(ctx), fsys, name)
+}
+
 type StatContextFS interface {
 	FS
 	StatContext(ctx context.Context, name string) (FileInfo, error)
