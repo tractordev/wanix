@@ -134,7 +134,7 @@ func (ns *NS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error)
 		for _, ref := range toStat {
 			fullName := path.Join(ref.path, relativeName)
 			// log.Println("resolve stat:", reflect.TypeOf(ref.fs), fullName)
-			_, err := fs.StatContext(ctx, ref.fs, fullName)
+			_, err := fs.LstatContext(ctx, ref.fs, fullName)
 			if err != nil {
 				if !errors.Is(err, fs.ErrNotExist) {
 					log.Println("resolve stat:", err)
