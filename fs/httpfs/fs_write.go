@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -137,14 +138,18 @@ func (fsys *FS) Rename(oldname, newname string) error {
 
 func (fsys *FS) RenameContext(ctx context.Context, oldname, newname string) error {
 	fsys.log.Debug("Rename", "oldname", oldname, "newname", newname)
-	url := fsys.buildURL(oldname)
+	u := fsys.buildURL(oldname)
 
-	req, err := http.NewRequestWithContext(ctx, "MOVE", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "MOVE", u, nil)
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("Destination", "/"+newname)
+	dest, err := url.Parse(fsys.buildURL(newname))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Destination", dest.Path)
 
 	resp, err := fsys.doRequest(req)
 	if err != nil {
