@@ -22,13 +22,13 @@ func CopyFS(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
 	if srcErr != nil {
 		return srcErr
 	}
-	dstInfo, dstErr := Lstat(dstFS, dstPath)
-	if dstErr == nil && !dstInfo.IsDir() {
-		return fmt.Errorf("will not overwrite %q", dstPath)
-	}
+	// dstInfo, dstErr := Lstat(dstFS, dstPath)
+	// if dstErr == nil && !dstInfo.IsDir() {
+	// 	return fmt.Errorf("will not overwrite %q", dstPath)
+	// }
 	switch mode := srcInfo.Mode(); mode & ModeType {
 	case os.ModeSymlink:
-		return copySymlink(srcFS, srcPath, dstFS, dstPath, mode)
+		return copySymlink(srcFS, srcPath, dstFS, dstPath)
 	case os.ModeDir:
 		return copyDir(srcFS, srcPath, dstFS, dstPath, mode)
 	case 0:
@@ -57,7 +57,7 @@ func CopyNewFS(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
 
 	switch mode := srcInfo.Mode(); mode & ModeType {
 	case os.ModeSymlink:
-		return copySymlink(srcFS, srcPath, dstFS, dstPath, mode)
+		return copySymlink(srcFS, srcPath, dstFS, dstPath)
 	case os.ModeDir:
 		return copyDirNewer(srcFS, srcPath, dstFS, dstPath, mode)
 	case 0:
@@ -101,7 +101,7 @@ func copyDirNewer(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileM
 				return err
 			}
 		} else if info.Mode()&os.ModeSymlink != 0 {
-			if err := copySymlink(srcFS, srcEntry, dstFS, dstEntry, info.Mode()); err != nil {
+			if err := copySymlink(srcFS, srcEntry, dstFS, dstEntry); err != nil {
 				return err
 			}
 		} else {
@@ -122,16 +122,12 @@ func copyDirNewer(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileM
 	return nil
 }
 
-func copySymlink(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileMode) error {
+func copySymlink(srcFS FS, srcPath string, dstFS FS, dstPath string) error {
 	target, err := Readlink(srcFS, srcPath)
 	if err != nil {
 		return err
 	}
-	err = Symlink(dstFS, target, dstPath)
-	if err != nil {
-		return err
-	}
-	return Chmod(dstFS, dstPath, mode.Perm())
+	return Symlink(dstFS, target, dstPath)
 }
 
 func copyFile(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileMode) (err error) {
