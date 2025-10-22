@@ -50,13 +50,15 @@ func (h *Handler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 func Use(level slog.Level) {
-	slog.SetDefault(
-		slog.New(
-			&Handler{
-				Handler: slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
-					Level: level,
-				}),
-			},
-		),
+	slog.SetDefault(New(level))
+}
+
+func New(level slog.Level) *slog.Logger {
+	return slog.New(
+		&Handler{
+			Handler: slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
+				Level: level,
+			}),
+		},
 	)
 }
