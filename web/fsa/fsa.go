@@ -51,5 +51,9 @@ func OPFS(pathParts ...string) (fs.FS, error) {
 		return opfsSingleton, nil
 	}
 
-	return fs.Sub(opfsSingleton, path.Join(pathParts...))
+	dir := path.Join(pathParts...)
+	if err := fs.MkdirAll(opfsSingleton, dir, 0o755); err != nil {
+		return nil, err
+	}
+	return fs.Sub(opfsSingleton, dir)
 }
