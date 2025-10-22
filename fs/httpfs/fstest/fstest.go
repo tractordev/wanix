@@ -1,5 +1,3 @@
-//go:build fstest
-
 package main
 
 import (
@@ -33,7 +31,7 @@ func main() {
 	slogger.Use(logLevel)
 
 	var fsys fs.FS
-	hfs := httpfs.New("https://r2fs.proteco.workers.dev/")
+	hfs := httpfs.New("https://r2fs.proteco.workers.dev/", nil)
 	if cacher {
 		fsys = httpfs.NewCacher(hfs)
 	} else {

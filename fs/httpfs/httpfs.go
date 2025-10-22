@@ -67,6 +67,11 @@ func New(baseURL string, client *http.Client) *FS {
 	}
 }
 
+// SetLogger sets the logger for the filesystem
+func (fsys *FS) SetLogger(logger *slog.Logger) {
+	fsys.log = logger
+}
+
 func (fsys *FS) Ignore(names ...string) {
 	fsys.ignoresMu.Lock()
 	defer fsys.ignoresMu.Unlock()
