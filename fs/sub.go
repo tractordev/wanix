@@ -67,6 +67,17 @@ func (f *SubdirFS) fixErr(err error) error {
 	return err
 }
 
+func (f *SubdirFS) Sub(dir string) (FS, error) {
+	if dir == "." {
+		return f, nil
+	}
+	full, err := f.fullName("sub", dir)
+	if err != nil {
+		return nil, err
+	}
+	return &SubdirFS{f.Fsys, full}, nil
+}
+
 func (f *SubdirFS) Open(name string) (File, error) {
 	return f.OpenContext(context.Background(), name)
 }
@@ -113,12 +124,32 @@ func (f *SubdirFS) Chtimes(name string, atime time.Time, mtime time.Time) error 
 	return f.fixErr(Chtimes(f.Fsys, full, atime, mtime))
 }
 
+func (f *SubdirFS) Chmod(name string, mode FileMode) error {
+	full, err := f.fullName("chmod", name)
+	if err != nil {
+		return err
+	}
+	return f.fixErr(Chmod(f.Fsys, full, mode))
+}
+
 func (f *SubdirFS) Remove(name string) error {
 	full, err := f.fullName("remove", name)
 	if err != nil {
 		return err
 	}
 	return f.fixErr(Remove(f.Fsys, full))
+}
+
+func (f *SubdirFS) Rename(oldname string, newname string) error {
+	newfull, err := f.fullName("rename", newname)
+	if err != nil {
+		return err
+	}
+	oldfull, err := f.fullName("rename", oldname)
+	if err != nil {
+		return err
+	}
+	return f.fixErr(Rename(f.Fsys, oldfull, newfull))
 }
 
 func (f *SubdirFS) Symlink(oldname string, newname string) error {
@@ -170,13 +201,5 @@ func (f *SubdirFS) RemoveXattr(ctx context.Context, name string, attr string) er
 	return f.fixErr(RemoveXattr(ctx, f.Fsys, full, attr))
 }
 
-func (f *SubdirFS) Sub(dir string) (FS, error) {
-	if dir == "." {
-		return f, nil
-	}
-	full, err := f.fullName("sub", dir)
-	if err != nil {
-		return nil, err
-	}
-	return &SubdirFS{f.Fsys, full}, nil
-}
+// TODO: watch
+// TODO: chown
