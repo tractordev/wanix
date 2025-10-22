@@ -283,7 +283,7 @@ func (u *FS) copyIfNeeded(name string) (string, error) {
 // If the file exists in the base layer but not in the overlay, it will be
 // copied to the overlay before changing the times.
 func (u *FS) Chtimes(name string, atime, mtime time.Time) error {
-	log.Println("Chtimes", name, atime, mtime)
+	// log.Println("Chtimes", name, atime, mtime)
 	name = filepath.Clean(name)
 	name, err := u.copyIfNeeded(name)
 	if err != nil {
@@ -296,7 +296,7 @@ func (u *FS) Chtimes(name string, atime, mtime time.Time) error {
 // If the file exists in the base layer but not in the overlay, it will be
 // copied to the overlay before changing the mode.
 func (u *FS) Chmod(name string, mode os.FileMode) error {
-	log.Println("Chmod", name, mode)
+	// log.Println("Chmod", name, mode)
 	name = filepath.Clean(name)
 	name, err := u.copyIfNeeded(name)
 	if err != nil {
@@ -309,7 +309,7 @@ func (u *FS) Chmod(name string, mode os.FileMode) error {
 // If the file exists in the base layer but not in the overlay, it will be
 // copied to the overlay before changing ownership.
 func (u *FS) Chown(name string, uid, gid int) error {
-	log.Println("Chown", name, uid, gid)
+	// log.Println("Chown", name, uid, gid)
 	name = filepath.Clean(name)
 	name, err := u.copyIfNeeded(name)
 	if err != nil {
@@ -339,7 +339,7 @@ func (u *FS) Rename(oldname, newname string) error {
 	// 0. Normalize paths
 	oldname = filepath.Clean(oldname)
 	newname = filepath.Clean(newname)
-	log.Println("Rename", oldname, newname)
+	// log.Println("Rename", oldname, newname)
 
 	// 1. Resolve source path (oldname) through rename chain
 	src, err := u.resolvePath(oldname)
@@ -473,7 +473,7 @@ func (u *FS) Rename(oldname, newname string) error {
 func (u *FS) Remove(name string) error {
 	// 0. Normalize path
 	name = filepath.Clean(name)
-	log.Println("Remove", name)
+	// log.Println("Remove", name)
 
 	// 1. Resolve to terminal path (following rename chains)
 	target, err := u.resolveTerminal(name)
@@ -626,7 +626,7 @@ func (u *FS) Remove(name string) error {
 func (u *FS) Symlink(oldname, newname string) error {
 	// 1. Use raw path for new symlink (don't follow renames for create-destination)
 	newpath := filepath.Clean(newname)
-	log.Println("Symlink", oldname, newname)
+	// log.Println("Symlink", oldname, newname)
 
 	// 2. Check and prepare parent directory
 	dir := filepath.Dir(newpath)
@@ -702,7 +702,7 @@ func (u *FS) Symlink(oldname, newname string) error {
 func (u *FS) Mkdir(name string, perm os.FileMode) error {
 	// 1. Use raw path for new directory (don't follow renames for create-destination)
 	path := filepath.Clean(name)
-	log.Println("Mkdir", name, perm)
+	// log.Println("Mkdir", name, perm)
 
 	// 2. Check if directory already exists in either layer
 	if _, err := fs.Stat(u.Overlay, path); err == nil {
@@ -781,7 +781,7 @@ func (u *FS) Create(name string) (fs.File, error) {
 func (u *FS) Stat(name string) (os.FileInfo, error) {
 	// 0. Normalize path
 	name = filepath.Clean(name)
-	log.Println("Stat", name)
+	// log.Println("Stat", name)
 
 	// 1. Resolve rename chain
 	path, err := u.resolvePath(name)
@@ -883,7 +883,7 @@ func (u *FS) Deleted() []string {
 func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) {
 	// 0. Normalize path
 	name = filepath.Clean(name)
-	log.Println("OpenFile", name, flag, perm)
+	// log.Println("OpenFile", name, flag, perm)
 
 	// 1. Resolve rename chain and check tombstone
 	path, err := u.resolvePath(name)
@@ -1028,7 +1028,7 @@ func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) 
 func (u *FS) Open(name string) (fs.File, error) {
 	// 0. Normalize path
 	name = filepath.Clean(name)
-	log.Println("Open", name)
+	// log.Println("Open", name)
 
 	// 1. Resolve rename chain
 	path, err := u.resolvePath(name)
