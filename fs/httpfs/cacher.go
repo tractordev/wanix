@@ -356,6 +356,16 @@ func (fsys *Cacher) StatContext(ctx context.Context, name string) (fs.FileInfo, 
 	}
 	fsys.log.Debug("Stat", "name", name, "cached", false)
 
+	// special case for attribute nodes
+	if strings.Contains(name, "/:attr") {
+		f, err := fsys.OpenContext(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return f.Stat()
+	}
+
 	var isDir bool
 	if name == "." {
 		isDir = true
