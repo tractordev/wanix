@@ -4,8 +4,10 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,10 +91,11 @@ func assertFileExists(t *testing.T, fsys fs.FS, name string) {
 // assertFileNotExists checks if a file does not exist
 func assertFileNotExists(t *testing.T, fsys fs.FS, name string) {
 	t.Helper()
-	if exists, err := fs.Exists(fsys, name); err != nil && !os.IsNotExist(err) {
-		t.Fatal(err)
-	} else if exists {
+	_, err := fs.Stat(fsys, name)
+	if err == nil {
 		t.Errorf("file %q exists but should not", name)
+	} else if !os.IsNotExist(err) && !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("unexpected error checking if file exists: %v", err)
 	}
 }
 
@@ -188,7 +191,7 @@ func TestTombstones(t *testing.T) {
 	}
 
 	// Should be in tombstones
-	if _, ok := fsys.Tombstones.Load("file1.txt"); !ok {
+	if _, ok := fsys.tombstones.Load("file1.txt"); !ok {
 		t.Error("file1.txt not in tombstones")
 	}
 
@@ -225,7 +228,7 @@ func TestTombstones(t *testing.T) {
 	}
 
 	// Should not be in tombstones (since it was only in overlay)
-	if _, ok := fsys.Tombstones.Load("newfile.txt"); ok {
+	if _, ok := fsys.tombstones.Load("newfile.txt"); ok {
 		t.Error("newfile.txt should not be in tombstones")
 	}
 
@@ -247,7 +250,7 @@ func TestTombstones(t *testing.T) {
 	f.Close()
 
 	// Tombstone should be cleared
-	if _, ok := fsys.Tombstones.Load("file1.txt"); ok {
+	if _, ok := fsys.tombstones.Load("file1.txt"); ok {
 		t.Error("tombstone should be cleared after recreating file")
 	}
 
@@ -291,7 +294,7 @@ func TestRenames(t *testing.T) {
 	}
 
 	// Should be in renames map with correct target
-	if newName, ok := fsys.Renames.Load("file1.txt"); !ok || newName != "file1.txt.new" {
+	if newName, ok := fsys.renames.Load("file1.txt"); !ok || newName != "file1.txt.new" {
 		t.Error("file1.txt rename not tracked correctly")
 	}
 
@@ -327,15 +330,15 @@ func TestRenames(t *testing.T) {
 	}
 
 	// Should not be in renames map (overlay files are renamed directly)
-	if _, ok := fsys.Renames.Load("newfile.txt"); ok {
+	if _, ok := fsys.renames.Load("newfile.txt"); ok {
 		t.Error("overlay file rename should not be tracked in renames map")
 	}
 
 	// Should not be tombstoned (overlay-only files shouldn't create tombstones)
-	if _, ok := fsys.Tombstones.Load("newfile.txt"); ok {
+	if _, ok := fsys.tombstones.Load("newfile.txt"); ok {
 		t.Error("overlay-only file should not be tombstoned after rename")
 	}
-	if _, ok := fsys.Tombstones.Load("newfile.txt.new"); ok {
+	if _, ok := fsys.tombstones.Load("newfile.txt.new"); ok {
 		t.Error("renamed overlay-only file should not be tombstoned")
 	}
 
@@ -432,7 +435,7 @@ func TestRenameChains(t *testing.T) {
 
 	// Verify rename map correctly points to final destination
 	// file1.txt was in base, so it should be tracked
-	if v, ok := fsys.Renames.Load("file1.txt"); !ok || v.(string) != "b.txt" {
+	if v, ok := fsys.renames.Load("file1.txt"); !ok || v.(string) != "b.txt" {
 		t.Errorf("file1.txt rename = %v, want b.txt", v)
 	}
 	// a.txt was only in overlay after first rename, so it won't have a rename entry
@@ -443,9 +446,9 @@ func TestRenameChains(t *testing.T) {
 	setupTestFiles(t, fsys2.Base)
 
 	// Manually create a rename cycle: x -> y -> z -> x
-	fsys2.Renames.Store("x", "y")
-	fsys2.Renames.Store("y", "z")
-	fsys2.Renames.Store("z", "x")
+	fsys2.renames.Store("x", "y")
+	fsys2.renames.Store("y", "z")
+	fsys2.renames.Store("z", "x")
 
 	// Attempting to resolve should return ErrInvalid
 	if _, err := fsys2.resolvePath("x"); !errors.Is(err, fs.ErrInvalid) {
@@ -552,7 +555,7 @@ func TestDirectoryListingWithTombstones(t *testing.T) {
 	}
 
 	// Verify file1.txt is tombstoned
-	if _, ok := fsys.Tombstones.Load("file1.txt"); !ok {
+	if _, ok := fsys.tombstones.Load("file1.txt"); !ok {
 		t.Error("file1.txt should be tombstoned")
 	}
 
@@ -709,7 +712,7 @@ func TestEdgeCases(t *testing.T) {
 		}
 
 		// Verify directory is tombstoned
-		if _, ok := fsys.Tombstones.Load("dir1"); !ok {
+		if _, ok := fsys.tombstones.Load("dir1"); !ok {
 			t.Error("directory not tombstoned after removal")
 		}
 	})
@@ -883,7 +886,7 @@ func TestOpenFileModes(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Verify it's tombstoned
-		if _, ok := fsys.Tombstones.Load("file2.txt"); !ok {
+		if _, ok := fsys.tombstones.Load("file2.txt"); !ok {
 			t.Error("file2.txt should be tombstoned")
 		}
 		// Now O_EXCL should succeed because tombstoned files don't count as existing
@@ -900,7 +903,7 @@ func TestOpenFileModes(t *testing.T) {
 			// Verify the file was recreated
 			assertFileContent(t, fsys.Overlay, "file2.txt", "recreated")
 			// Verify tombstone was cleared
-			if _, ok := fsys.Tombstones.Load("file2.txt"); ok {
+			if _, ok := fsys.tombstones.Load("file2.txt"); ok {
 				t.Error("tombstone should be cleared after recreation")
 			}
 		}
@@ -1155,4 +1158,287 @@ func TestOpenFileParentDirs(t *testing.T) {
 
 func TestOpenFileParentDirs_Short(t *testing.T) {
 	t.Skip("omitted non-core test")
+}
+
+func TestWhiteout(t *testing.T) {
+	fsys := testFS(t)
+	setupTestFiles(t, fsys.Base)
+
+	// Enable whiteout persistence
+	whiteoutDir := ".wh"
+	if err := fsys.Whiteout(whiteoutDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify whiteout directories were created
+	for _, dir := range []string{whiteoutDir, whiteoutDir + "/deletes", whiteoutDir + "/renames"} {
+		if fi, err := fsys.Overlay.(*memfs.FS).Stat(dir); err != nil {
+			t.Errorf("whiteout directory %q not created: %v", dir, err)
+		} else if !fi.IsDir() {
+			t.Errorf("%q is not a directory", dir)
+		}
+	}
+
+	// Test that tombstones are persisted to disk
+	if err := fsys.Remove("file1.txt"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify tombstone exists in memory
+	if _, ok := fsys.tombstones.Load("file1.txt"); !ok {
+		t.Error("file1.txt should be tombstoned in memory")
+	}
+
+	// Verify tombstone was persisted to disk
+	deletesDir := path.Join(whiteoutDir, "deletes")
+	entries, err := fs.ReadDir(fsys.Overlay, deletesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("expected 1 tombstone file, got %d", len(entries))
+	}
+	// Read the tombstone file and verify it contains the path
+	if len(entries) > 0 {
+		content, err := fs.ReadFile(fsys.Overlay, path.Join(deletesDir, entries[0].Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.TrimSpace(string(content)) != "file1.txt" {
+			t.Errorf("tombstone content = %q, want %q", string(content), "file1.txt")
+		}
+	}
+
+	// Test that renames are persisted to disk
+	if err := fsys.Rename("file2.txt", "file2.renamed.txt"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify rename exists in memory
+	if v, ok := fsys.renames.Load("file2.txt"); !ok || v.(string) != "file2.renamed.txt" {
+		t.Error("file2.txt rename not tracked in memory")
+	}
+
+	// Verify rename was persisted to disk
+	renamesDir := path.Join(whiteoutDir, "renames")
+	entries, err = fs.ReadDir(fsys.Overlay, renamesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("expected 1 rename file, got %d", len(entries))
+	}
+	// Read the rename file and verify it contains "oldpath newpath"
+	if len(entries) > 0 {
+		content, err := fs.ReadFile(fsys.Overlay, path.Join(renamesDir, entries[0].Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := "file2.txt file2.renamed.txt"
+		if strings.TrimSpace(string(content)) != expected {
+			t.Errorf("rename content = %q, want %q", string(content), expected)
+		}
+	}
+}
+
+func TestWhiteoutPersistence(t *testing.T) {
+	// Create a filesystem and enable whiteout
+	fsys1 := testFS(t)
+	setupTestFiles(t, fsys1.Base)
+
+	whiteoutDir := ".wh"
+	if err := fsys1.Whiteout(whiteoutDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Perform operations that create tombstones and renames
+	if err := fsys1.Remove("file1.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := fsys1.Rename("file2.txt", "file2.renamed.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := fsys1.Remove("dir1/file3.txt"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify file1.txt is not accessible
+	if _, err := fsys1.Stat("file1.txt"); !os.IsNotExist(err) {
+		t.Error("file1.txt should not be accessible")
+	}
+
+	// Verify file2.txt resolves to file2.renamed.txt
+	assertFileContent(t, fsys1, "file2.renamed.txt", "content2")
+
+	// Create a new filesystem with the same overlay (simulating remount)
+	fsys2 := &FS{
+		Base:    fsys1.Base,
+		Overlay: fsys1.Overlay,
+	}
+
+	// Enable whiteout - this should load persisted tombstones and renames
+	if err := fsys2.Whiteout(whiteoutDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify tombstones were loaded
+	if _, ok := fsys2.tombstones.Load("file1.txt"); !ok {
+		t.Error("file1.txt tombstone not loaded from disk")
+	}
+	if _, ok := fsys2.tombstones.Load("dir1/file3.txt"); !ok {
+		t.Error("dir1/file3.txt tombstone not loaded from disk")
+	}
+
+	// Verify renames were loaded
+	if v, ok := fsys2.renames.Load("file2.txt"); !ok || v.(string) != "file2.renamed.txt" {
+		t.Error("file2.txt rename not loaded from disk")
+	}
+
+	// Verify operations work correctly with loaded state
+	// file1.txt should not be accessible
+	if _, err := fsys2.Stat("file1.txt"); !os.IsNotExist(err) {
+		t.Error("file1.txt should not be accessible after reload")
+	}
+
+	// file2.txt should resolve to file2.renamed.txt
+	assertFileContent(t, fsys2, "file2.renamed.txt", "content2")
+
+	// file2.txt should also be accessible via rename tracking
+	assertFileContent(t, fsys2, "file2.txt", "content2")
+
+	// dir1/file3.txt should not be accessible
+	if _, err := fsys2.Stat("dir1/file3.txt"); !os.IsNotExist(err) {
+		t.Error("dir1/file3.txt should not be accessible after reload")
+	}
+}
+
+func TestWhiteoutMultipleOperations(t *testing.T) {
+	fsys := testFS(t)
+	setupTestFiles(t, fsys.Base)
+
+	whiteoutDir := ".wh"
+	if err := fsys.Whiteout(whiteoutDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Perform multiple operations
+	operations := []struct {
+		name string
+		op   func() error
+	}{
+		{"remove file1", func() error { return fsys.Remove("file1.txt") }},
+		{"remove file2", func() error { return fsys.Remove("file2.txt") }},
+		{"rename dir1/file3", func() error { return fsys.Rename("dir1/file3.txt", "file3.moved.txt") }},
+		{"rename dir1/dir2/file4", func() error { return fsys.Rename("dir1/dir2/file4.txt", "file4.moved.txt") }},
+		{"remove file3.moved", func() error { return fsys.Remove("file3.moved.txt") }},
+	}
+
+	for _, op := range operations {
+		if err := op.op(); err != nil {
+			t.Errorf("%s failed: %v", op.name, err)
+		}
+	}
+
+	// Count persisted tombstones
+	deletesDir := path.Join(whiteoutDir, "deletes")
+	deleteEntries, err := fs.ReadDir(fsys.Overlay, deletesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should have tombstones for: file1.txt, file2.txt, file3.moved.txt (and possibly intermediates)
+	if len(deleteEntries) < 3 {
+		t.Errorf("expected at least 3 tombstone files, got %d", len(deleteEntries))
+	}
+
+	// Count persisted renames
+	renamesDir := path.Join(whiteoutDir, "renames")
+	renameEntries, err := fs.ReadDir(fsys.Overlay, renamesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should have renames for: dir1/file3.txt and dir1/dir2/file4.txt
+	if len(renameEntries) < 2 {
+		t.Errorf("expected at least 2 rename files, got %d", len(renameEntries))
+	}
+
+	// Verify filesystem state is correct
+	assertFileNotExists(t, fsys, "file1.txt")
+	assertFileNotExists(t, fsys, "file2.txt")
+	assertFileNotExists(t, fsys, "file3.moved.txt")
+	assertFileExists(t, fsys, "file4.moved.txt")
+	assertFileContent(t, fsys, "file4.moved.txt", "content4")
+}
+
+func TestWhiteoutRenameChains(t *testing.T) {
+	fsys := testFS(t)
+	setupTestFiles(t, fsys.Base)
+
+	whiteoutDir := ".wh"
+	if err := fsys.Whiteout(whiteoutDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a rename chain: file1.txt -> a.txt -> b.txt
+	if err := fsys.Rename("file1.txt", "a.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := fsys.Rename("a.txt", "b.txt"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify the rename chain is collapsed in the renames map
+	// file1.txt should point directly to b.txt
+	if v, ok := fsys.renames.Load("file1.txt"); !ok || v.(string) != "b.txt" {
+		t.Errorf("file1.txt rename = %v, want b.txt (chain should be collapsed)", v)
+	}
+
+	// Read the persisted rename file and verify it contains the collapsed chain
+	renamesDir := path.Join(whiteoutDir, "renames")
+	entries, err := fs.ReadDir(fsys.Overlay, renamesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Find the rename file for file1.txt
+	found := false
+	for _, entry := range entries {
+		content, err := fs.ReadFile(fsys.Overlay, path.Join(renamesDir, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		contentStr := strings.TrimSpace(string(content))
+		if strings.HasPrefix(contentStr, "file1.txt ") {
+			expected := "file1.txt b.txt"
+			if contentStr != expected {
+				t.Errorf("persisted rename for file1.txt = %q, want %q", contentStr, expected)
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("rename file for file1.txt not found in persisted renames")
+	}
+
+	// Create a new filesystem and load the whiteout data
+	fsys2 := &FS{
+		Base:    fsys.Base,
+		Overlay: fsys.Overlay,
+	}
+	if err := fsys2.Whiteout(whiteoutDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify the collapsed rename chain was loaded correctly
+	if v, ok := fsys2.renames.Load("file1.txt"); !ok || v.(string) != "b.txt" {
+		t.Errorf("after reload, file1.txt rename = %v, want b.txt", v)
+	}
+
+	// Verify we can access the file via the final name
+	assertFileContent(t, fsys2, "b.txt", "content1")
+
+	// Verify we can access the file via the original name
+	assertFileContent(t, fsys2, "file1.txt", "content1")
 }

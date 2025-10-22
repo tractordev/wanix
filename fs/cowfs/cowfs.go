@@ -27,12 +27,15 @@
 package cowfs
 
 import (
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,28 +58,130 @@ type FS struct {
 	// Must be set before use.
 	Overlay fs.FS
 
-	// Tombstones tracks deleted files from the base layer.
+	// tombstones tracks deleted files from the base layer.
 	// Keys are file paths, values are empty structs.
 	// Automatically managed; do not modify directly.
-	Tombstones sync.Map
+	tombstones sync.Map
 
-	// Renames tracks renamed files from the base layer.
+	// renames tracks renamed files from the base layer.
 	// Keys are original base file paths, values are current paths.
 	// Automatically managed; do not modify directly.
-	Renames sync.Map
+	renames sync.Map
+
+	// whiteoutDir is the directory where whiteout files are stored.
+	// Automatically managed; do not modify directly.
+	whiteoutDir string
 }
 
 // Reset clears all rename and tombstone tracking in the filesystem.
 // It does not remove any files from Base or Overlay; only resets copy-on-write bookkeeping.
 func (u *FS) Reset() {
-	u.Tombstones.Range(func(k, v any) bool {
-		u.Tombstones.Delete(k)
+	u.tombstones.Range(func(k, v any) bool {
+		u.tombstones.Delete(k)
 		return true
 	})
-	u.Renames.Range(func(k, v any) bool {
-		u.Renames.Delete(k)
+	u.renames.Range(func(k, v any) bool {
+		u.renames.Delete(k)
 		return true
 	})
+}
+
+// Whiteout enables persistence of tombstones and renames to the overlay filesystem.
+// This allows copy-on-write tracking information to survive filesystem remounts or
+// application restarts.
+//
+// The method creates two subdirectories under the provided directory:
+//   - deletes/: Contains files tracking tombstoned (deleted) paths from the base layer
+//   - renames/: Contains files tracking rename operations from the base layer
+//
+// Each tracking file is named using the SHA1 hash of the original path:
+//   - Delete files contain the tombstoned path as their content
+//   - Rename files contain "oldpath newpath" as their content
+//
+// Calling Whiteout will:
+//  1. Create the necessary directory structure in the overlay
+//  2. Load any existing tombstones and renames from previous sessions
+//  3. Enable automatic persistence of future tombstone and rename operations
+//
+// Example usage:
+//
+//	cfs := &cowfs.FS{
+//		Base:    baseFS,
+//		Overlay: overlayFS,
+//	}
+//	// Enable persistence to .wh directory in overlay
+//	if err := cfs.Whiteout(".wh"); err != nil {
+//		return err
+//	}
+//	// All subsequent Remove and Rename operations will be persisted
+//	cfs.Remove("file.txt")  // Creates .wh/deletes/<hash> file
+//	cfs.Rename("a", "b")    // Creates .wh/renames/<hash> file
+//
+// Note: Whiteout should typically be called once during filesystem initialization,
+// before performing any operations. The directory path is relative to the overlay
+// filesystem root.
+func (u *FS) Whiteout(dir string) error {
+	u.whiteoutDir = dir
+	if err := fs.MkdirAll(u.Overlay, path.Join(dir, "deletes"), 0o755); err != nil {
+		return err
+	}
+	if err := fs.MkdirAll(u.Overlay, path.Join(dir, "renames"), 0o755); err != nil {
+		return err
+	}
+	return fs.WalkDir(u.Overlay, dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(p, path.Join(dir, "deletes")) {
+			del, err := fs.ReadFile(u.Overlay, p)
+			if err != nil {
+				return err
+			}
+			u.tombstones.Store(strings.TrimSpace(string(del)), struct{}{})
+			return nil
+		}
+		if strings.HasPrefix(p, path.Join(dir, "renames")) {
+			rename, err := fs.ReadFile(u.Overlay, p)
+			if err != nil {
+				return err
+			}
+			parts := strings.Split(strings.TrimSpace(string(rename)), " ")
+			u.renames.Store(parts[0], parts[1])
+			return nil
+		}
+		return nil
+	})
+
+}
+
+func (u *FS) tombstone(name string) error {
+	u.tombstones.Store(name, struct{}{})
+	if u.whiteoutDir != "" {
+		h := sha1.New()
+		h.Write([]byte(name))
+		filename := path.Join(u.whiteoutDir, "deletes", fmt.Sprintf("%x", h.Sum(nil)))
+		if err := fs.WriteFile(u.Overlay, filename, []byte(name), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (u *FS) rename(oldname, newname string) error {
+	u.renames.Store(oldname, newname)
+	if u.whiteoutDir != "" {
+		h := sha1.New()
+		h.Write([]byte(oldname))
+		filename := path.Join(u.whiteoutDir, "renames", fmt.Sprintf("%x", h.Sum(nil)))
+		content := []byte(fmt.Sprintf("%s %s", oldname, newname))
+		if err := fs.WriteFile(u.Overlay, filename, content, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // resolveTerminal follows rename chains to the terminal path without checking tombstones.
@@ -102,7 +207,7 @@ func (u *FS) resolveTerminal(path string) (string, error) {
 		seen[cur] = struct{}{}
 
 		// Follow rename if any
-		if v, ok := u.Renames.Load(cur); ok {
+		if v, ok := u.renames.Load(cur); ok {
 			// Treat self-maps as invalid
 			if v.(string) == cur {
 				return "", fs.ErrInvalid
@@ -127,7 +232,7 @@ func (u *FS) resolvePath(path string) (string, error) {
 	}
 
 	// Check tombstone at terminal
-	if _, dead := u.Tombstones.Load(cur); dead {
+	if _, dead := u.tombstones.Load(cur); dead {
 		return "", fs.ErrNotExist
 	}
 	return cur, nil
@@ -284,7 +389,9 @@ func (u *FS) Rename(oldname, newname string) error {
 	_, baseErr := fs.Stat(u.Base, newname)
 	if baseErr == nil {
 		// Destination exists in base - tombstone it
-		u.Tombstones.Store(newname, struct{}{})
+		if err := u.tombstone(newname); err != nil {
+			return err
+		}
 	} else if !errors.Is(baseErr, fs.ErrNotExist) {
 		return baseErr
 	}
@@ -317,27 +424,36 @@ func (u *FS) Rename(oldname, newname string) error {
 
 	// Tombstone original base origin(s) - only tombstone if they exist in base
 	if srcInBase {
-		u.Tombstones.Store(src, struct{}{})
+		if err := u.tombstone(src); err != nil {
+			return err
+		}
 	}
 	if oldname != src && srcInBase {
-		u.Tombstones.Store(oldname, struct{}{})
+		if err := u.tombstone(oldname); err != nil {
+			return err
+		}
 	}
 
 	// Update rename map: redirect any entries pointing to src to point to newname
-	u.Renames.Range(func(k, v any) bool {
+	u.renames.Range(func(k, v any) bool {
 		if v.(string) == src {
-			u.Renames.Store(k.(string), newname)
+			if err := u.rename(k.(string), newname); err != nil {
+				log.Println("rename persistence error", err)
+				return false
+			}
 		}
 		return true
 	})
 
 	// If oldname was a base origin, add/refresh its mapping
 	if srcInBase {
-		u.Renames.Store(oldname, newname)
+		if err := u.rename(oldname, newname); err != nil {
+			return err
+		}
 	}
 
 	// Clear tombstone on the destination (file is now alive there)
-	u.Tombstones.Delete(newname)
+	u.tombstones.Delete(newname)
 
 	return nil
 }
@@ -385,7 +501,7 @@ func (u *FS) Remove(name string) error {
 	}
 
 	// 4. Handle already tombstoned files (idempotent)
-	if _, ok := u.Tombstones.Load(target); ok {
+	if _, ok := u.tombstones.Load(target); ok {
 		// If it's in overlay, still remove it
 		if existsInOverlay {
 			if err := fs.Remove(u.Overlay, target); err != nil {
@@ -398,7 +514,9 @@ func (u *FS) Remove(name string) error {
 
 	// 5. If file doesn't exist anywhere, return error
 	if !existsInBase && !existsInOverlay {
-		u.Tombstones.Store(target, struct{}{})
+		if err := u.tombstone(target); err != nil {
+			log.Println("tombstone persistence error", err)
+		}
 		return fs.ErrNotExist
 	}
 
@@ -456,7 +574,7 @@ func (u *FS) Remove(name string) error {
 		entries := make(map[string]struct{})
 		for _, e := range baseEntries {
 			name := filepath.Join(target, e.Name())
-			if _, ok := u.Tombstones.Load(name); !ok {
+			if _, ok := u.tombstones.Load(name); !ok {
 				entries[e.Name()] = struct{}{}
 			}
 		}
@@ -480,12 +598,14 @@ func (u *FS) Remove(name string) error {
 
 	// 9. tombstone it to record it was deleted
 	// log.Println("tombstoning", target)
-	u.Tombstones.Store(target, struct{}{})
+	if err := u.tombstone(target); err != nil {
+		return err
+	}
 
 	// 10. Clean up any renames that pointed to this file
-	u.Renames.Range(func(k, v any) bool {
+	u.renames.Range(func(k, v any) bool {
 		if v == target {
-			u.Renames.Delete(k)
+			u.renames.Delete(k)
 		}
 		return true
 	})
@@ -551,7 +671,9 @@ func (u *FS) Symlink(oldname, newname string) error {
 
 	if _, err := fs.Stat(u.Base, newpath); err == nil {
 		// Hide base entry
-		u.Tombstones.Store(newpath, struct{}{})
+		if err := u.tombstone(newpath); err != nil {
+			return err
+		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
@@ -563,7 +685,7 @@ func (u *FS) Symlink(oldname, newname string) error {
 	}
 
 	// 5. Clear tombstone after successful creation
-	u.Tombstones.Delete(newpath)
+	u.tombstones.Delete(newpath)
 
 	return nil
 }
@@ -630,7 +752,9 @@ func (u *FS) Mkdir(name string, perm os.FileMode) error {
 
 	// 4. If directory exists in base, tombstone it
 	if existsInBase {
-		u.Tombstones.Store(path, struct{}{})
+		if err := u.tombstone(path); err != nil {
+			return err
+		}
 	}
 
 	// 5. Create directory in overlay
@@ -639,7 +763,7 @@ func (u *FS) Mkdir(name string, perm os.FileMode) error {
 	}
 
 	// 6. Clear tombstone after successful creation
-	u.Tombstones.Delete(path)
+	u.tombstones.Delete(path)
 
 	return nil
 }
@@ -666,7 +790,7 @@ func (u *FS) Stat(name string) (os.FileInfo, error) {
 	}
 
 	// 2. Check for tombstone
-	if _, ok := u.Tombstones.Load(path); ok {
+	if _, ok := u.tombstones.Load(path); ok {
 		return nil, fs.ErrNotExist
 	}
 
@@ -699,7 +823,7 @@ func (u *FS) Readlink(name string) (string, error) {
 	}
 
 	// 2. Check tombstone
-	if _, ok := u.Tombstones.Load(path); ok {
+	if _, ok := u.tombstones.Load(path); ok {
 		return "", fs.ErrNotExist
 	}
 
@@ -720,13 +844,13 @@ func (u *FS) Deleted() []string {
 	finalDeletes := map[string]struct{}{}
 
 	// 1. Add all tombstoned paths
-	u.Tombstones.Range(func(k, _ any) bool {
+	u.tombstones.Range(func(k, _ any) bool {
 		finalDeletes[k.(string)] = struct{}{}
 		return true
 	})
 
 	// 2. Add all rename sources (original paths that have been moved)
-	u.Renames.Range(func(k, _ any) bool {
+	u.renames.Range(func(k, _ any) bool {
 		finalDeletes[k.(string)] = struct{}{}
 		return true
 	})
@@ -772,7 +896,7 @@ func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) 
 
 	// Check if file is tombstoned (unless we're creating a new file)
 	if flag&os.O_CREATE == 0 {
-		if _, ok := u.Tombstones.Load(path); ok {
+		if _, ok := u.tombstones.Load(path); ok {
 			return nil, fs.ErrNotExist
 		}
 	}
@@ -798,7 +922,7 @@ func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) 
 	if creating && exclusive {
 		baseExists := false
 		if _, err := fs.Stat(u.Base, path); err == nil {
-			if _, dead := u.Tombstones.Load(path); !dead {
+			if _, dead := u.tombstones.Load(path); !dead {
 				baseExists = true
 			}
 		} else if !errors.Is(err, fs.ErrNotExist) {
@@ -872,7 +996,7 @@ func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) 
 		}
 
 		// Clear tombstone after successful write/create
-		u.Tombstones.Delete(path)
+		u.tombstones.Delete(path)
 
 		return f, nil
 	}
@@ -913,7 +1037,7 @@ func (u *FS) Open(name string) (fs.File, error) {
 	}
 
 	// 2. Tombstone check
-	if _, ok := u.Tombstones.Load(path); ok {
+	if _, ok := u.tombstones.Load(path); ok {
 		return nil, fs.ErrNotExist
 	}
 
@@ -951,7 +1075,7 @@ func (u *FS) Open(name string) (fs.File, error) {
 				HideFn: func(name string) bool {
 					// Hide entry if it's tombstoned
 					fullPath := filepath.Join(path, name)
-					_, hidden := u.Tombstones.Load(fullPath)
+					_, hidden := u.tombstones.Load(fullPath)
 					return hidden
 				},
 			}, nil
@@ -972,7 +1096,7 @@ func (u *FS) Open(name string) (fs.File, error) {
 			HideFn: func(name string) bool {
 				// Hide entry if it's tombstoned
 				fullPath := filepath.Join(path, name)
-				_, hidden := u.Tombstones.Load(fullPath)
+				_, hidden := u.tombstones.Load(fullPath)
 				return hidden
 			},
 		}, nil
