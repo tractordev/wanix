@@ -78,6 +78,19 @@ func (f *SubdirFS) Sub(dir string) (FS, error) {
 	return &SubdirFS{f.Fsys, full}, nil
 }
 
+func (f *SubdirFS) Stat(name string) (FileInfo, error) {
+	return f.StatContext(context.Background(), name)
+}
+
+func (f *SubdirFS) StatContext(ctx context.Context, name string) (FileInfo, error) {
+	full, err := f.fullName("stat", name)
+	if err != nil {
+		return nil, err
+	}
+	info, err := StatContext(ctx, f.Fsys, full)
+	return info, f.fixErr(err)
+}
+
 func (f *SubdirFS) Open(name string) (File, error) {
 	return f.OpenContext(context.Background(), name)
 }
