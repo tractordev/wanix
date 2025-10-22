@@ -166,8 +166,6 @@ func (fsys *FS) buildFileInfo(path string, jsHandle js.Value) (fs.FileInfo, erro
 		mode |= fs.ModeDir
 	}
 
-	// log.Println("buildFileInfo", path, hasMetadata, mode, isDir, mode&fs.ModeDir != 0)
-
 	return fskit.Entry(name, mode, size, mtime), nil
 }
 
@@ -411,7 +409,11 @@ func (fsys *FS) Mkdir(name string, perm fs.FileMode) error {
 		return &fs.PathError{Op: "mkdir", Path: name, Err: err}
 	}
 
-	// todo: set perms
+	Metadata().SetMetadata(name, FileMetadata{
+		Mode:  perm | fs.ModeDir,
+		Mtime: time.Now(),
+		Atime: time.Now(),
+	})
 
 	// Invalidate stat cache since we created a directory
 	fsys.invalidateCachedStat(name)
@@ -526,10 +528,12 @@ func (fsys *FS) openDirectory(dirPath string, handle js.Value) fs.File {
 
 		var mode fs.FileMode
 		var size int64
+		var mtime time.Time
 
 		// Get metadata from global store
 		if metadata, hasMetadata := Metadata().GetMetadata(entryPath); hasMetadata {
 			mode = metadata.Mode
+			mtime = metadata.Mtime
 			size = 0 // Size will be loaded lazily when needed
 		} else {
 			// Set default modes for new entries
@@ -540,13 +544,14 @@ func (fsys *FS) openDirectory(dirPath string, handle js.Value) fs.File {
 				mode = DefaultFileMode
 				size = 0
 			}
+			mtime = time.Now()
 		}
 
 		if isDir {
 			mode |= fs.ModeDir
 		}
 
-		entries = append(entries, fskit.Entry(entryName, mode, size))
+		entries = append(entries, fskit.Entry(entryName, mode, size, mtime))
 		return nil
 	})
 
@@ -554,7 +559,14 @@ func (fsys *FS) openDirectory(dirPath string, handle js.Value) fs.File {
 		log.Panic(err)
 	}
 
-	return fskit.DirFile(fskit.Entry(dirPath, 0755|fs.ModeDir), entries...)
+	var mode fs.FileMode
+	var mtime time.Time
+	if metadata, hasMetadata := Metadata().GetMetadata(dirPath); hasMetadata {
+		mode = metadata.Mode | fs.ModeDir
+		mtime = metadata.Mtime
+	}
+
+	return fskit.DirFile(fskit.Entry(dirPath, mode, mtime), entries...)
 }
 
 // openFile creates a file handle for the given JavaScript file handle
