@@ -29,15 +29,15 @@ type MetadataStore struct {
 	fileMu       sync.Mutex   // Protects file operations
 }
 
-var globalMetadata *MetadataStore
+var metadataSingleton *MetadataStore
 var metadataOnce sync.Once
 
-// GetMetadataStore returns the global metadata store singleton
-func GetMetadataStore() *MetadataStore {
+// Metadata returns the global metadata store singleton
+func Metadata() *MetadataStore {
 	metadataOnce.Do(func() {
-		globalMetadata = &MetadataStore{}
+		metadataSingleton = &MetadataStore{}
 	})
-	return globalMetadata
+	return metadataSingleton
 }
 
 // Initialize sets up the metadata store with OPFS root and loads existing data

@@ -31,7 +31,6 @@ type FS struct {
 	statCache map[string]*statCacheEntry // Similar to httpfs headCache
 	cacheTTL  time.Duration              // Similar to httpfs cacheTTL
 	cacheMu   sync.RWMutex               // Similar to httpfs cacheMu
-	opfsRoot  *FS                        // Reference to OPFS root
 }
 
 // NewFS creates a new FS instance from a JavaScript directory handle
@@ -134,7 +133,7 @@ func (fsys *FS) buildFileInfo(path string, jsHandle js.Value) (fs.FileInfo, erro
 	}
 
 	// Get metadata from global store
-	metadata, hasMetadata := GetMetadataStore().GetMetadata(path)
+	metadata, hasMetadata := Metadata().GetMetadata(path)
 
 	var mode fs.FileMode
 	var mtime, atime time.Time
@@ -155,7 +154,7 @@ func (fsys *FS) buildFileInfo(path string, jsHandle js.Value) (fs.FileInfo, erro
 		atime = time.Now()
 
 		// Store initial metadata
-		GetMetadataStore().SetMetadata(path, FileMetadata{
+		Metadata().SetMetadata(path, FileMetadata{
 			Mode:  mode,
 			Mtime: mtime,
 			Atime: atime,
@@ -200,7 +199,7 @@ func (fsys *FS) Symlink(oldname, newname string) error {
 	}
 
 	// Update metadata store with symlink mode
-	GetMetadataStore().SetMode(newname, fs.FileMode(0777)|fs.ModeSymlink)
+	Metadata().SetMode(newname, fs.FileMode(0777)|fs.ModeSymlink)
 
 	// Invalidate stat cache
 	fsys.invalidateCachedStat(newname)
@@ -213,8 +212,14 @@ func (fsys *FS) Chtimes(name string, atime time.Time, mtime time.Time) error {
 		return &fs.PathError{Op: "chtimes", Path: name, Err: fs.ErrInvalid}
 	}
 
+	if metadata, hasMetadata := Metadata().GetMetadata(name); hasMetadata {
+		if metadata.Mode&fs.ModeSymlink != 0 {
+			return nil
+		}
+	}
+
 	// Update metadata store
-	GetMetadataStore().SetTimes(name, atime, mtime)
+	Metadata().SetTimes(name, atime, mtime)
 
 	// Invalidate stat cache
 	fsys.invalidateCachedStat(name)
@@ -227,8 +232,14 @@ func (fsys *FS) Chmod(name string, mode fs.FileMode) error {
 		return &fs.PathError{Op: "chmod", Path: name, Err: fs.ErrInvalid}
 	}
 
+	if metadata, hasMetadata := Metadata().GetMetadata(name); hasMetadata {
+		if metadata.Mode&fs.ModeSymlink != 0 {
+			return nil
+		}
+	}
+
 	// Update metadata store
-	GetMetadataStore().SetMode(name, mode)
+	Metadata().SetMode(name, mode)
 
 	// Invalidate stat cache
 	fsys.invalidateCachedStat(name)
@@ -444,7 +455,7 @@ func (fsys *FS) Remove(name string) error {
 	}
 
 	// Clean up metadata and cache
-	GetMetadataStore().DeleteMetadata(name)
+	Metadata().DeleteMetadata(name)
 	fsys.invalidateCachedStat(name)
 
 	return nil
@@ -461,14 +472,6 @@ func (fsys *FS) Rename(oldname, newname string) error {
 	}
 	if !ok {
 		return &fs.PathError{Op: "rename", Path: oldname, Err: fs.ErrNotExist}
-	}
-
-	ok, err = fs.Exists(fsys, newname)
-	if err != nil {
-		return &fs.PathError{Op: "rename", Path: newname, Err: err}
-	}
-	if ok {
-		return &fs.PathError{Op: "rename", Path: newname, Err: fs.ErrExist}
 	}
 
 	oldDirHandle, err := fsys.walkDir(path.Dir(oldname))
@@ -493,10 +496,10 @@ func (fsys *FS) Rename(oldname, newname string) error {
 	}
 
 	// Handle metadata for rename: copy metadata from old to new path, then delete old
-	if metadata, exists := GetMetadataStore().GetMetadata(oldname); exists {
-		GetMetadataStore().SetMetadata(newname, metadata)
+	if metadata, exists := Metadata().GetMetadata(oldname); exists {
+		Metadata().SetMetadata(newname, metadata)
 	}
-	GetMetadataStore().DeleteMetadata(oldname)
+	Metadata().DeleteMetadata(oldname)
 
 	// Invalidate both paths in cache
 	fsys.invalidateCachedStat(oldname)
@@ -525,7 +528,7 @@ func (fsys *FS) openDirectory(dirPath string, handle js.Value) fs.File {
 		var size int64
 
 		// Get metadata from global store
-		if metadata, hasMetadata := GetMetadataStore().GetMetadata(entryPath); hasMetadata {
+		if metadata, hasMetadata := Metadata().GetMetadata(entryPath); hasMetadata {
 			mode = metadata.Mode
 			size = 0 // Size will be loaded lazily when needed
 		} else {
