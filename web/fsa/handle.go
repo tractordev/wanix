@@ -151,6 +151,8 @@ func (h *FileHandle) Write(b []byte) (int, error) {
 	}
 	h.offset += int64(n)
 
+	Metadata().SetTimes(h.path, time.Now(), time.Now())
+
 	// Invalidate stat cache since file size/mtime changed
 	h.fsys.invalidateCachedStat(h.path)
 
