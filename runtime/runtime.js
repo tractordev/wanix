@@ -11,7 +11,7 @@ import wasmExecGo from "./wasm/wasm_exec.go.js";
 import wasmExecTinygo from "./wasm/wasm_exec.tinygo.js";
 
 export class WanixRuntime extends WanixHandle {
-    constructor(config={}) {
+    constructor(config = {}) {
         const sys = new MessageChannel();
         super(sys.port2);
         this.config = config;
@@ -20,7 +20,7 @@ export class WanixRuntime extends WanixHandle {
         this._ready = new Promise(resolve => this._wasmReady = resolve);
 
         if (!window.__wanix) {
-            window.__wanix = {pending: []};
+            window.__wanix = { pending: [] };
         }
         window.__wanix.pending.push(this);
         window.__wanix[this._id] = this;
@@ -38,7 +38,7 @@ export class WanixRuntime extends WanixHandle {
         } else {
             fetch(config.wasm).then(r => r.arrayBuffer()).then(this._loadWasm);
         }
-        
+
 
         // window.wanix = {
         //     config,
@@ -69,7 +69,7 @@ export class WanixRuntime extends WanixHandle {
         const stream = response.body.pipeThrough(new DecompressionStream('gzip'));
 
         this._bundle = await new Response(stream).arrayBuffer();
-        
+
         let foundWasm = false;
         await untar(this._bundle.slice()).progress((f) => {
             const fname = f.name.replace(/^\.\//, "");
@@ -79,7 +79,7 @@ export class WanixRuntime extends WanixHandle {
                 console.log("loading wasm from bundle");
                 this._loadWasm(f.buffer);
 
-            } 
+            }
             // else if (fname === "v86/libv86.js") {
             //     console.log("loading libv86.js from bundle");
             //     const v86Script = document.createElement('script');
@@ -126,10 +126,10 @@ export class WanixRuntime extends WanixHandle {
         }
         document.head.appendChild(execScript);
 
-        const go = new window.Go(); 
+        const go = new window.Go();
         WebAssembly.instantiate(wasmBytes, go.importObject).then(obj => {
             go.run(obj.instance);
-        }); 
+        });
     }
 }
 
