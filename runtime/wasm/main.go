@@ -7,20 +7,20 @@ import (
 	"bytes"
 	"log"
 	"syscall/js"
-	"time"
 
+	"github.com/hugelgupf/p9/p9"
+	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
-	"tractor.dev/wanix/fs/httpfs"
 	"tractor.dev/wanix/fs/memfs"
-	"tractor.dev/wanix/fs/syncfs"
+	"tractor.dev/wanix/fs/p9kit"
 	"tractor.dev/wanix/fs/tarfs"
 	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/vfs/ramfs"
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
-	"tractor.dev/wanix/web/fsa"
+	"tractor.dev/wanix/web/jsutil"
 	"tractor.dev/wanix/web/runtime"
 	"tractor.dev/wanix/web/virtio9p"
 )
@@ -67,20 +67,20 @@ func main() {
 		// root.Bind("#bundle", "bundle")
 	}
 
-	r2fs := httpfs.New("https://r2fs.proteco.workers.dev/", nil)
-	opfs, err := fsa.OPFS("r2fs")
-	if err != nil {
-		log.Fatal(err)
-	}
-	sfs := syncfs.New(opfs, r2fs, 3*time.Second)
-	go func() {
-		if err := sfs.Sync(); err != nil {
-			log.Printf("err syncing: %v\n", err)
-		}
-	}()
-	if err := root.Namespace().Bind(sfs, ".", "#data"); err != nil {
-		log.Fatal(err)
-	}
+	// r2fs := httpfs.New("https://r2fs.proteco.workers.dev/", nil)
+	// opfs, err := fsa.OPFS("r2fs")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// sfs := syncfs.New(opfs, r2fs, 3*time.Second)
+	// go func() {
+	// 	if err := sfs.Sync(); err != nil {
+	// 		log.Printf("err syncing: %v\n", err)
+	// 	}
+	// }()
+	// if err := root.Namespace().Bind(sfs, ".", "#data"); err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	inst.Set("createPort", js.FuncOf(func(this js.Value, args []js.Value) any {
 		ch := js.Global().Get("MessageChannel").New()
@@ -89,6 +89,37 @@ func main() {
 	}))
 
 	go api.PortResponder(inst.Call("_portConn", inst.Get("_sys").Get("port1")), root)
+
+	export9p := inst.Get("config").Get("export9p")
+	if export9p.IsUndefined() {
+		export9p = js.ValueOf(false)
+	}
+	if export9p.Bool() {
+		log.Println("exporting 9p")
+		ws := js.Global().Get("WanixSocket").New("ws://localhost:7654/.well-known/export9p")
+		sess := mux.New(&jsutil.ReadWriter{
+			ReadCloser:  &jsutil.Reader{Value: ws},
+			WriteCloser: &jsutil.Writer{Value: ws},
+		})
+		go func() {
+			for {
+				ch, err := sess.Accept()
+				if err != nil {
+					log.Println("9p export accept:", err)
+					break
+				}
+				go func() {
+					defer ch.Close()
+					srv := p9.NewServer(p9kit.Attacher(root.Namespace(), p9kit.WithMemAttrStore()))
+					if err := srv.Handle(ch, ch); err != nil {
+						log.Println("9p export:", err)
+						return
+					}
+				}()
+			}
+		}()
+
+	}
 
 	inst.Call("_wasmReady")
 

@@ -10,6 +10,7 @@
     const queryParams = new URLSearchParams(window.location.search);
     const w = new WanixRuntime({ 
         helpers: true, 
+        export9p: queryParams.get('export9p') === 'true',
         wasm: queryParams.get('wasm') || "./wanix.wasm", 
         bundle: queryParams.get('bundle') || "/shell/bundle.tgz",
         network: queryParams.get('network') || "ws://localhost:7654/.well-known/ethernet"

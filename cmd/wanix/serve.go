@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -17,8 +18,10 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/hugelgupf/p9/p9"
 	"github.com/progrium/go-netstack/vnet"
+	altws "golang.org/x/net/websocket"
 	"tractor.dev/wanix/fs/localfs"
 
+	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/p9kit"
@@ -29,6 +32,7 @@ func serveCmd() *cli.Command {
 	var (
 		listenAddr string
 		bundle     string
+		export9p   bool
 	)
 	cmd := &cli.Command{
 		Usage: "serve [dir]",
@@ -78,6 +82,10 @@ func serveCmd() *cli.Command {
 			http.Handle("/.well-known/", http.NotFoundHandler())
 			http.Handle("/.well-known/ethernet", ethernetHandler(vn))
 
+			if export9p {
+				http.Handle("/.well-known/export9p", export9pHandler())
+			}
+
 			p9srv := p9.NewServer(p9kit.Attacher(dirfs, p9kit.WithXattrAttrStore()))
 
 			http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +116,7 @@ func serveCmd() *cli.Command {
 	}
 	cmd.Flags().StringVar(&listenAddr, "listen", ":7654", "addr to serve on")
 	cmd.Flags().StringVar(&bundle, "bundle", "", "default bundle to use")
+	cmd.Flags().BoolVar(&export9p, "export9p", false, "export 9p server")
 	return cmd
 }
 
@@ -171,6 +180,43 @@ func p9Handler(srv *p9.Server, w http.ResponseWriter, r *http.Request) {
 	if err := srv.Handle(inR, outW); err != nil {
 		log.Println("9p session ended:", err)
 	}
+}
+
+func export9pHandler() http.Handler {
+	return altws.Handler(func(conn *altws.Conn) {
+		conn.PayloadType = altws.BinaryFrame
+		defer conn.Close()
+
+		sess := mux.New(conn)
+
+		l, err := net.Listen("tcp4", ":0")
+		if err != nil {
+			log.Fatal(err)
+		}
+		addr := l.Addr().(*net.TCPAddr).String()
+		log.Println("* 9p export at", addr)
+
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				log.Println("9p export accept:", err)
+				break
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+
+				ch, err := sess.Open(context.Background())
+				if err != nil {
+					log.Println("sess open:", err)
+					return
+				}
+				defer ch.Close()
+
+				go io.Copy(ch, c)
+				io.Copy(c, ch)
+			}(c)
+		}
+	})
 }
 
 func ethernetHandler(vn *vnet.VirtualNetwork) http.Handler {
