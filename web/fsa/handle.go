@@ -38,14 +38,14 @@ func (h *FileHandle) tryGetFile() (err error) {
 	return
 }
 
-func (h *FileHandle) tryCreateWritable() (err error) {
+func (h *FileHandle) tryCreateWritable(keepExisting bool) (err error) {
 	if !h.writer.IsUndefined() {
 		return nil
 	}
 	if h.Value.Get("createWritable").IsUndefined() {
 		return fs.ErrNotSupported
 	}
-	h.writer, err = jsutil.AwaitErr(h.Value.Call("createWritable", map[string]any{"keepExistingData": h.append}))
+	h.writer, err = jsutil.AwaitErr(h.Value.Call("createWritable", map[string]any{"keepExistingData": keepExisting}))
 	return
 }
 
@@ -78,7 +78,7 @@ func (h *FileHandle) Name() string {
 
 // not applied until closed (like other writes)
 func (h *FileHandle) Truncate(size int64) error {
-	if err := h.tryCreateWritable(); err != nil {
+	if err := h.tryCreateWritable(true); err != nil {
 		return err
 	}
 	if !h.writer.IsUndefined() {
@@ -123,7 +123,7 @@ func (h *FileHandle) Stat() (fs.FileInfo, error) {
 }
 
 func (h *FileHandle) Write(b []byte) (int, error) {
-	if err := h.tryCreateWritable(); err != nil {
+	if err := h.tryCreateWritable(h.append); err != nil {
 		return 0, err
 	}
 	h.mu.Lock()
