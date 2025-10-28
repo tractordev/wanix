@@ -1,0 +1,58 @@
+an indexeddb with a single object store called "fs" with the following schema:
+
+{
+	path: string,
+	mode: number,
+	mtime: number,
+    atime: number,
+	size: number,
+	data: Uint8Array,
+}
+
+the path is the full path to the file or directory. 
+paths do not start with a slash and root is just "."
+mtime is the last modification time of the file or directory in unix time
+atime is the last access time in unix time
+size is the size of the file in bytes
+data is the content of the file as a Uint8Array
+
+all operations are atomic. if a file is being written, the read will return the old content.
+there is a unique index on the path column.
+
+the api is a class called IDBFS. the constructor takes a single argument, the name of the database.
+it will create the database if it doesn't exist. the IDBFS interface looks like this:
+
+interface IDBFS {
+    open(path: string): Promise<File>
+    create(path: string): Promise<File>
+    openfile(path: string, flags: number): Promise<File>
+    mkdir(path: string, perm: number): Promise<void>
+    symlink(oldpath: string, newpath: string): Promise<void>
+    chtimes(path: string, atime: number, mtime: number): Promise<void>
+    chmod(path: string, mode: number): Promise<void>
+    stat(path: string): Promise<FileInfo>
+    truncate(path: string, size: number): Promise<void>
+    remove(path: string): Promise<void>
+    rename(oldpath: string, newpath: string): Promise<void>
+    readlink(path: string): Promise<string>
+    readdir(path: string): Promise<FileInfo[]>
+}
+
+symlink creates a file with the mode 0777 | unix symlink mode and the content is the target path.
+readlink returns the target path of the symlink if it is a symlink. otherwise it returns an error.
+
+interface FileInfo {
+    name: string // the basename of the file path
+    mode: number // the mode of the file
+    mtime: number // the last modification time in unix time
+    atime: number // the last access time in unix time
+    size: number // the size of the file in bytes
+}
+
+interface File {
+    close(): Promise<void>
+    stat(): Promise<FileInfo>
+    read(buf: Uint8Array): Promise<number>
+    write(data: Uint8Array): Promise<number>
+    seek(offset: number, whence: number): Promise<number>
+}
