@@ -577,7 +577,8 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 		localEnt := p9file{path: path.Join(l.path, e.Name()), fsys: l.fsys, vattrs: l.vattrs}
 		qid, _, err := localEnt.info()
 		if err != nil {
-			return p9Ents, err
+			log.Println("p9kit: readdir info", e.Name(), err)
+			continue
 		}
 
 		p9Ents = append(p9Ents, p9.Dirent{
