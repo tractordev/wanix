@@ -15,7 +15,7 @@ func LoadStylesheet(url string) {
 	doc.Get("head").Call("appendChild", link)
 }
 
-func LoadScript(url string) js.Value {
+func LoadScript(url string, module bool) js.Value {
 	promise := js.Global().Get("Promise").New(js.FuncOf(func(this js.Value, args []js.Value) any {
 		resolve := args[0]
 		reject := args[1]
@@ -23,6 +23,9 @@ func LoadScript(url string) js.Value {
 		doc := js.Global().Get("document")
 		script := doc.Call("createElement", "script")
 		script.Set("src", url)
+		if module {
+			script.Set("type", "module")
+		}
 		script.Set("onload", resolve)
 		script.Set("onerror", js.FuncOf(func(this js.Value, args []js.Value) any {
 			err := js.Global().Get("Error").New("Failed to load script: " + url)
