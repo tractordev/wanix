@@ -58,6 +58,12 @@ func convertErr(e error) error {
 		return fs.ErrExist
 	case "EIO":
 		return fs.ErrInvalid
+	case "ENOTEMPTY":
+		return fs.ErrNotEmpty
+	case "EISDIR":
+		return fs.ErrInvalid
+	case "EBADF":
+		return fs.ErrClosed
 	}
 	log.Println("idbfs: error", code, e)
 	return e

@@ -413,6 +413,18 @@ export class IDBFS {
 
         const newEntry = await this._getEntry(newpath);
         if (newEntry) {
+            if (this._isDir(newEntry.mode)) {
+                const entries = await this._getAllEntries();
+                const prefix = newpath === '.' ? '' : newpath + '/';
+                const hasChildren = entries.some(e =>
+                    e.path !== newpath &&
+                    e.path.startsWith(prefix) &&
+                    e.path.slice(prefix.length).indexOf('/') === -1
+                );
+                if (hasChildren) {
+                    throw new IDBFSError('Directory not empty', 'ENOTEMPTY');
+                }
+            }
             // If newpath exists, remove it first
             await this.remove(newpath);
         }
