@@ -169,6 +169,10 @@ func (fsys *FS) ReadlinkContext(ctx context.Context, name string) (string, error
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return "", fs.ErrNotExist
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
 	}
@@ -205,6 +209,10 @@ func (fsys *FS) ReadFileContext(ctx context.Context, name string) ([]byte, error
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fs.ErrNotExist
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
@@ -247,6 +255,11 @@ func (fsys *FS) streamTree(ctx context.Context, name string) iter.Seq2[*Node, er
 			return
 		}
 		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusNotFound {
+			yield(nil, fs.ErrNotExist)
+			return
+		}
 
 		if resp.StatusCode != http.StatusOK {
 			yield(nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status))
