@@ -49,6 +49,10 @@ func main() {
 	root.Bind("#vm", "vm")
 	root.Bind("#|", "#console")
 
+	// if err := root.Namespace().Bind(idbfs.New("test"), ".", "idbfs"); err != nil {
+	// 	log.Fatal(err)
+	// }
+
 	bundleBytes := inst.Get("_bundle")
 	if !bundleBytes.IsUndefined() {
 		jsBuf := js.Global().Get("Uint8Array").New(bundleBytes)
@@ -90,6 +94,7 @@ func main() {
 
 	go api.PortResponder(inst.Call("_portConn", inst.Get("_sys").Get("port1")), root)
 
+	// this is still a bit of a hack and wip
 	export9p := inst.Get("config").Get("export9p")
 	if export9p.IsUndefined() {
 		export9p = js.ValueOf(false)
@@ -123,6 +128,11 @@ func main() {
 
 	inst.Call("_wasmReady")
 
-	virtio9p.Serve(root.Namespace(), inst, false)
+	debug := inst.Get("config").Get("debug9p")
+	if debug.IsUndefined() {
+		debug = js.ValueOf(false)
+	}
+
+	virtio9p.Serve(root.Namespace(), inst, debug.Bool())
 
 }

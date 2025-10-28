@@ -32,7 +32,6 @@ func serveCmd() *cli.Command {
 	var (
 		listenAddr string
 		bundle     string
-		export9p   bool
 	)
 	cmd := &cli.Command{
 		Usage: "serve [dir]",
@@ -81,10 +80,7 @@ func serveCmd() *cli.Command {
 
 			http.Handle("/.well-known/", http.NotFoundHandler())
 			http.Handle("/.well-known/ethernet", ethernetHandler(vn))
-
-			if export9p {
-				http.Handle("/.well-known/export9p", export9pHandler())
-			}
+			http.Handle("/.well-known/export9p", export9pHandler())
 
 			p9srv := p9.NewServer(p9kit.Attacher(dirfs, p9kit.WithXattrAttrStore()))
 
@@ -116,7 +112,6 @@ func serveCmd() *cli.Command {
 	}
 	cmd.Flags().StringVar(&listenAddr, "listen", ":7654", "addr to serve on")
 	cmd.Flags().StringVar(&bundle, "bundle", "", "default bundle to use")
-	cmd.Flags().BoolVar(&export9p, "export9p", false, "export 9p server")
 	return cmd
 }
 
@@ -194,7 +189,7 @@ func export9pHandler() http.Handler {
 			log.Fatal(err)
 		}
 		addr := l.Addr().(*net.TCPAddr).String()
-		log.Println("* 9p export at", addr)
+		log.Println("9p export on", addr)
 
 		for {
 			c, err := l.Accept()
