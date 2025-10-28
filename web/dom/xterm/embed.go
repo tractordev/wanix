@@ -43,13 +43,13 @@ func Load() {
 		if err != nil {
 			panic(err)
 		}
-		jsutil.LoadScript(js.Global().Get("URL").Call("createObjectURL", fitJS).String())
+		jsutil.LoadScript(js.Global().Get("URL").Call("createObjectURL", fitJS).String(), false)
 
 		xtermJS, err := assetBlob("xterm-5.3.0.min.js", "text/javascript")
 		if err != nil {
 			panic(err)
 		}
-		promise := jsutil.LoadScript(js.Global().Get("URL").Call("createObjectURL", xtermJS).String())
+		promise := jsutil.LoadScript(js.Global().Get("URL").Call("createObjectURL", xtermJS).String(), false)
 		_, err = jsutil.AwaitErr(promise)
 		if err != nil {
 			panic(err)
