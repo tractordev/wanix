@@ -214,11 +214,6 @@ export class IDBFS {
         path = this._normalizePath(path);
         await this._ensureParentExists(path);
 
-        const existing = await this._getEntry(path);
-        if (existing) {
-            throw new IDBFSError('File exists', 'EEXIST');
-        }
-
         const now = Math.floor(Date.now() / 1000);
         const entry = {
             path: path,
@@ -565,7 +560,7 @@ class File {
         const toRead = Math.min(buf.length, available);
 
         if (toRead <= 0) {
-            return 0;
+            return null;
         }
 
         buf.set(this.entry.data.slice(this.position, this.position + toRead));
