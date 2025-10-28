@@ -1,7 +1,6 @@
 package fs
 
 import (
-	"log"
 	"path"
 )
 
@@ -25,18 +24,24 @@ func Rename(fsys FS, oldname, newname string) error {
 		return opErr(fsys, newname, "rename", err)
 	}
 
-	newfsys, newrname, err := ResolveTo[RenameFS](fsys, ContextFor(fsys), path.Dir(newname))
+	newfsys, newrdir, err := ResolveTo[RenameFS](fsys, ContextFor(fsys), path.Dir(newname))
 	if err != nil {
 		return opErr(fsys, newname, "rename", err)
 	}
 
 	if Equal(oldfsys, newfsys) {
-		return oldfsys.Rename(oldrname, path.Join(newrname, path.Base(newname)))
+		return oldfsys.Rename(oldrname, path.Join(newrdir, path.Base(newname)))
 	}
 
-	log.Println("rename across filesystems not implemented")
-	// TODO:
-	// - potentially use CopyFS and RemoveAll to move as last resort
+	// fallback to copy and remove across filesystems
 
-	return opErr(fsys, newname, "rename", ErrNotSupported)
+	if err := CopyFS(oldfsys, oldrname, newfsys, path.Join(newrdir, path.Base(newname))); err != nil {
+		return opErr(fsys, newname, "rename", err)
+	}
+
+	if err := RemoveAll(oldfsys, oldrname); err != nil {
+		return opErr(fsys, newname, "rename", err)
+	}
+
+	return nil
 }
