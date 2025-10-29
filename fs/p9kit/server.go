@@ -382,9 +382,7 @@ func (l *p9file) SetAttr(valid p9.SetAttrMask, attr p9.SetAttr) error {
 	// Handle size changes (truncate)
 	if valid.Size {
 		if err := fs.Truncate(l.fsys, l.path, int64(attr.Size)); err != nil {
-			if errors.Is(err, fs.ErrNotSupported) {
-				log.Printf("p9kit: truncate on %T: %s %s\n", l.fsys, l.path, err)
-			}
+			log.Printf("p9kit: truncate on %T: %s %s\n", l.fsys, l.path, err)
 			return err
 		}
 	}
