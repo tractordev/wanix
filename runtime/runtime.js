@@ -25,7 +25,7 @@ export class WanixRuntime extends WanixHandle {
         window.__wanix.pending.push(this);
         window.__wanix[this._id] = this;
 
-        if (!config.wasm) {
+        if (config.wasm === undefined) {
             config.wasm = "./wanix.wasm";
         }
 
@@ -35,7 +35,7 @@ export class WanixRuntime extends WanixHandle {
 
         if (config.bundle) {
             this._loadBundle(config.bundle);
-        } else {
+        } else if (config.wasm) {
             fetch(config.wasm).then(r => r.arrayBuffer()).then(this._loadWasm);
         }
 
