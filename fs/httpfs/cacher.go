@@ -141,7 +141,7 @@ func (fsys *Cacher) InvalidateNode(path string, resync, recursive bool) error {
 		}
 	}
 
-	if resync {
+	if resync && !strings.Contains(path, "/:attr") {
 		_, err := fsys.PullDir(context.Background(), filepath.Dir(path))
 		return err
 	}
