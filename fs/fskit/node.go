@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"path"
 	"sync"
 	"time"
@@ -13,7 +14,7 @@ import (
 
 // Node is used to create an fs.FileInfo, fs.DirEntry, or fs.FS.
 type Node struct {
-	name    string
+	path    string
 	mode    fs.FileMode
 	modTime time.Time
 	size    int64
@@ -21,11 +22,12 @@ type Node struct {
 	uid     int
 	gid     int
 	data    []byte
+	log     *slog.Logger
 
 	reader io.Reader
 	writer io.Writer
 
-	// nodes   []*N
+	mu sync.Mutex
 }
 
 func RawNode(attrs ...any) *Node {
@@ -33,7 +35,7 @@ func RawNode(attrs ...any) *Node {
 	for _, m := range attrs {
 		switch v := m.(type) {
 		case *Node:
-			n.name = v.name
+			n.path = v.path
 			n.mode = v.mode
 			n.size = v.size
 			n.modTime = v.modTime
@@ -43,6 +45,7 @@ func RawNode(attrs ...any) *Node {
 			n.data = v.data
 			n.reader = v.reader
 			n.writer = v.writer
+			n.log = v.log
 		case int64:
 			n.size = v
 		case int:
@@ -54,14 +57,14 @@ func RawNode(attrs ...any) *Node {
 		case []byte:
 			n.data = v
 		case string:
-			n.name = v
+			n.path = v
 		case fs.FileMode:
 			n.mode = v
 			if v&fs.ModeDir != 0 && n.size == 0 {
 				n.size = 2 // Set initial size to 2 for "." and ".." entries
 			}
 		case fs.FileInfo:
-			n.name = v.Name()
+			n.path = v.Name()
 			n.mode = v.Mode()
 			n.size = v.Size()
 			n.modTime = v.ModTime()
@@ -80,17 +83,20 @@ func RawNode(attrs ...any) *Node {
 			n.reader = v
 		case io.Writer:
 			n.writer = v
+		case *slog.Logger:
+			n.log = v
 
-			// case *N:
-			// n.nodes = append(n.nodes, v)
 		}
+	}
+	if n.log == nil {
+		n.log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	return n
 }
 
 func Entry(name string, mode fs.FileMode, more ...any) *Node {
 	n := RawNode(more...)
-	n.name = name
+	n.path = name
 	n.mode = mode
 	return n
 }
@@ -99,15 +105,53 @@ func Entry(name string, mode fs.FileMode, more ...any) *Node {
 var _ = (fs.FileInfo)((*Node)(nil))
 var _ = (fs.DirEntry)((*Node)(nil))
 
-func (n *Node) Name() string               { return path.Base(n.name) }
 func (n *Node) Info() (fs.FileInfo, error) { return n, nil }
-func (n *Node) Mode() fs.FileMode          { return n.mode }
-func (n *Node) Type() fs.FileMode          { return n.mode.Type() }
-func (n *Node) ModTime() time.Time         { return n.modTime }
-func (n *Node) IsDir() bool                { return n.mode&fs.ModeDir != 0 }
-func (n *Node) Sys() any                   { return n.sys }
+
+func (n *Node) Path() string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.path
+}
+
+func (n *Node) Name() string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return path.Base(n.path)
+}
+
+func (n *Node) Mode() fs.FileMode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.mode
+}
+
+func (n *Node) Type() fs.FileMode {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.mode.Type()
+}
+
+func (n *Node) ModTime() time.Time {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.modTime
+}
+
+func (n *Node) IsDir() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.mode&fs.ModeDir != 0
+}
+
+func (n *Node) Sys() any {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.sys
+}
 
 func (n *Node) Size() int64 {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	if n.size < 0 {
 		return 0
 	}
@@ -122,38 +166,85 @@ func (n *Node) String() string {
 }
 
 func (n *Node) Data() []byte {
-	return n.data
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.data == nil {
+		return nil
+	}
+	dataCopy := make([]byte, len(n.data))
+	copy(dataCopy, n.data)
+	return dataCopy
+}
+
+func (n *Node) Log() *slog.Logger {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.log
+}
+
+func (n *Node) Reader() io.Reader {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.reader
+}
+
+func (n *Node) Writer() io.Writer {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.writer
+}
+
+func SetLogger(n *Node, log *slog.Logger) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.log = log
 }
 
 func SetName(n *Node, name string) {
-	n.name = name
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.path = name
 }
 
 func SetData(n *Node, data []byte) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.data = data
 }
 
 func SetMode(n *Node, mode fs.FileMode) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.mode = mode
 }
 
 func SetModTime(n *Node, modTime time.Time) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.modTime = modTime
 }
 
 func SetSize(n *Node, size int64) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.size = size
 }
 
 func SetSys(n *Node, sys any) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.sys = sys
 }
 
 func SetUid(n *Node, uid int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.uid = uid
 }
 
 func SetGid(n *Node, gid int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.gid = gid
 }
 
@@ -167,26 +258,29 @@ func (n *Node) Open(name string) (fs.File, error) {
 // TODO: open sub nodes
 func (n *Node) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if name == "." {
-		return n.file(), nil
+		return n.openFile(), nil
 	}
 	return nil, fs.ErrNotExist
 }
 
-func (n *Node) file() *nodeFile {
-	nn := *n
-	return &nodeFile{Node: &nn, inode: n}
+func (n *Node) openFile() *nodeFile {
+	return &nodeFile{data: n.Data(), inode: n}
 }
 
 type nodeFile struct {
-	*Node
-	inode  *Node
-	dirty  bool
-	offset int64
-	closed bool
-	mu     sync.Mutex
+	data    []byte
+	inode   *Node
+	dirty   bool
+	offset  int64
+	closed  bool
+	modTime time.Time
+	mu      sync.Mutex
 }
 
-func (f *nodeFile) Close() error {
+func (f *nodeFile) Close() (err error) {
+	defer func() {
+		f.inode.Log().Debug("close", "name", f.inode.Path(), "err", err)
+	}()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -195,7 +289,8 @@ func (f *nodeFile) Close() error {
 	}
 
 	if f.dirty && f.inode != nil {
-		f.inode.data = f.data
+		SetData(f.inode, f.data)
+		SetModTime(f.inode, f.modTime)
 	}
 
 	f.closed = true
@@ -203,10 +298,24 @@ func (f *nodeFile) Close() error {
 }
 
 func (f *nodeFile) Stat() (fs.FileInfo, error) {
-	return f, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.inode == nil {
+		return nil, fs.ErrClosed
+	}
+	return f.inode, nil
 }
 
-func (f *nodeFile) Read(b []byte) (int, error) {
+func (f *nodeFile) Read(b []byte) (n int, err error) {
+	defer func() {
+		f.inode.Log().Debug("read", "name", f.inode.Path(), "n", n, "err", err)
+	}()
+
+	// Check for custom reader BEFORE acquiring lock to avoid deadlock
+	if reader := f.inode.Reader(); reader != nil {
+		return reader.Read(b)
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -214,22 +323,21 @@ func (f *nodeFile) Read(b []byte) (int, error) {
 		return 0, fs.ErrClosed
 	}
 
-	if f.reader != nil {
-		return f.reader.Read(b)
-	}
-
 	if f.offset >= int64(len(f.data)) {
 		return 0, io.EOF
 	}
 	if f.offset < 0 {
-		return 0, &fs.PathError{Op: "read", Path: f.name, Err: fs.ErrInvalid}
+		return 0, &fs.PathError{Op: "read", Path: f.inode.Path(), Err: fs.ErrInvalid}
 	}
-	n := copy(b, f.data[f.offset:])
+	n = copy(b, f.data[f.offset:])
 	f.offset += int64(n)
 	return n, nil
 }
 
-func (f *nodeFile) Seek(offset int64, whence int) (int64, error) {
+func (f *nodeFile) Seek(offset int64, whence int) (newPos int64, err error) {
+	defer func() {
+		f.inode.Log().Debug("seek", "name", f.inode.Path(), "offset", offset, "whence", whence, "newPos", newPos, "err", err)
+	}()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -246,13 +354,22 @@ func (f *nodeFile) Seek(offset int64, whence int) (int64, error) {
 		offset += int64(len(f.data))
 	}
 	if offset < 0 || offset > int64(len(f.data)) {
-		return 0, &fs.PathError{Op: "seek", Path: f.name, Err: fs.ErrInvalid}
+		return 0, &fs.PathError{Op: "seek", Path: f.inode.Path(), Err: fs.ErrInvalid}
 	}
 	f.offset = offset
 	return offset, nil
 }
 
-func (f *nodeFile) ReadAt(b []byte, offset int64) (int, error) {
+func (f *nodeFile) ReadAt(b []byte, offset int64) (n int, err error) {
+	defer func() {
+		f.inode.Log().Debug("readat", "name", f.inode.Path(), "offset", offset, "n", n, "err", err)
+	}()
+
+	// Check for custom reader BEFORE acquiring lock to avoid deadlock
+	if reader := f.inode.Reader(); reader != nil {
+		return reader.Read(b)
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -260,21 +377,26 @@ func (f *nodeFile) ReadAt(b []byte, offset int64) (int, error) {
 		return 0, fs.ErrClosed
 	}
 
-	if f.reader != nil {
-		return f.reader.Read(b)
-	}
-
 	if offset < 0 || offset > int64(len(f.data)) {
-		return 0, &fs.PathError{Op: "read", Path: f.name, Err: fs.ErrInvalid}
+		return 0, &fs.PathError{Op: "read", Path: f.inode.Path(), Err: fs.ErrInvalid}
 	}
-	n := copy(b, f.data[offset:])
+	n = copy(b, f.data[offset:])
 	if n < len(b) {
 		return n, io.EOF
 	}
 	return n, nil
 }
 
-func (f *nodeFile) Write(b []byte) (int, error) {
+func (f *nodeFile) Write(b []byte) (n int, err error) {
+	defer func() {
+		f.inode.Log().Debug("write", "name", f.inode.Path(), "n", n, "err", err)
+	}()
+
+	// Check for custom writer BEFORE acquiring lock to avoid deadlock
+	if writer := f.inode.Writer(); writer != nil {
+		return writer.Write(b)
+	}
+
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -282,11 +404,7 @@ func (f *nodeFile) Write(b []byte) (int, error) {
 		return 0, fs.ErrClosed
 	}
 
-	if f.writer != nil {
-		return f.writer.Write(b)
-	}
-
-	n := len(b)
+	n = len(b)
 	cur := f.offset
 	diff := cur - int64(len(f.data))
 	var tail []byte
@@ -306,7 +424,16 @@ func (f *nodeFile) Write(b []byte) (int, error) {
 	return n, nil
 }
 
-func (f *nodeFile) WriteAt(b []byte, offset int64) (int, error) {
+func (f *nodeFile) WriteAt(b []byte, offset int64) (n int, err error) {
+	defer func() {
+		f.inode.Log().Debug("writeat", "name", f.inode.Path(), "offset", offset, "n", n, "err", err)
+	}()
+
+	// Check for custom writer BEFORE acquiring lock to avoid deadlock
+	if writer := f.inode.Writer(); writer != nil {
+		return writer.Write(b)
+	}
+
 	f.mu.Lock()
 
 	if f.closed {
@@ -314,14 +441,9 @@ func (f *nodeFile) WriteAt(b []byte, offset int64) (int, error) {
 		return 0, fs.ErrClosed
 	}
 
-	if f.writer != nil {
-		f.mu.Unlock()
-		return f.writer.Write(b)
-	}
-
 	if offset < 0 || offset > int64(len(f.data)) {
 		f.mu.Unlock()
-		return 0, &fs.PathError{Op: "write", Path: f.name, Err: fs.ErrInvalid}
+		return 0, &fs.PathError{Op: "write", Path: f.inode.Path(), Err: fs.ErrInvalid}
 	}
 
 	f.offset = offset

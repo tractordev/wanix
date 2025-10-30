@@ -162,13 +162,13 @@ func (fsys MapFS) OpenContext(ctx context.Context, name string) (fs.File, error)
 		}
 	}
 	for _, fi := range list {
-		delete(need, fi.name)
+		delete(need, fi.path)
 	}
 	for name := range need {
 		list = append(list, RawNode(name, fs.FileMode(fs.ModeDir|0555)))
 	}
 	slices.SortFunc(list, func(a, b *Node) int {
-		return strings.Compare(a.name, b.name)
+		return strings.Compare(a.path, b.path)
 	})
 
 	if n == nil {
@@ -176,7 +176,7 @@ func (fsys MapFS) OpenContext(ctx context.Context, name string) (fs.File, error)
 		if dirSubfs, found := fsys[name]; found {
 			if dirNode, ok := dirSubfs.(*Node); ok && dirNode.IsDir() {
 				n = dirNode
-				n.name = name
+				n.path = name
 			} else {
 				n = RawNode(name, fs.ModeDir|0555)
 			}
@@ -184,7 +184,7 @@ func (fsys MapFS) OpenContext(ctx context.Context, name string) (fs.File, error)
 			n = RawNode(name, fs.ModeDir|0555)
 		}
 	} else {
-		n.name = name
+		n.path = name
 	}
 
 	var entries []fs.DirEntry

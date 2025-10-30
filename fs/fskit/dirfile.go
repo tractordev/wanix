@@ -31,7 +31,7 @@ func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
 	})
 	return &dirFile{
 		FileInfo: &nodeCopy,
-		path:     nodeCopy.name,
+		path:     nodeCopy.path,
 		iter: NewDirIter(func() ([]fs.DirEntry, error) {
 			return removeDuplicatesAndSort(entries), nil
 		}),

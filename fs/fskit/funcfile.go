@@ -20,16 +20,27 @@ type FuncFile struct {
 
 func (f *FuncFile) Close() error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	if f.closed {
+		f.mu.Unlock()
 		return fs.ErrClosed
 	}
 
 	f.closed = true
+	openFile := f.openFile
+	f.mu.Unlock()
 
-	if f.CloseFunc != nil && f.openFile != nil {
-		return f.CloseFunc(f.openFile.Node)
+	// Close the underlying openFile to sync data back to node
+	if openFile != nil {
+		err := openFile.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	// Call CloseFunc after closing openFile
+	if f.CloseFunc != nil && openFile != nil {
+		return f.CloseFunc(openFile.inode)
 	}
 
 	return nil
@@ -67,39 +78,100 @@ func (f *FuncFile) ReadAt(b []byte, off int64) (int, error) {
 
 func (f *FuncFile) Read(b []byte) (int, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	if f.closed {
+		f.mu.Unlock()
 		return 0, fs.ErrClosed
 	}
 
-	if !f.hasRead {
+	// Check if we need to initialize
+	needsInit := !f.hasRead
+	if needsInit {
 		f.hasRead = true
+		node := f.Node
+		f.mu.Unlock()
 
 		if f.ReadFunc != nil {
-			err := f.ReadFunc(f.Node)
+			err := f.ReadFunc(node)
 			if err != nil {
 				return 0, err
 			}
 		}
 
-		f.openFile = f.Node.file()
+		// Call openFile without holding f.mu to avoid deadlock
+		openFile := node.openFile()
+
+		f.mu.Lock()
+		// Check if file was closed while we were creating openFile
+		if f.closed {
+			f.mu.Unlock()
+			return 0, fs.ErrClosed
+		}
+		f.openFile = openFile
+		f.mu.Unlock()
+
+		// Use the openFile we just created
+		return openFile.Read(b)
 	}
 
-	return f.openFile.Read(b)
+	// Not first read - wait for openFile to be initialized
+	// (in case another goroutine is currently initializing)
+	for f.openFile == nil && !f.closed {
+		f.mu.Unlock()
+		f.mu.Lock()
+	}
+
+	if f.closed {
+		f.mu.Unlock()
+		return 0, fs.ErrClosed
+	}
+
+	openFile := f.openFile
+	f.mu.Unlock()
+
+	// Read without holding f.mu to avoid deadlock
+	return openFile.Read(b)
 }
 
 func (f *FuncFile) Write(b []byte) (int, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	if f.closed {
+		f.mu.Unlock()
 		return 0, fs.ErrClosed
 	}
 
-	if f.openFile == nil {
-		f.openFile = f.Node.file()
+	// Check if we need to initialize
+	needsInit := f.openFile == nil
+	if needsInit {
+		node := f.Node
+		f.mu.Unlock()
+
+		// Call openFile without holding f.mu to avoid deadlock
+		openFile := node.openFile()
+
+		f.mu.Lock()
+		// Check if file was closed while we were creating openFile
+		if f.closed {
+			f.mu.Unlock()
+			return 0, fs.ErrClosed
+		}
+		// Only set if still nil (another goroutine might have set it)
+		if f.openFile == nil {
+			f.openFile = openFile
+			f.mu.Unlock()
+			// Use the openFile we just created
+			return openFile.Write(b)
+		}
+		// Another goroutine set it, use that one
+		openFile = f.openFile
+		f.mu.Unlock()
+		return openFile.Write(b)
 	}
 
-	return f.openFile.Write(b)
+	openFile := f.openFile
+	f.mu.Unlock()
+
+	// Write without holding f.mu to avoid deadlock
+	return openFile.Write(b)
 }
