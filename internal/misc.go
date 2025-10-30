@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"strings"
+	"sync/atomic"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs/fskit"
@@ -35,11 +36,11 @@ func FieldFile(args ...any) fs.FS {
 		mode = 0755
 	}
 	return fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
-		var wasRead bool
+		var wasRead atomic.Bool
 		return &fskit.FuncFile{
 			Node: fskit.Entry(name, mode, -1, []byte(value+"\n")),
 			ReadFunc: func(n *fskit.Node) error {
-				wasRead = true
+				wasRead.Store(true)
 				if getter != nil {
 					v, err := getter()
 					if err != nil {
@@ -55,7 +56,7 @@ func FieldFile(args ...any) fs.FS {
 			CloseFunc: func(n *fskit.Node) error {
 				// only call setter if setter is set
 				// and there was no read
-				if setter != nil && !wasRead {
+				if setter != nil && !wasRead.Load() {
 					return setter(n.Data())
 				}
 				return nil
