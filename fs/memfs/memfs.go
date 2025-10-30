@@ -3,7 +3,8 @@ package memfs
 import (
 	"context"
 	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"path"
 	"slices"
 	"strings"
@@ -17,10 +18,11 @@ import (
 type FS struct {
 	nodes map[string]*fskit.Node
 	mu    sync.Mutex
+	log   *slog.Logger
 }
 
 func New() *FS {
-	fsys := &FS{nodes: make(map[string]*fskit.Node)}
+	fsys := &FS{nodes: make(map[string]*fskit.Node), log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	// Always ensure "." exists as the root directory
 	fsys.nodes["."] = fskit.RawNode(".", fs.ModeDir|0755)
 	fskit.SetSize(fsys.nodes["."], 2) // "." and ".."
@@ -71,6 +73,10 @@ func From(m fskit.MapFS) *FS {
 	return fsys
 }
 
+func (fsys *FS) SetLogger(logger *slog.Logger) {
+	fsys.log = logger
+}
+
 func (fsys *FS) Clear() {
 	fsys.mu.Lock()
 	defer fsys.mu.Unlock()
@@ -99,9 +105,19 @@ func (fsys *FS) Node(name string) (*fskit.Node, bool) {
 // Must be called with fsys.mu held.
 func (fsys *FS) updateDirSize(dir string) {
 	node, ok := fsys.nodes[dir]
-	if !ok || !node.IsDir() {
+	if !ok {
 		return
 	}
+
+	// Release lock temporarily to check if it's a directory (to avoid deadlock)
+	fsys.mu.Unlock()
+	isDir := node.IsDir()
+	fsys.mu.Lock()
+
+	if !isDir {
+		return
+	}
+
 	count := 0
 	if dir == "." {
 		// For root directory, count top-level entries
@@ -121,8 +137,11 @@ func (fsys *FS) updateDirSize(dir string) {
 			}
 		}
 	}
-	// Set size to include "." and ".." plus actual entries
+
+	// Release lock before calling SetSize to avoid deadlock
+	fsys.mu.Unlock()
 	fskit.SetSize(node, int64(2+count))
+	fsys.mu.Lock()
 }
 
 func (fsys *FS) Open(name string) (fs.File, error) {
@@ -133,7 +152,10 @@ func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
 	return fsys.StatContext(context.Background(), name)
 }
 
-func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+func (fsys *FS) StatContext(ctx context.Context, name string) (fi fs.FileInfo, err error) {
+	defer func() {
+		fsys.log.Debug("stat", "name", name, "err", err)
+	}()
 	f, err := fsys.OpenContext(fs.WithNoFollow(ctx), name)
 	if err != nil {
 		return nil, err
@@ -141,7 +163,7 @@ func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, erro
 	defer f.Close()
 	// Clean name after opening, for use in symlink resolution
 	name = path.Clean(name)
-	fi, err := f.Stat()
+	fi, err = f.Stat()
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +181,7 @@ func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, erro
 			return fs.StatContext(ctx, origin, target)
 		} else {
 			if strings.HasPrefix(target, "/") {
-				log.Println("memfs: statcontext: no origin for absolute symlink:", name)
+				fsys.log.Debug("statcontext", "error", "no origin for absolute symlink", "name", name)
 				return nil, fs.ErrInvalid
 			} else {
 				target = path.Join(path.Dir(name), target)
@@ -170,7 +192,10 @@ func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, erro
 	return fi, nil
 }
 
-func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (fsys *FS) OpenContext(ctx context.Context, name string) (f fs.File, err error) {
+	defer func() {
+		fsys.log.Debug("open", "name", name, "err", err)
+	}()
 	// Check validity before cleaning - paths like "./." and "file/." are invalid per fs.ValidPath
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
@@ -180,12 +205,13 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 	fsys.mu.Lock()
 	n := fsys.nodes[name]
-	if n != nil {
-		// SetName is called here while holding the lock to avoid race conditions
-		// when multiple goroutines access the same node concurrently
-		fskit.SetName(n, name)
-	}
 	fsys.mu.Unlock()
+
+	if n != nil {
+		// SetName and SetLogger called after releasing lock to avoid deadlock
+		fskit.SetName(n, name)
+		fskit.SetLogger(n, fsys.log)
+	}
 	if n != nil {
 		if fs.FollowSymlinks(ctx) && fs.IsSymlink(n.Mode()) {
 			target, err := fs.Readlink(fsys, name)
@@ -201,7 +227,7 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 				return fs.OpenContext(ctx, origin, target)
 			} else {
 				if strings.HasPrefix(target, "/") {
-					log.Println("memfs: opencontext: no origin for absolute symlink:", name)
+					fsys.log.Debug("opencontext", "error", "no origin for absolute symlink", "name", name)
 					return nil, fs.ErrInvalid
 				} else {
 					target = path.Join(path.Dir(name), target)
@@ -275,10 +301,14 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	}
 	// Set directory size to include "." and ".." plus actual entries
 	fskit.SetSize(n, int64(2+len(entries)))
+	fskit.SetLogger(n, fsys.log)
 	return fskit.DirFile(n, entries...), nil
 }
 
-func (fsys *FS) Create(name string) (fs.File, error) {
+func (fsys *FS) Create(name string) (f fs.File, err error) {
+	defer func() {
+		fsys.log.Debug("create", "name", name, "err", err)
+	}()
 	name = path.Clean(name)
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "create", Path: name, Err: fs.ErrNotExist}
@@ -297,14 +327,21 @@ func (fsys *FS) Create(name string) (fs.File, error) {
 	}
 
 	fsys.mu.Lock()
-	defer fsys.mu.Unlock()
-	fsys.nodes[name] = fskit.Entry(name, fs.FileMode(0644), time.Now())
+	node := fskit.Entry(name, fs.FileMode(0644), time.Now())
+	fskit.SetLogger(node, fsys.log)
+	fsys.nodes[name] = node
 	// Update parent directory size
 	fsys.updateDirSize(dir)
-	return fsys.nodes[name].Open(".")
+	fsys.mu.Unlock()
+
+	// Open the file AFTER releasing fsys.mu to avoid deadlock
+	return node.Open(".")
 }
 
-func (fsys *FS) Mkdir(name string, perm fs.FileMode) error {
+func (fsys *FS) Mkdir(name string, perm fs.FileMode) (err error) {
+	defer func() {
+		fsys.log.Debug("mkdir", "name", name, "perm", perm, "err", err)
+	}()
 	name = path.Clean(name)
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "mkdir", Path: name, Err: fs.ErrNotExist}
@@ -331,13 +368,17 @@ func (fsys *FS) Mkdir(name string, perm fs.FileMode) error {
 	defer fsys.mu.Unlock()
 	node := fskit.Entry(name, perm|fs.ModeDir, time.Now())
 	fskit.SetSize(node, 2) // Set initial size to 2 for "." and ".." entries
+	fskit.SetLogger(node, fsys.log)
 	fsys.nodes[name] = node
 	// Update parent directory size
 	fsys.updateDirSize(dir)
 	return nil
 }
 
-func (fsys *FS) Chmod(name string, mode fs.FileMode) error {
+func (fsys *FS) Chmod(name string, mode fs.FileMode) (err error) {
+	defer func() {
+		fsys.log.Debug("chmod", "name", name, "mode", mode, "err", err)
+	}()
 	name = path.Clean(name)
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "chmod", Path: name, Err: fs.ErrNotExist}
@@ -352,13 +393,23 @@ func (fsys *FS) Chmod(name string, mode fs.FileMode) error {
 	}
 
 	fsys.mu.Lock()
-	defer fsys.mu.Unlock()
-	// Preserve the file type bits while updating only the permission bits
-	fskit.SetMode(fsys.nodes[name], fsys.nodes[name].Mode()&fs.ModeType|mode&0777)
+	node := fsys.nodes[name]
+	fsys.mu.Unlock()
+
+	if node == nil {
+		return &fs.PathError{Op: "chmod", Path: name, Err: fs.ErrNotExist}
+	}
+
+	// Get current mode and set new mode without holding fsys.mu to avoid deadlock
+	currentMode := node.Mode()
+	fskit.SetMode(node, currentMode&fs.ModeType|mode&0777)
 	return nil
 }
 
-func (fsys *FS) Chown(name string, uid, gid int) error {
+func (fsys *FS) Chown(name string, uid, gid int) (err error) {
+	defer func() {
+		fsys.log.Debug("chown", "name", name, "uid", uid, "gid", gid, "err", err)
+	}()
 	name = path.Clean(name)
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "chown", Path: name, Err: fs.ErrNotExist}
@@ -373,13 +424,23 @@ func (fsys *FS) Chown(name string, uid, gid int) error {
 	}
 
 	fsys.mu.Lock()
-	defer fsys.mu.Unlock()
-	fskit.SetUid(fsys.nodes[name], uid)
-	fskit.SetGid(fsys.nodes[name], gid)
+	node := fsys.nodes[name]
+	fsys.mu.Unlock()
+
+	if node == nil {
+		return &fs.PathError{Op: "chown", Path: name, Err: fs.ErrNotExist}
+	}
+
+	// Set uid/gid without holding fsys.mu to avoid deadlock
+	fskit.SetUid(node, uid)
+	fskit.SetGid(node, gid)
 	return nil
 }
 
-func (fsys *FS) Chtimes(name string, atime, mtime time.Time) error {
+func (fsys *FS) Chtimes(name string, atime, mtime time.Time) (err error) {
+	defer func() {
+		fsys.log.Debug("chtimes", "name", name, "atime", atime, "mtime", mtime, "err", err)
+	}()
 	name = path.Clean(name)
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "chtimes", Path: name, Err: fs.ErrNotExist}
@@ -394,12 +455,66 @@ func (fsys *FS) Chtimes(name string, atime, mtime time.Time) error {
 	}
 
 	fsys.mu.Lock()
-	defer fsys.mu.Unlock()
-	fskit.SetModTime(fsys.nodes[name], mtime)
+	node := fsys.nodes[name]
+	fsys.mu.Unlock()
+
+	if node == nil {
+		return &fs.PathError{Op: "chtimes", Path: name, Err: fs.ErrNotExist}
+	}
+
+	// Set modTime without holding fsys.mu to avoid deadlock
+	fskit.SetModTime(node, mtime)
 	return nil
 }
 
-func (fsys *FS) Remove(name string) error {
+func (fsys *FS) Truncate(name string, size int64) (err error) {
+	defer func() {
+		fsys.log.Debug("truncate", "name", name, "size", size, "err", err)
+	}()
+	name = path.Clean(name)
+	if !fs.ValidPath(name) {
+		return &fs.PathError{Op: "truncate", Path: name, Err: fs.ErrNotExist}
+	}
+
+	fsys.mu.Lock()
+	node := fsys.nodes[name]
+	fsys.mu.Unlock()
+
+	if node == nil {
+		return &fs.PathError{Op: "truncate", Path: name, Err: fs.ErrNotExist}
+	}
+
+	// Get current data and resize it
+	data := node.Data()
+
+	if size < 0 {
+		return &fs.PathError{Op: "truncate", Path: name, Err: fs.ErrInvalid}
+	}
+
+	if size == int64(len(data)) {
+		// No change needed
+		return nil
+	}
+
+	var newData []byte
+	if size > int64(len(data)) {
+		// Extend with null bytes
+		newData = make([]byte, size)
+		copy(newData, data)
+	} else {
+		// Truncate to size
+		newData = data[:size]
+	}
+
+	// Update the existing node's data without replacing the node
+	fskit.SetData(node, newData)
+	return nil
+}
+
+func (fsys *FS) Remove(name string) (err error) {
+	defer func() {
+		fsys.log.Debug("remove", "name", name, "err", err)
+	}()
 	name = path.Clean(name)
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotExist}
@@ -441,7 +556,10 @@ func (fsys *FS) Remove(name string) error {
 	return nil
 }
 
-func (fsys *FS) Rename(oldpath, newpath string) error {
+func (fsys *FS) Rename(oldpath, newpath string) (err error) {
+	defer func() {
+		fsys.log.Debug("rename", "oldpath", oldpath, "newpath", newpath, "err", err)
+	}()
 	oldpath = path.Clean(oldpath)
 	newpath = path.Clean(newpath)
 	if !fs.ValidPath(oldpath) || !fs.ValidPath(newpath) {
@@ -527,7 +645,10 @@ func (fsys *FS) Rename(oldpath, newpath string) error {
 	return nil
 }
 
-func (fsys *FS) Symlink(oldname, newname string) error {
+func (fsys *FS) Symlink(oldname, newname string) (err error) {
+	defer func() {
+		fsys.log.Debug("symlink", "oldname", oldname, "newname", newname, "err", err)
+	}()
 	newname = path.Clean(newname)
 	if !fs.ValidPath(newname) {
 		return &fs.PathError{Op: "symlink", Path: oldname, Err: fs.ErrInvalid}
@@ -554,7 +675,10 @@ func (fsys *FS) Symlink(oldname, newname string) error {
 	return nil
 }
 
-func (fsys *FS) Readlink(name string) (string, error) {
+func (fsys *FS) Readlink(name string) (link string, err error) {
+	defer func() {
+		fsys.log.Debug("readlink", "name", name, "err", err)
+	}()
 	name = path.Clean(name)
 	if !fs.ValidPath(name) {
 		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrNotExist}

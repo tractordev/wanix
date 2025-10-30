@@ -452,3 +452,166 @@ func TestMemFSSymlinks(t *testing.T) {
 		}
 	})
 }
+
+func TestTruncate(t *testing.T) {
+	t.Run("TruncateBasic", func(t *testing.T) {
+		m := New()
+
+		// Create file with content
+		if err := fs.WriteFile(m, "file.txt", []byte("hello world"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Truncate to smaller size
+		if err := fs.Truncate(m, "file.txt", 5); err != nil {
+			t.Fatal(err)
+		}
+
+		data, err := fs.ReadFile(m, "file.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if string(data) != "hello" {
+			t.Errorf("expected 'hello', got '%s'", string(data))
+		}
+	})
+
+	t.Run("TruncateExtend", func(t *testing.T) {
+		m := New()
+
+		// Create file with content
+		if err := fs.WriteFile(m, "file.txt", []byte("hello"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Truncate to larger size (should pad with null bytes)
+		if err := fs.Truncate(m, "file.txt", 10); err != nil {
+			t.Fatal(err)
+		}
+
+		data, err := fs.ReadFile(m, "file.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(data) != 10 {
+			t.Errorf("expected length 10, got %d", len(data))
+		}
+
+		expected := []byte{'h', 'e', 'l', 'l', 'o', 0, 0, 0, 0, 0}
+		if !bytes.Equal(data, expected) {
+			t.Errorf("expected %v, got %v", expected, data)
+		}
+	})
+
+	t.Run("TruncateWithOpenHandle", func(t *testing.T) {
+		// This is the key test for the vi bug fix
+		m := New()
+
+		// Create file with initial content
+		if err := fs.WriteFile(m, "test.txt", []byte("hello world"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Open file for writing (simulating vi opening the file)
+		f, err := m.Open("test.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Truncate the file while it's open (simulating vi's SetAttr truncate)
+		if err := fs.Truncate(m, "test.txt", 0); err != nil {
+			t.Fatal(err)
+		}
+
+		// Write to the open file handle (simulating vi writing)
+		if w, ok := f.(interface{ Write([]byte) (int, error) }); ok {
+			n, err := w.Write([]byte("test content"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n != 12 {
+				t.Errorf("expected to write 12 bytes, wrote %d", n)
+			}
+		} else {
+			t.Fatal("file doesn't support Write")
+		}
+
+		// Close the file handle
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		// Read the file - should contain "test content", not be empty or corrupted
+		data, err := fs.ReadFile(m, "test.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if string(data) != "test content" {
+			t.Errorf("expected 'test content', got '%s' (bytes: %v)", string(data), data)
+		}
+	})
+
+	t.Run("TruncateMultipleHandles", func(t *testing.T) {
+		// Test with multiple file handles open simultaneously
+		// This demonstrates that each handle has its own buffer snapshot
+		m := New()
+
+		// Create file
+		if err := fs.WriteFile(m, "test.txt", []byte("original content"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		// Open first handle
+		f1, err := m.Open("test.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Open second handle
+		f2, err := m.Open("test.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Truncate the underlying node
+		if err := fs.Truncate(m, "test.txt", 0); err != nil {
+			t.Fatal(err)
+		}
+
+		// Write from first handle - writes to its buffer which had "original content"
+		if w, ok := f1.(interface{ Write([]byte) (int, error) }); ok {
+			w.Write([]byte("from f1"))
+		}
+
+		// Close first handle - syncs its buffer to node
+		f1.Close()
+
+		// At this point the file contains "from f1l content" because f1's buffer
+		// had "original content" and we overwrote the first 7 bytes
+
+		// Write from second handle - writes to its buffer
+		if w, ok := f2.(interface{ Write([]byte) (int, error) }); ok {
+			w.Write([]byte("from f2"))
+		}
+
+		// Close second handle - syncs its buffer to node
+		f2.Close()
+
+		// The second write overwrites because it closed last
+		data, err := fs.ReadFile(m, "test.txt")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Both handles had copies of "original content" in their buffers
+		// Both overwrote the first 7 bytes with their write
+		// The last close wins, so we get f2's modified buffer
+		expected := "from f2l content"
+		if string(data) != expected {
+			t.Errorf("expected '%s', got '%s'", expected, string(data))
+		}
+	})
+}
