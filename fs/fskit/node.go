@@ -1,7 +1,6 @@
 package fskit
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"log/slog"
@@ -329,7 +328,15 @@ func (f *nodeFile) Read(b []byte) (n int, err error) {
 	if f.offset < 0 {
 		return 0, &fs.PathError{Op: "read", Path: f.inode.Path(), Err: fs.ErrInvalid}
 	}
-	n = copy(b, f.data[f.offset:])
+
+	// Check if offset can be represented as int (required for slice operations)
+	// This prevents overflow on 32-bit systems and WASM
+	const maxInt = int(^uint(0) >> 1)
+	if f.offset > int64(maxInt) {
+		return 0, &fs.PathError{Op: "read", Path: f.inode.Path(), Err: fs.ErrInvalid}
+	}
+
+	n = copy(b, f.data[int(f.offset):])
 	f.offset += int64(n)
 	return n, nil
 }
@@ -380,7 +387,15 @@ func (f *nodeFile) ReadAt(b []byte, offset int64) (n int, err error) {
 	if offset < 0 || offset > int64(len(f.data)) {
 		return 0, &fs.PathError{Op: "read", Path: f.inode.Path(), Err: fs.ErrInvalid}
 	}
-	n = copy(b, f.data[offset:])
+
+	// Check if offset can be represented as int (required for slice operations)
+	// This prevents overflow on 32-bit systems and WASM
+	const maxInt = int(^uint(0) >> 1)
+	if offset > int64(maxInt) {
+		return 0, &fs.PathError{Op: "read", Path: f.inode.Path(), Err: fs.ErrInvalid}
+	}
+
+	n = copy(b, f.data[int(offset):])
 	if n < len(b) {
 		return n, io.EOF
 	}
@@ -406,18 +421,50 @@ func (f *nodeFile) Write(b []byte) (n int, err error) {
 
 	n = len(b)
 	cur := f.offset
-	diff := cur - int64(len(f.data))
-	var tail []byte
-	if n+int(cur) < len(f.data) {
-		tail = f.data[n+int(cur):]
+
+	// Validate offset is within valid range for slice operations
+	if cur < 0 {
+		return 0, &fs.PathError{Op: "write", Path: f.inode.Path(), Err: fs.ErrInvalid}
 	}
-	if diff > 0 {
-		f.data = append(f.data, append(bytes.Repeat([]byte{00}, int(diff)), b...)...)
-		f.data = append(f.data, tail...)
+
+	// Check if offset can be represented as int (required for slice operations)
+	// This prevents overflow on 32-bit systems and WASM
+	const maxInt = int(^uint(0) >> 1)
+	if cur > int64(maxInt) {
+		return 0, &fs.PathError{Op: "write", Path: f.inode.Path(), Err: fs.ErrInvalid}
+	}
+
+	dataLen := int64(len(f.data))
+	endPos := cur + int64(n)
+
+	// Check if end position would overflow
+	if endPos > int64(maxInt) {
+		return 0, &fs.PathError{Op: "write", Path: f.inode.Path(), Err: fs.ErrInvalid}
+	}
+
+	curInt := int(cur)
+	endPosInt := int(endPos)
+
+	// Calculate if we need to grow the data slice
+	if cur > dataLen {
+		// Need to pad with zeros between current data end and write position
+		// Grow data to accommodate padding + new data
+		newData := make([]byte, endPosInt)
+		copy(newData, f.data)
+		// zeros are already in place from make()
+		copy(newData[curInt:], b)
+		f.data = newData
+	} else if endPos > dataLen {
+		// Write starts within or at the end of existing data but extends beyond
+		newData := make([]byte, endPosInt)
+		copy(newData, f.data)
+		copy(newData[curInt:], b)
+		f.data = newData
 	} else {
-		f.data = append(f.data[:cur], b...)
-		f.data = append(f.data, tail...)
+		// Write is entirely within existing data
+		copy(f.data[curInt:], b)
 	}
+
 	f.modTime = time.Now()
 	f.dirty = true
 	f.offset += int64(n)

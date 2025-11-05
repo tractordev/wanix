@@ -592,3 +592,165 @@ func TestNodeModTimeTracking(t *testing.T) {
 		t.Errorf("expected 'hello world', got %q", string(n.Data()))
 	}
 }
+
+// TestNodeFileOffsetOverflow is a regression test for integer overflow issues
+// when converting int64 offsets to int for slice operations.
+// Before the fix, large offsets would overflow on 32-bit systems (including WASM),
+// causing incorrect behavior like returning MaxInt32 (2147483647) as bytes written.
+func TestNodeFileOffsetOverflow(t *testing.T) {
+	node := Entry("test.txt", 0644, []byte("hello"))
+
+	f, err := node.Open(".")
+	if err != nil {
+		t.Fatalf("failed to open: %v", err)
+	}
+	defer f.Close()
+
+	// Calculate maxInt for this platform
+	const maxInt = int(^uint(0) >> 1)
+
+	// Test 1: Seek beyond maxInt should fail or succeed based on platform
+	sf := f.(interface {
+		Seek(int64, int) (int64, error)
+	})
+
+	// Attempt to seek to a large offset
+	// Avoid overflow by checking if we're on a 64-bit platform
+	var largeOffset int64
+	if maxInt == 9223372036854775807 {
+		// 64-bit platform, use a large but valid offset
+		largeOffset = int64(maxInt) - 1000
+	} else {
+		// 32-bit platform, use maxInt + 1 to test overflow handling
+		// Compute at runtime to avoid compile-time overflow on 64-bit
+		maxIntAsInt64 := int64(maxInt)
+		largeOffset = maxIntAsInt64 + 1
+	}
+
+	_, _ = sf.Seek(largeOffset, 0)
+	// On platforms where int64 > int, this should fail with ErrInvalid
+	// On 64-bit platforms where int == int64, the seek might succeed but
+	// subsequent write should still validate
+
+	// Test 2: Try to write at an offset that would overflow
+	wf := f.(interface{ Write([]byte) (int, error) })
+	nBytes, err := wf.Write([]byte("test"))
+
+	// The write should either:
+	// - Fail because seek failed (offset validation in Seek)
+	// - Fail because write validates offset is > maxInt
+	// - Succeed on 64-bit if within memory limits
+	// But it should NEVER return an overflowed value like MaxInt32
+	if err == nil {
+		// If write succeeded, verify it returned correct count
+		if nBytes != 4 {
+			t.Errorf("write should return correct count (4), got %d", nBytes)
+		}
+	} else {
+		// Error is expected on 32-bit systems
+		if err != fs.ErrInvalid && err != fs.ErrClosed {
+			t.Logf("write failed with error (may be expected): %v", err)
+		}
+	}
+
+	// Test 3: WriteAt with large offset
+	waf := f.(interface {
+		WriteAt([]byte, int64) (int, error)
+	})
+
+	nBytes, err = waf.WriteAt([]byte("test"), largeOffset)
+	if err == nil {
+		// Write succeeded - verify correct count
+		if nBytes != 4 {
+			t.Errorf("WriteAt should return correct count (4), got %d", nBytes)
+		}
+	} else {
+		// Error expected on platforms where offset > maxInt
+		if err != fs.ErrInvalid && err != fs.ErrClosed {
+			t.Logf("WriteAt failed with error (may be expected): %v", err)
+		}
+	}
+
+	// Test 4: ReadAt with large offset
+	f.Close()
+	f, _ = node.Open(".")
+	defer f.Close()
+
+	raf := f.(interface {
+		ReadAt([]byte, int64) (int, error)
+	})
+
+	buf := make([]byte, 10)
+	nBytes, err = raf.ReadAt(buf, largeOffset)
+	if err == nil || err == io.EOF {
+		// Read succeeded (shouldn't happen with empty data at that offset)
+		// but if it does, nBytes should be sane
+		if nBytes < 0 || nBytes > len(buf) {
+			t.Errorf("ReadAt returned invalid count: %d", nBytes)
+		}
+	} else {
+		// Error expected
+		if err != fs.ErrInvalid && err != fs.ErrClosed {
+			t.Logf("ReadAt failed with error (may be expected): %v", err)
+		}
+	}
+}
+
+// TestNodeFileOffsetOverflowSpecific tests the specific bug scenario
+// where a write of 175 bytes returned 2147483647 (MaxInt32).
+func TestNodeFileOffsetOverflowSpecific(t *testing.T) {
+	node := Entry("test.txt", 0644, []byte{})
+
+	f, err := node.Open(".")
+	if err != nil {
+		t.Fatalf("failed to open: %v", err)
+	}
+	defer f.Close()
+
+	sf := f.(interface {
+		Seek(int64, int) (int64, error)
+	})
+	wf := f.(interface{ Write([]byte) (int, error) })
+
+	// Scenario: offset that would cause int overflow on 32-bit
+	// const maxInt32 = 2147483647
+	const maxInt = int(^uint(0) >> 1)
+
+	// If we're on a 32-bit system (or WASM), try to reproduce the overflow
+	if maxInt <= 2147483647 {
+		// Try to seek near the overflow boundary
+		testOffset := int64(maxInt) - 100
+		_, err = sf.Seek(testOffset, 0)
+		if err != nil {
+			// Expected on some systems
+			t.Logf("Seek to large offset failed (expected): %v", err)
+			return
+		}
+
+		// Try to write 175 bytes (the original failing case)
+		data := make([]byte, 175)
+		for i := range data {
+			data[i] = byte(i)
+		}
+
+		nBytes, err := wf.Write(data)
+
+		// The bug was: n would be 2147483647 instead of 175
+		// After fix: either write succeeds with n=175, or fails with proper error
+		if err != nil {
+			if err != fs.ErrInvalid && err != fs.ErrClosed {
+				t.Logf("write failed with error (may be expected): %v", err)
+			}
+		} else {
+			// Write succeeded
+			if nBytes != 175 {
+				t.Errorf("REGRESSION: write of 175 bytes returned %d (expected 175)", nBytes)
+			}
+			if nBytes == 2147483647 {
+				t.Error("REGRESSION: write returned MaxInt32, indicating integer overflow bug")
+			}
+		}
+	} else {
+		t.Logf("Skipping 32-bit specific test on 64-bit platform")
+	}
+}
