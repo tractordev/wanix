@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"errors"
 	"io"
 	"os"
 )
@@ -59,7 +60,7 @@ func OpenFile(fsys FS, name string, flag int, perm FileMode) (f File, err error)
 			f.Close()
 			// close and reopen after chmod
 			// since close might clobber the chmod
-			if err := Chmod(fsys, name, perm); err != nil {
+			if err := Chmod(fsys, name, perm); err != nil && !errors.Is(err, ErrNotSupported) {
 				return nil, err
 			}
 			f, err = fsys.Open(name)
