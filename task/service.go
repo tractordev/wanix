@@ -43,9 +43,9 @@ func (d *Service) Alloc(kind string, parent *Resource) (*Resource, error) {
 	d.nextID++
 	rid := strconv.Itoa(d.nextID)
 
-	_, p0a, p0b := pipe.NewFS(true)
-	_, p1a, p1b := pipe.NewFS(true)
-	_, p2a, p2b := pipe.NewFS(true)
+	_, p0a, p0b := pipe.NewFS(false)
+	_, p1a, p1b := pipe.NewFS(false)
+	_, p2a, p2b := pipe.NewFS(false)
 
 	p := &Resource{
 		starter: starter,
