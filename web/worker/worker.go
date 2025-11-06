@@ -13,6 +13,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/task"
+	"tractor.dev/wanix/web/jsutil"
 	"tractor.dev/wanix/web/runtime"
 )
 
@@ -58,6 +59,8 @@ func (r *Resource) Start(args ...string) error {
 	r.worker = js.Global().Get("Worker").New(url, js.ValueOf(map[string]any{"type": "module"}))
 	r.worker.Set("onerror", js.FuncOf(func(this js.Value, args []js.Value) any {
 		js.Global().Get("console").Call("error", args[0])
+		// load the script again in a way that will show an import/syntax error
+		jsutil.LoadScript(url.String(), true)
 		return nil
 	}))
 	r.worker.Set("onmessageerror", js.FuncOf(func(this js.Value, args []js.Value) any {
