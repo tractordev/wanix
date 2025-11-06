@@ -50,6 +50,11 @@ func (f *FuncFile) Stat() (fs.FileInfo, error) {
 	return f.Node, nil
 }
 
+// no-op
+func (f *FuncFile) Seek(offset int64, whence int) (int64, error) {
+	return 0, nil
+}
+
 func (f *FuncFile) ReadAt(b []byte, off int64) (int, error) {
 	f.mu.Lock()
 
