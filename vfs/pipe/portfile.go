@@ -1,8 +1,6 @@
 package pipe
 
 import (
-	"io"
-
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 )
@@ -31,14 +29,14 @@ func (pf *PortFile) Close() error { return nil }
 func (pf *PortFile) Read(b []byte) (int, error) { return pf.Port.Read(b) }
 
 func (pf *PortFile) Stat() (fs.FileInfo, error) {
-	return fskit.Entry(pf.Name, fs.FileMode(0644)|fs.ModeNamedPipe, int64(pf.Port.Size())), nil
+	return fskit.Entry(pf.Name, fs.FileMode(0644), int64(pf.Port.Size())), nil
 }
 
 // Optional stream-friendly methods
 func (pf *PortFile) ReadAt(b []byte, off int64) (int, error) {
-	if off > 0 {
-		return 0, io.EOF
-	}
+	// if off > 0 {
+	// 	return 0, io.EOF
+	// }
 	return pf.Read(b)
 }
 

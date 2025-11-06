@@ -68,7 +68,9 @@ func (p *PipeFS) OpenContext(ctx context.Context, name string) (iofs.File, error
 }
 
 // Allocator allows binding a fresh PipeFS per bind operation.
-type Allocator struct{}
+type Allocator struct {
+	Buffered bool
+}
 
 func (a *Allocator) Open(name string) (iofs.File, error) {
 	return a.OpenContext(context.Background(), name)
@@ -79,7 +81,7 @@ func (a *Allocator) OpenContext(ctx context.Context, name string) (iofs.File, er
 }
 
 func (a *Allocator) BindAllocFS(name string) (iofs.FS, error) {
-	fsys, _, _ := NewFS(true)
+	fsys, _, _ := NewFS(!a.Buffered)
 	return fsys, nil
 }
 
