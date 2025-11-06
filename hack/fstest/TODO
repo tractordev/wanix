@@ -1,2 +1,3 @@
 - test for mv file to existing file/dir
 - test truncate with open write handle
+- test du -sh
