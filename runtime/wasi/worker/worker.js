@@ -1,5 +1,5 @@
 import { 
-    WanixFS,
+    WanixHandle,
 	CallBuffer, 
 	WASI, 
     WASIProcExit,
@@ -24,7 +24,7 @@ self.onmessage = async (e) => {
 }
 
 async function initializeSyncWorker(e) {
-    const fs = new WanixFS(e.data.worker.fsys);
+    const fs = new WanixHandle(e.data.worker.sys);
     const pid = e.data.worker.env.pid;
     const env = (await fs.readText(`task/${pid}/env`)).trim().split("\n");
     const args = (await fs.readText(`task/${pid}/cmd`)).trim().split(" ");
@@ -156,6 +156,7 @@ async function runWasi(e) {
 	const inst = await WebAssembly.instantiate(wasm, imports);
     const wasmString = new TextDecoder('utf-8', { ignoreBOM: true, fatal: false }).decode(e.data.bin);
     let code = 0;
+	let start = performance.now();
 	// split so we don't trigger the tinygo check itself by being in the embedded source
 	if (wasmString.includes(["t","i","n","y","g","o","_","l","a","u","n","c","h"].join(""))) {
         wasi.initialize(inst);
@@ -163,6 +164,8 @@ async function runWasi(e) {
     } else {
         code = wasi.start(inst);
     }
+	const end = performance.now();
+	// console.log(`wasi execution took ${end - start}ms`);
 	caller.call("exit", {code});
 }
 

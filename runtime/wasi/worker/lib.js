@@ -4277,6 +4277,9 @@ var FileHandle = class extends WanixHandle {
     }
     const count = buffer.byteLength;
     const data = this.caller.call("fd_read", { fd: this.fd, count, at });
+    if (data === null) {
+      return 0;
+    }
     let writeBuffer3;
     if (buffer instanceof ArrayBuffer) {
       writeBuffer3 = new Uint8Array(buffer);
