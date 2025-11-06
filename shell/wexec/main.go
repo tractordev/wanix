@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -13,13 +14,18 @@ import (
 )
 
 func debug(format string, a ...any) {
-	// log.Printf(format+"\n", a...)
+	if os.Getenv("DEBUG") == "1" {
+		log.Printf(format+"\n", a...)
+	}
 }
 
 func main() {
+	log.SetFlags(log.Lshortfile)
 	if len(os.Args) < 2 {
 		log.Fatal("usage: wexec <wasm> [args...]")
 	}
+
+	// fake /env program to print environment for debugging
 	if os.Args[1] == "/env" {
 		fmt.Println(os.Environ())
 		fmt.Println("---")
@@ -62,32 +68,46 @@ func main() {
 	go func() {
 		defer wg.Done()
 		debug("polling fd/1 => stdout")
+		f, err := os.Open(fmt.Sprintf("/task/%s/fd/1", pid))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		b := make([]byte, 4096)
 		for {
-			b, err := os.ReadFile(fmt.Sprintf("/task/%s/fd/1", pid))
-			if err != nil {
+			n, err := f.Read(b)
+			if err != nil && err != io.EOF {
 				log.Fatal(err)
 			}
-			if done.Load() == 1 && len(b) == 0 {
+			if done.Load() == 1 && n == 0 {
+				debug("stdout thread done")
 				return
 			}
-			os.Stdout.Write(b)
-			time.Sleep(200 * time.Millisecond)
+			os.Stdout.Write(b[:n])
+			time.Sleep(30 * time.Millisecond)
 		}
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		debug("polling fd/2 => stderr")
+		f, err := os.Open(fmt.Sprintf("/task/%s/fd/2", pid))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		b := make([]byte, 4096)
 		for {
-			b, err := os.ReadFile(fmt.Sprintf("/task/%s/fd/2", pid))
-			if err != nil {
+			n, err := f.Read(b)
+			if err != nil && err != io.EOF {
 				log.Fatal(err)
 			}
-			if done.Load() == 1 && len(b) == 0 {
+			if done.Load() == 1 && n == 0 {
+				debug("stderr thread done")
 				return
 			}
-			os.Stderr.Write(b)
-			time.Sleep(200 * time.Millisecond)
+			os.Stderr.Write(b[:n])
+			time.Sleep(30 * time.Millisecond)
 		}
 	}()
 
@@ -104,15 +124,18 @@ func main() {
 		}
 		out := strings.TrimSpace(string(b))
 		if out != "" {
+			debug("exit code: %s", out)
 			code, err := strconv.Atoi(out)
 			if err != nil {
 				log.Fatal(err)
 			}
 			done.Store(1)
+			debug("waiting for threads to finish")
 			wg.Wait()
+			debug("exiting with code %d", code)
 			os.Exit(code)
 		}
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
