@@ -244,9 +244,13 @@ func (l *p9file) Close() error {
 }
 
 // Open implements p9.File.Open.
-func (l *p9file) Open(mode p9.OpenFlags) (p9.QID, uint32, error) {
-	// log.Println("server open:", l.path)
-	qid, _, err := l.info()
+func (l *p9file) Open(mode p9.OpenFlags) (qid p9.QID, _ uint32, err error) {
+	defer func() {
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			log.Println("p9kit.open:", l.path, err)
+		}
+	}()
+	qid, _, err = l.info()
 	if err != nil {
 		return qid, 0, err
 	}
