@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"text/tabwriter"
 )
@@ -16,7 +17,11 @@ func main() {
 
 	fmt.Fprintf(w, "Env:\t%v\n", os.Environ())
 
-	entries, _ := os.ReadDir("/")
+	entries, err := os.ReadDir("/")
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
 	var root []string
 	for _, entry := range entries {
 		if entry.IsDir() {
