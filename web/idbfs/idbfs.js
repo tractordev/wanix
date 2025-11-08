@@ -29,8 +29,6 @@ const SEEK_END = 2;
 // Threshold for inline vs external data storage
 const INLINE_DATA_THRESHOLD = 4096; // 4KB
 
-console.log("idbfs.js loaded");
-
 class IDBFSError extends Error {
     constructor(message, code) {
         super(message);
@@ -40,7 +38,15 @@ class IDBFSError extends Error {
 }
 
 function log(...args) {
-    console.log(...args);
+    // Enable debug logging if ?debug-idbfs=true in the URL query params
+    let _debugIDBFS;
+    if (typeof window !== "undefined" && window.location && window.location.search) {
+        const params = new URLSearchParams(window.location.search);
+        _debugIDBFS = params.get("debug-idbfs") === "true";
+    }
+    if (_debugIDBFS) {
+        console.log("[idbfs]", ...args);
+    }
 }
 
 // LRU Cache for hot entries
