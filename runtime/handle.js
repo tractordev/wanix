@@ -83,8 +83,16 @@ export class WanixHandle {
         await this.peer.call("Truncate", [name, size]);
     }
 
+    async create(name) {
+        return (await this.peer.call("Create", [name])).value;
+    }
+
     async open(name) {
         return (await this.peer.call("Open", [name])).value;
+    }
+
+    async openFile(name, flags, mode) {
+        return (await this.peer.call("OpenFile", [name, flags, mode])).value;
     }
 
     async read(fd, count) {
@@ -95,12 +103,56 @@ export class WanixHandle {
         return (await this.peer.call("Write", [fd, data])).value;
     }
 
+    async writeAt(fd, data, offset) {
+        return (await this.peer.call("WriteAt", [fd, data, offset])).value;
+    }
+
     async close(fd) {
         return (await this.peer.call("Close", [fd])).value;
     }
 
     async sync(fd) {
         return (await this.peer.call("Sync", [fd])).value;
+    }
+
+    async fstat(fd) {
+        return (await this.peer.call("Fstat", [fd])).value;
+    }
+
+    async lstat(name) {
+        return (await this.peer.call("Lstat", [name])).value;
+    }
+
+    async chmod(name, mode) {
+        await this.peer.call("Chmod", [name, mode]);
+    }
+
+    async chown(name, uid, gid) {
+        await this.peer.call("Chown", [name, uid, gid]);
+    }
+
+    async fchmod(fd, mode) {
+        await this.peer.call("Fchmod", [fd, mode]);
+    }
+
+    async fchown(fd, uid, gid) {
+        await this.peer.call("Fchown", [fd, uid, gid]);
+    }
+
+    async ftruncate(fd, length) {
+        await this.peer.call("Ftruncate", [fd, length]);
+    }
+
+    async readlink(name) {
+        return (await this.peer.call("Readlink", [name])).value;
+    }
+
+    async symlink(oldname, newname) {
+        await this.peer.call("Symlink", [oldname, newname]);
+    }
+
+    async chtimes(name, atime, mtime) {
+        await this.peer.call("Chtimes", [name, atime, mtime]);
     }
 
     async openReadable(name) {
