@@ -20,6 +20,14 @@ func Remove(fsys FS, name string) error {
 	if err == nil {
 		return rfsys.Remove(rname)
 	}
+
+	// for non-existent files, return ErrNotExist
+	// before returning ErrNotSupported
+	_, err = Stat(fsys, name)
+	if err != nil {
+		return err
+	}
+
 	return opErr(fsys, name, "remove", err)
 }
 

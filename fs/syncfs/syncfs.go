@@ -626,45 +626,35 @@ func (sfs *SyncFS) newSyncFile(f fs.File, path string) (*syncFile, error) {
 
 // Write wraps the underlying Write and marks file as modified
 func (sf *syncFile) Write(p []byte) (int, error) {
-	if w, ok := sf.File.(interface{ Write([]byte) (int, error) }); ok {
-		n, err := w.Write(p)
-		if err == nil && n > 0 {
-			if !sf.modified {
-				// Capture the time of the first write
-				sf.writeTime = time.Now()
-				sf.modified = true
-			}
+	n, err := fs.Write(sf.File, p)
+	if err == nil && n > 0 {
+		if !sf.modified {
+			// Capture the time of the first write
+			sf.writeTime = time.Now()
+			sf.modified = true
 		}
-		return n, err
 	}
-	return 0, fs.ErrPermission
+	return n, err
 }
 
 // WriteAt wraps the underlying WriteAt and marks file as modified
 func (sf *syncFile) WriteAt(p []byte, off int64) (int, error) {
-	if wa, ok := sf.File.(interface {
-		WriteAt([]byte, int64) (int, error)
-	}); ok {
-		n, err := wa.WriteAt(p, off)
-		if err == nil && n > 0 {
-			if !sf.modified {
-				// Capture the time of the first write
-				sf.writeTime = time.Now()
-				sf.modified = true
-			}
+	n, err := fs.WriteAt(sf.File, p, off)
+	if err == nil && n > 0 {
+		if !sf.modified {
+			sf.writeTime = time.Now()
+			sf.modified = true
 		}
-		return n, err
 	}
-	return 0, fs.ErrPermission
+	return n, err
 }
 
 func (sf *syncFile) Seek(offset int64, whence int) (int64, error) {
-	if s, ok := sf.File.(interface {
-		Seek(int64, int) (int64, error)
-	}); ok {
-		return s.Seek(offset, whence)
-	}
-	return 0, fs.ErrPermission
+	return fs.Seek(sf.File, offset, whence)
+}
+
+func (sf *syncFile) ReadAt(p []byte, off int64) (int, error) {
+	return fs.ReadAt(sf.File, p, off)
 }
 
 // ReadDir implements fs.ReadDirFile using SyncFS ReadDir

@@ -17,7 +17,10 @@ func Write(f File, data []byte) (int, error) {
 }
 
 // WriteAt writes data to the file at the given offset.
-func WriteAt(f File, data []byte, off int64) (int, error) {
+func WriteAt(f File, data []byte, off int64) (n int, err error) {
+	// defer func() {
+	// 	log.Printf("writeat %d %d: %v", off, len(data), err)
+	// }()
 	// Validate offset
 	if off < 0 {
 		return 0, fmt.Errorf("negative offset: %d", off)
@@ -40,7 +43,7 @@ func WriteAt(f File, data []byte, off int64) (int, error) {
 	}
 
 	// Seek to the desired position
-	_, err := Seek(f, off, 0) // SEEK_SET = 0
+	_, err = Seek(f, off, 0) // SEEK_SET = 0
 	if err != nil {
 		return 0, fmt.Errorf("seek to offset %d: %w", off, err)
 	}
