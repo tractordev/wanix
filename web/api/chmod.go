@@ -3,13 +3,11 @@
 package api
 
 import (
-	"log"
-
 	"tractor.dev/toolkit-go/duplex/rpc"
 	"tractor.dev/wanix/fs"
 )
 
-func (s *syscaller) truncate(r rpc.Responder, c *rpc.Call) {
+func (s *syscaller) chmod(r rpc.Responder, c *rpc.Call) {
 	var args []any
 	c.Receive(&args)
 
@@ -18,20 +16,20 @@ func (s *syscaller) truncate(r rpc.Responder, c *rpc.Call) {
 		panic("arg 0 is not a string")
 	}
 
-	usize, ok := args[1].(uint64)
+	umode, ok := args[1].(uint64)
 	if !ok {
-		log.Panicf("arg 1 is not a uint64: %T %v", args[1], args[1])
+		panic("arg 1 is not a uint64")
 	}
-	size := int64(usize)
+	mode := fs.FileMode(umode)
 
-	err := fs.Truncate(s.task.Namespace(), path, size)
+	err := fs.Chmod(s.task.Namespace(), path, mode)
 	if err != nil {
 		r.Return(err)
 		return
 	}
 }
 
-func (s *syscaller) ftruncate(r rpc.Responder, c *rpc.Call) {
+func (s *syscaller) fchmod(r rpc.Responder, c *rpc.Call) {
 	var args []any
 	c.Receive(&args)
 
@@ -41,11 +39,11 @@ func (s *syscaller) ftruncate(r rpc.Responder, c *rpc.Call) {
 	}
 	fd := int(ufd)
 
-	usize, ok := args[1].(uint64)
+	umode, ok := args[1].(uint64)
 	if !ok {
 		panic("arg 1 is not a uint64")
 	}
-	size := int64(usize)
+	mode := fs.FileMode(umode)
 
 	file, ok := s.fds[fd]
 	if !ok {
@@ -53,7 +51,7 @@ func (s *syscaller) ftruncate(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	err := fs.Truncate(s.task.Namespace(), file.path, size)
+	err := fs.Chmod(s.task.Namespace(), file.path, mode)
 	if err != nil {
 		r.Return(err)
 		return

@@ -17,8 +17,13 @@ import (
 
 type syscaller struct {
 	task      *task.Resource
-	fds       map[int]fs.File
+	fds       map[int]*openFile
 	fdCounter int
+}
+
+type openFile struct {
+	file fs.File
+	path string
 }
 
 func PortResponder(port js.Value, root *task.Resource) {
@@ -31,16 +36,19 @@ func PortResponder(port js.Value, root *task.Resource) {
 
 	syscaller := &syscaller{
 		task:      root,
-		fds:       make(map[int]fs.File),
-		fdCounter: 0,
+		fds:       make(map[int]*openFile),
+		fdCounter: 3, // 0-2 reserved for stdio
 	}
 
 	peer := talk.NewPeer(sess, codec.CBORCodec{})
 	peer.Handle("Open", rpc.HandlerFunc(syscaller.open))
+	peer.Handle("OpenFile", rpc.HandlerFunc(syscaller.openFile))
+	peer.Handle("Create", rpc.HandlerFunc(syscaller.create))
 	peer.Handle("Close", rpc.HandlerFunc(syscaller.close))
 	peer.Handle("Sync", rpc.HandlerFunc(syscaller.sync))
 	peer.Handle("Read", rpc.HandlerFunc(syscaller.read))
 	peer.Handle("Write", rpc.HandlerFunc(syscaller.write))
+	peer.Handle("WriteAt", rpc.HandlerFunc(syscaller.writeAt))
 	peer.Handle("ReadDir", rpc.HandlerFunc(syscaller.readDir))
 	peer.Handle("Mkdir", rpc.HandlerFunc(syscaller.mkdir))
 	peer.Handle("MkdirAll", rpc.HandlerFunc(syscaller.mkdirAll))
@@ -56,5 +64,15 @@ func PortResponder(port js.Value, root *task.Resource) {
 	peer.Handle("ReadFile", rpc.HandlerFunc(syscaller.readFile))
 	peer.Handle("WriteFile", rpc.HandlerFunc(syscaller.writeFile))
 	peer.Handle("AppendFile", rpc.HandlerFunc(syscaller.appendFile))
+	peer.Handle("Fstat", rpc.HandlerFunc(syscaller.fstat))
+	peer.Handle("Lstat", rpc.HandlerFunc(syscaller.lstat))
+	peer.Handle("Chmod", rpc.HandlerFunc(syscaller.chmod))
+	peer.Handle("Chown", rpc.HandlerFunc(syscaller.chown))
+	peer.Handle("Fchmod", rpc.HandlerFunc(syscaller.fchmod))
+	peer.Handle("Fchown", rpc.HandlerFunc(syscaller.fchown))
+	peer.Handle("Ftruncate", rpc.HandlerFunc(syscaller.ftruncate))
+	peer.Handle("Readlink", rpc.HandlerFunc(syscaller.readlink))
+	peer.Handle("Symlink", rpc.HandlerFunc(syscaller.symlink))
+	peer.Handle("Chtimes", rpc.HandlerFunc(syscaller.chtimes))
 	peer.Respond()
 }

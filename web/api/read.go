@@ -31,7 +31,7 @@ func (s *syscaller) read(r rpc.Responder, c *rpc.Call) {
 	}
 
 	buf := make([]byte, count)
-	n, err := f.Read(buf)
+	n, err := f.file.Read(buf)
 	if err == io.EOF {
 		r.Return(nil)
 		return

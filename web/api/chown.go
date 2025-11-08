@@ -3,13 +3,11 @@
 package api
 
 import (
-	"log"
-
 	"tractor.dev/toolkit-go/duplex/rpc"
 	"tractor.dev/wanix/fs"
 )
 
-func (s *syscaller) truncate(r rpc.Responder, c *rpc.Call) {
+func (s *syscaller) chown(r rpc.Responder, c *rpc.Call) {
 	var args []any
 	c.Receive(&args)
 
@@ -18,20 +16,26 @@ func (s *syscaller) truncate(r rpc.Responder, c *rpc.Call) {
 		panic("arg 0 is not a string")
 	}
 
-	usize, ok := args[1].(uint64)
+	uuid, ok := args[1].(uint64)
 	if !ok {
-		log.Panicf("arg 1 is not a uint64: %T %v", args[1], args[1])
+		panic("arg 1 is not a uint64")
 	}
-	size := int64(usize)
+	uid := int(uuid)
 
-	err := fs.Truncate(s.task.Namespace(), path, size)
+	ugid, ok := args[2].(uint64)
+	if !ok {
+		panic("arg 2 is not a uint64")
+	}
+	gid := int(ugid)
+
+	err := fs.Chown(s.task.Namespace(), path, uid, gid)
 	if err != nil {
 		r.Return(err)
 		return
 	}
 }
 
-func (s *syscaller) ftruncate(r rpc.Responder, c *rpc.Call) {
+func (s *syscaller) fchown(r rpc.Responder, c *rpc.Call) {
 	var args []any
 	c.Receive(&args)
 
@@ -41,11 +45,17 @@ func (s *syscaller) ftruncate(r rpc.Responder, c *rpc.Call) {
 	}
 	fd := int(ufd)
 
-	usize, ok := args[1].(uint64)
+	uuid, ok := args[1].(uint64)
 	if !ok {
 		panic("arg 1 is not a uint64")
 	}
-	size := int64(usize)
+	uid := int(uuid)
+
+	ugid, ok := args[2].(uint64)
+	if !ok {
+		panic("arg 2 is not a uint64")
+	}
+	gid := int(ugid)
 
 	file, ok := s.fds[fd]
 	if !ok {
@@ -53,7 +63,7 @@ func (s *syscaller) ftruncate(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	err := fs.Truncate(s.task.Namespace(), file.path, size)
+	err := fs.Chown(s.task.Namespace(), file.path, uid, gid)
 	if err != nil {
 		r.Return(err)
 		return

@@ -24,5 +24,5 @@ func (s *syscaller) sync(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	r.Return(fs.Sync(f))
+	r.Return(fs.Sync(f.file))
 }

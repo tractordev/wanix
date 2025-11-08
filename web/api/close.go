@@ -24,6 +24,6 @@ func (s *syscaller) close(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	r.Return(f.Close())
+	r.Return(f.file.Close())
 	delete(s.fds, int(fd))
 }

@@ -29,7 +29,41 @@ func (s *syscaller) write(r rpc.Responder, c *rpc.Call) {
 		panic("arg 1 is not a []byte")
 	}
 
-	n, err := fs.Write(f, data)
+	n, err := fs.Write(f.file, data)
+	if err != nil {
+		r.Return(err)
+		return
+	}
+
+	r.Return(n)
+}
+
+func (s *syscaller) writeAt(r rpc.Responder, c *rpc.Call) {
+	var args []any
+	c.Receive(&args)
+
+	fd, ok := args[0].(uint64)
+	if !ok {
+		log.Panicf("arg 0 is not a uint64: %T %v", args[1], args[1])
+	}
+
+	f, ok := s.fds[int(fd)]
+	if !ok {
+		r.Return(fs.ErrInvalid)
+		return
+	}
+
+	data, ok := args[1].([]byte)
+	if !ok {
+		panic("arg 1 is not a []byte")
+	}
+
+	offset, ok := args[2].(uint64)
+	if !ok {
+		panic("arg 2 is not a uint64")
+	}
+
+	n, err := fs.WriteAt(f.file, data, int64(offset))
 	if err != nil {
 		r.Return(err)
 		return
