@@ -41,17 +41,41 @@ func AsyncIter(iter js.Value, fn func(js.Value) error) (err error) {
 
 type Writer struct {
 	js.Value
+	buf js.Value // optional reusable buffer
+}
+
+// NewWriter creates a writer with an optional reusable buffer for better performance.
+// Pass bufSize > 0 to enable buffer reuse, or 0 to allocate on each write.
+func NewWriter(v js.Value, bufSize int) *Writer {
+	w := &Writer{Value: v}
+	if bufSize > 0 {
+		w.buf = js.Global().Get("Uint8Array").New(bufSize)
+	}
+	return w
 }
 
 func (w *Writer) Write(p []byte) (n int, err error) {
-	buf := js.Global().Get("Uint8Array").New(len(p))
+	var buf js.Value
+	if w.buf.IsUndefined() || w.buf.Length() < len(p) {
+		buf = js.Global().Get("Uint8Array").New(len(p))
+	} else {
+		// Create a subarray view limited to len(p) to avoid writing stale buffer data
+		buf = w.buf.Call("subarray", 0, len(p))
+	}
+
 	js.CopyBytesToJS(buf, p)
 	nn, e := AwaitErr(w.Value.Call("write", buf))
 	if e != nil {
 		return 0, e
 	}
 	n = nn.Int()
-	return
+
+	// Handle short writes
+	// if n < len(p) {
+	// 	return n, io.ErrShortWrite
+	// }
+
+	return n, nil
 }
 
 func (w *Writer) Close() error {
@@ -61,19 +85,45 @@ func (w *Writer) Close() error {
 
 type Reader struct {
 	js.Value
+	buf js.Value // optional reusable buffer
+}
+
+// NewReader creates a reader with an optional reusable buffer for better performance.
+// Pass bufSize > 0 to enable buffer reuse, or 0 to allocate on each read.
+func NewReader(v js.Value, bufSize int) *Reader {
+	r := &Reader{Value: v}
+	if bufSize > 0 {
+		r.buf = js.Global().Get("Uint8Array").New(bufSize)
+	}
+	return r
 }
 
 func (r *Reader) Read(p []byte) (n int, err error) {
-	buf := js.Global().Get("Uint8Array").New(len(p))
+	var buf js.Value
+	if r.buf.IsUndefined() || r.buf.Length() < len(p) {
+		buf = js.Global().Get("Uint8Array").New(len(p))
+	} else {
+		// Create a subarray view limited to len(p) to avoid reading more than p can hold
+		buf = r.buf.Call("subarray", 0, len(p))
+	}
+
 	nn, e := AwaitErr(r.Value.Call("read", buf))
 	if e != nil {
 		return 0, e
 	}
-	js.CopyBytesToGo(p, buf)
+
+	// Check EOF first before copying
 	if nn.IsNull() {
 		return 0, io.EOF
 	}
-	return nn.Int(), nil
+
+	// Only copy the bytes that were actually read
+	n = nn.Int()
+	if n > 0 {
+		js.CopyBytesToGo(p[:n], buf)
+	}
+
+	return n, nil
 }
 
 func (r *Reader) Close() error {
