@@ -93,7 +93,7 @@ func (fsys *FS) Open(name string) (f fs.File, err error) {
 	if err != nil {
 		return nil, convertErr(err)
 	}
-	return &File{Value: v, log: fsys.log}, nil
+	return NewFile(v), nil
 }
 
 func (fsys *FS) Create(name string) (f fs.File, err error) {
@@ -104,7 +104,7 @@ func (fsys *FS) Create(name string) (f fs.File, err error) {
 	if err != nil {
 		return nil, convertErr(err)
 	}
-	return &File{Value: v, log: fsys.log}, nil
+	return NewFile(v), nil
 }
 
 func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (f fs.File, err error) {
@@ -115,7 +115,7 @@ func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (f fs.File, er
 	if err != nil {
 		return nil, convertErr(err)
 	}
-	return &File{Value: v, log: fsys.log}, nil
+	return NewFile(v), nil
 }
 
 func (fsys *FS) Mkdir(name string, perm fs.FileMode) (err error) {
@@ -216,7 +216,18 @@ func (fsys *FS) Readlink(name string) (link string, err error) {
 
 type File struct {
 	js.Value
-	log *log.Logger
+	log    *log.Logger
+	reader *jsutil.Reader
+	writer *jsutil.Writer
+}
+
+func NewFile(v js.Value) *File {
+	return &File{
+		Value:  v,
+		log:    log.New(io.Discard, "", 0),
+		reader: jsutil.NewReader(v, 8192), //&jsutil.Reader{Value: v},
+		writer: jsutil.NewWriter(v, 8192), //&jsutil.Writer{Value: v},
+	}
 }
 
 var _ fs.File = &File{}
@@ -245,16 +256,14 @@ func (f *File) Read(p []byte) (n int, err error) {
 	defer func() {
 		f.log.Printf("fread %d: %v", n, err)
 	}()
-	r := &jsutil.Reader{Value: f.Value}
-	return r.Read(p)
+	return f.reader.Read(p)
 }
 
 func (f *File) Write(p []byte) (n int, err error) {
 	defer func() {
 		f.log.Printf("fwrite %d: %v", n, err)
 	}()
-	w := &jsutil.Writer{Value: f.Value}
-	return w.Write(p)
+	return f.writer.Write(p)
 }
 
 func (f *File) Seek(offset int64, whence int) (pos int64, err error) {
