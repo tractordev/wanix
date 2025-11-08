@@ -37,6 +37,11 @@ RUN esbuild wasi/mod.ts \
     --bundle \
     --external:util \
     --format=esm
+RUN esbuild gojs/mod.ts \
+    --outfile=gojs/worker/lib.js \
+    --bundle \
+    --external:util \
+    --format=esm
 
 FROM tinygo/tinygo:0.39.0 AS wasm-tinygo
 WORKDIR /build

@@ -79,6 +79,7 @@ js:
 	$(DOCKER_CMD) rm -f wanix-build-js
 	$(DOCKER_CMD) create --name wanix-build-js wanix-build-js
 	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/wasi/worker/lib.js runtime/wasi/worker/lib.js
+	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/gojs/worker/lib.js runtime/gojs/worker/lib.js
 	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/assets/wanix.min.js runtime/assets/wanix.min.js
 	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/assets/wanix.js runtime/assets/wanix.js
 	$(DOCKER_CMD) cp wanix-build-js:/build/runtime/assets/wanix.handle.js runtime/assets/wanix.handle.js

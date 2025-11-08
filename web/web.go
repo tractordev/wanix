@@ -5,6 +5,7 @@ package web
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"syscall/js"
 
@@ -12,6 +13,7 @@ import (
 	"tractor.dev/wanix/cap"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	gojsworker "tractor.dev/wanix/runtime/gojs/worker"
 	wasiworker "tractor.dev/wanix/runtime/wasi/worker"
 	"tractor.dev/wanix/task"
 	"tractor.dev/wanix/vfs/pipe"
@@ -80,6 +82,16 @@ func New(k *wanix.K) fskit.MapFS {
 		return w.Start(args...)
 	})
 
+	k.Task.Register("gojs", func(p *task.Resource) error {
+		w, err := workerfs.Alloc(p)
+		if err != nil {
+			return err
+		}
+		url := gojsworker.BlobURL()
+		args := append([]string{fmt.Sprintf("pid=%s", p.ID()), url}, strings.Split(p.Cmd(), " ")...)
+		log.Println("gojs task started")
+		return w.Start(args...)
+	})
 	return webfs
 }
 
