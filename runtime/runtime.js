@@ -39,6 +39,23 @@ export class WanixRuntime extends WanixHandle {
             fetch(config.wasm).then(r => r.arrayBuffer()).then(this._loadWasm);
         }
 
+        // this is totally experimental and shouldn't be used yet
+        if (config.screen) {
+            const screen = document.createElement('div');
+            const div = document.createElement('div');
+            const canvas = document.createElement('canvas');
+            screen.appendChild(div);
+            screen.appendChild(canvas);
+            screen.id = 'screen';
+            // screen.style.display = 'none';
+            screen.style.position = 'absolute';
+            screen.style.right = '0';
+            screen.style.bottom = '0';
+            screen.style.opacity = '0.5';
+            document.body.appendChild(screen);
+            this.screen = "#screen";
+        }
+
 
         // window.wanix = {
         //     config,

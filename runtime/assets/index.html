@@ -11,6 +11,7 @@
     const w = new WanixRuntime({ 
         helpers: true, 
         export9p: queryParams.get('export9p') === 'true',
+        screen: queryParams.get('screen') === 'true',
         debug9p: queryParams.get('debug9p') === 'true',
         wasm: queryParams.get('wasm') || "./wanix.wasm", 
         bundle: queryParams.get('bundle') || "/shell/bundle.tgz",
