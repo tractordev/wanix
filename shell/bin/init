@@ -10,5 +10,9 @@ fi
 
 cd /web/opfs
 
+# configure automatic execution of wasm files based on first 4 bytes \0asm
+mount -t binfmt_misc none /proc/sys/fs/binfmt_misc
+echo ':wasm:M:0:\x00asm::/bin/wexec:' > /proc/sys/fs/binfmt_misc/register
+
 # start shell on ttyS0 with job control
-setsid /bin/busybox sh -c "PS1='\w ➜ ' LD_PRELOAD=/lib/preload.so exec /bin/busybox sh </dev/ttyS0 >/dev/ttyS0 2>&1"
+setsid /bin/busybox sh -c "PS1='\w ➜ ' exec /bin/busybox sh </dev/ttyS0 >/dev/ttyS0 2>&1"
