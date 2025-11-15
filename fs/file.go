@@ -75,7 +75,9 @@ func ReadAt(f File, p []byte, off int64) (int, error) {
 		return f.Read(p)
 	}
 
-	// Emulate ReadAt by reading and discarding bytes up to off
+	// Emulate ReadAt by reading and discarding bytes up to off.
+	// This is probably a bad idea though because if File has its
+	// own internal offset, this is just going to skip data.
 	_, err := io.CopyN(io.Discard, f, off)
 	if err != nil {
 		return 0, err
