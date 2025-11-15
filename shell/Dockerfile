@@ -26,9 +26,8 @@ RUN cd busybox-${BUSYBOX_VERSION} && \
     make defconfig ARCH=i386 CROSS_COMPILE=i686-linux-gnu- && \
     sed -i 's/^CONFIG_FEATURE_MOUNT_NFS=y/CONFIG_FEATURE_MOUNT_NFS=n/' .config && \
     sed -i 's/^CONFIG_FEATURE_INETD_RPC=y/CONFIG_FEATURE_INETD_RPC=n/' .config && \
-    # sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config && \
-    # LDFLAGS='-static'
-    make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- -j$(nproc) && \
+    sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config && \
+    make LDFLAGS='-static' ARCH=i386 CROSS_COMPILE=i686-linux-gnu- -j$(nproc) && \
     i686-linux-gnu-strip busybox && \
     chmod +x busybox && \
     mv busybox /build
@@ -53,11 +52,11 @@ COPY --from=lib32 /empty /rootfs/dev
 COPY --from=lib32 /empty /rootfs/etc
 COPY --from=lib32 /empty /rootfs/proc
 COPY --from=lib32 /empty /rootfs/lib
-COPY --from=lib32 /lib/ld-linux.so.2 /rootfs/lib/
-COPY --from=lib32 /lib/i386-linux-gnu/libc.so.6 /rootfs/lib/
-COPY --from=lib32 /lib/i386-linux-gnu/libm.so.6 /rootfs/lib/
-COPY --from=lib32 /lib/i386-linux-gnu/libresolv.so.2 /rootfs/lib/
-COPY --from=lib32 /lib/i386-linux-gnu/libdl.so.2 /rootfs/lib/
+#COPY --from=lib32 /lib/ld-linux.so.2 /rootfs/lib/
+#COPY --from=lib32 /lib/i386-linux-gnu/libc.so.6 /rootfs/lib/
+#COPY --from=lib32 /lib/i386-linux-gnu/libm.so.6 /rootfs/lib/
+#COPY --from=lib32 /lib/i386-linux-gnu/libresolv.so.2 /rootfs/lib/
+#COPY --from=lib32 /lib/i386-linux-gnu/libdl.so.2 /rootfs/lib/
 COPY --from=wexec /home/tinygo/wexec /rootfs/bin/
 COPY --from=busybox /build/busybox /rootfs/bin/
 COPY --from=kernel /build/arch/x86/boot/bzImage /kernel/bzImage
