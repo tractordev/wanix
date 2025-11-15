@@ -4,8 +4,11 @@ package jsutil
 
 import (
 	"io"
+	"log"
 	"strings"
 	"syscall/js"
+
+	"tractor.dev/wanix/vfs/pipe"
 )
 
 func Log(args ...any) {
@@ -143,4 +146,50 @@ func (rw *ReadWriter) Close() (err error) {
 	}
 	err = rw.WriteCloser.Close()
 	return
+}
+
+type PortReadWriter struct {
+	port js.Value
+	rbuf *pipe.Buffer
+	wbuf js.Value
+}
+
+func NewPortReadWriter(port js.Value) *PortReadWriter {
+	rbuf := pipe.NewBuffer(true)
+	port.Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
+		data := js.Global().Get("Uint8Array").New(args[0].Get("data"))
+		buf := make([]byte, data.Length())
+		js.CopyBytesToGo(buf, data)
+		_, err := rbuf.Write(buf)
+		if err != nil {
+			log.Println("error writing to rbuf:", err)
+		}
+		return nil
+	}))
+	return &PortReadWriter{
+		port: port,
+		rbuf: rbuf,
+		wbuf: js.Global().Get("Uint8Array").New(8192),
+	}
+}
+
+func (prw *PortReadWriter) Write(p []byte) (n int, err error) {
+	var buf js.Value
+	if prw.wbuf.IsUndefined() || prw.wbuf.Length() < len(p) {
+		buf = js.Global().Get("Uint8Array").New(len(p))
+	} else {
+		// Create a subarray view limited to len(p) to avoid writing stale buffer data
+		buf = prw.wbuf.Call("subarray", 0, len(p))
+	}
+	n = js.CopyBytesToJS(buf, p)
+	prw.port.Call("postMessage", buf) // no transfer, we reuse our buffer
+	return
+}
+
+func (prw *PortReadWriter) Read(p []byte) (int, error) {
+	return prw.rbuf.Read(p)
+}
+
+func (prw *PortReadWriter) Close() error {
+	return nil
 }
