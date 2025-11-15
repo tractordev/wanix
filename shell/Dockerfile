@@ -9,20 +9,6 @@ COPY wexec/main.go .
 RUN GOOS=linux GOARCH=386 tinygo build -o wexec main.go
 
 ##
-# Build preload.so with gcc for i386
-FROM --platform=$X86_64 ubuntu:noble AS preload
-RUN apt-get update && apt-get install -y \
-    gcc-10-multilib \
-    g++-10-multilib \
-    make \
-    && rm -rf /var/lib/apt/lists/*
-ENV CFLAGS="-m32"
-ENV LDFLAGS="-m32"
-WORKDIR /build
-COPY preload/main.c .
-RUN gcc -m32 -shared -fPIC -o preload.so main.c -ldl
-
-##
 # Build busybox with gcc for i386
 FROM --platform=$BUILDPLATFORM debian:bullseye AS busybox
 ARG BUSYBOX_VERSION=1.35.0
@@ -72,7 +58,6 @@ COPY --from=lib32 /lib/i386-linux-gnu/libc.so.6 /rootfs/lib/
 COPY --from=lib32 /lib/i386-linux-gnu/libm.so.6 /rootfs/lib/
 COPY --from=lib32 /lib/i386-linux-gnu/libresolv.so.2 /rootfs/lib/
 COPY --from=lib32 /lib/i386-linux-gnu/libdl.so.2 /rootfs/lib/
-COPY --from=preload /build/preload.so /rootfs/lib/
 COPY --from=wexec /home/tinygo/wexec /rootfs/bin/
 COPY --from=busybox /build/busybox /rootfs/bin/
 COPY --from=kernel /build/arch/x86/boot/bzImage /kernel/bzImage
