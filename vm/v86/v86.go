@@ -18,6 +18,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/vfs/pipe"
+	"tractor.dev/wanix/web/jsutil"
 	"tractor.dev/wanix/web/runtime"
 )
 
@@ -27,7 +28,6 @@ var v86Bundle []byte
 type VM struct {
 	id     string
 	kind   string
-	worker js.Value
 	serial *serialReadWriter
 }
 
@@ -98,8 +98,7 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 						log.Println("vm start:", err)
 						return
 					}
-					worker, serialport := makeVM(r.ID(), options)
-					r.worker = worker
+					serialport, _ := makeVM(r.ID(), options, false)
 					r.serial = newSerialReadWriter(serialport)
 					if err := TryPatch(ctx, r.serial, serialFile); err != nil {
 						log.Println("vm start:", err)
@@ -114,19 +113,48 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	return fs.OpenContext(ctx, fsys, name)
 }
 
-func makeVM(id string, options map[string]any) (js.Value, js.Value) {
-	blob := js.Global().Get("Blob").New(js.ValueOf([]any{string(v86Bundle)}), js.ValueOf(map[string]any{"type": "text/javascript"}))
+func makeVM(id string, options map[string]any, inWorker bool) (js.Value, *jsutil.PortReadWriter) {
+	var src []any
+	var readyChannel js.Value
+	if inWorker {
+		src = []any{string(v86Bundle)}
+	} else {
+		readyChannel = js.Global().Get("MessageChannel").New()
+		// todo: this is a bit of a hack, but it works
+		js.Global().Set("vmReadyPort", readyChannel.Get("port2"))
+		src = []any{"var self = window.vmReadyPort; var process = undefined;", string(v86Bundle)}
+	}
+	blob := js.Global().Get("Blob").New(js.ValueOf(src), js.ValueOf(map[string]any{"type": "text/javascript"}))
 	url := js.Global().Get("URL").Call("createObjectURL", blob)
-	worker := js.Global().Get("Worker").New(url) //js.ValueOf(map[string]any{"type": "module"})
-	worker.Set("onerror", js.FuncOf(func(this js.Value, args []js.Value) any {
-		js.Global().Get("console").Call("error", args[0])
-		return nil
-	}))
-	worker.Set("onmessageerror", js.FuncOf(func(this js.Value, args []js.Value) any {
-		js.Global().Get("console").Call("error", args[0])
-		return nil
-	}))
 
+	var readyReceiver js.Value
+	var readySender js.Value
+
+	if inWorker {
+		log.Println("starting worker")
+		worker := js.Global().Get("Worker").New(url)
+		worker.Set("onerror", js.FuncOf(func(this js.Value, args []js.Value) any {
+			js.Global().Get("console").Call("error", args[0])
+			return nil
+		}))
+		worker.Set("onmessageerror", js.FuncOf(func(this js.Value, args []js.Value) any {
+			js.Global().Get("console").Call("error", args[0])
+			return nil
+		}))
+		readySender = worker
+		readyReceiver = worker
+	} else {
+		log.Println("starting in-process")
+		readySender = readyChannel.Get("port1")
+		readyReceiver = readyChannel.Get("port1")
+		jsutil.LoadScript(url.String(), false)
+	}
+
+	ready := make(chan js.Value)
+	readyReceiver.Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
+		ready <- args[0].Get("data").Get("shmPort")
+		return nil
+	}))
 	sys := runtime.Instance().Call("createPort")
 	serialch := js.Global().Get("MessageChannel").New()
 	p9ch := js.Global().Get("MessageChannel").New()
@@ -137,16 +165,23 @@ func makeVM(id string, options map[string]any) (js.Value, js.Value) {
 		}))
 		return nil
 	}))
-	worker.Call("postMessage", map[string]any{
+
+	data := map[string]any{
 		"id":      id,
 		"sys":     sys,
 		"p9":      p9ch.Get("port2"),
 		"serial":  serialch.Get("port2"),
 		"options": options,
-	}, []any{sys, p9ch.Get("port2"), serialch.Get("port2")})
-	return worker, serialch.Get("port1")
+		"screen":  runtime.Instance().Get("screen"),
+	}
+	transfer := []any{sys, p9ch.Get("port2"), serialch.Get("port2")}
+	readySender.Call("postMessage", data, transfer)
+	bigpipe := jsutil.NewPortReadWriter(<-ready)
+
+	return serialch.Get("port1"), bigpipe
 }
 
+// todo: replace with PortReadWriter
 type serialReadWriter struct {
 	js.Value
 	buf *pipe.Buffer
