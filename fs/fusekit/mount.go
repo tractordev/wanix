@@ -38,7 +38,7 @@ func Mount(fsys iofs.FS, path string, fsctx context.Context) (closer io.Closer, 
 	}
 	opts.Debug = false
 
-	server, err := fs.Mount(path, &node{fs: fsys, ctx: fsctx}, opts)
+	server, err := fs.Mount(path, &node{rootfs: fsys, fs: fsys, path: "", ctx: fsctx}, opts)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package fusekit
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -11,37 +12,64 @@ import (
 )
 
 func sysErrno(err error) syscall.Errno {
-	log.Printf("ERR: %T %v", err, err)
-	// printLastFrames()
-	switch err {
-	case nil:
+	if err == nil {
 		return syscall.Errno(0)
-	case fs.ErrNotSupported:
-		return syscall.EOPNOTSUPP
-	case os.ErrPermission:
-		return syscall.EPERM
-	case os.ErrExist:
-		return syscall.EEXIST
-	case os.ErrNotExist:
-		return syscall.ENOENT
-	case os.ErrInvalid:
-		return syscall.EINVAL
 	}
 
+	// Check standard fs errors first
+	if errors.Is(err, fs.ErrNotSupported) {
+		return syscall.EOPNOTSUPP
+	}
+	if errors.Is(err, fs.ErrExist) {
+		return syscall.EEXIST
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return syscall.ENOENT
+	}
+	if errors.Is(err, fs.ErrInvalid) {
+		return syscall.EINVAL
+	}
+	if errors.Is(err, fs.ErrPermission) {
+		return syscall.EPERM
+	}
+	if errors.Is(err, fs.ErrNotEmpty) {
+		return syscall.ENOTEMPTY
+	}
+	if errors.Is(err, fs.ErrClosed) {
+		return syscall.EBADF
+	}
+
+	// Check for common I/O errors
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return syscall.ETIMEDOUT
+	}
+	if errors.Is(err, os.ErrNoDeadline) {
+		return syscall.EOPNOTSUPP
+	}
+	if errors.Is(err, os.ErrClosed) {
+		return syscall.EBADF
+	}
+
+	// Check specific error types
 	switch t := err.(type) {
 	case syscall.Errno:
 		return t
 	case *os.SyscallError:
-		return t.Err.(syscall.Errno)
+		if errno, ok := t.Err.(syscall.Errno); ok {
+			return errno
+		}
+		return syscall.EIO
 	case *os.PathError:
 		return sysErrno(t.Err)
 	case *os.LinkError:
 		return sysErrno(t.Err)
 	default:
-		log.Panicf("unsupported error type: %T", err)
-		return syscall.EOPNOTSUPP
+		// Log unmapped errors for debugging
+		if runtime.GOOS != "js" { // Don't log in WASM builds
+			log.Printf("unmapped error: %T %v", err, err)
+		}
+		return syscall.EIO
 	}
-
 }
 
 func printLastFrames() {

@@ -7,12 +7,36 @@ import (
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"tractor.dev/wanix/fs/pstat"
 )
 
 func fakeIno(s string) uint64 {
 	h := fnv.New64a() // FNV-1a 64-bit hash
 	h.Write([]byte(s))
 	return h.Sum64()
+}
+
+// getIno tries to extract a real inode number from the FileInfo,
+// falling back to a hash-based inode for virtual filesystems.
+func getIno(path string, fi iofs.FileInfo) uint64 {
+	if fi == nil {
+		return fakeIno(path)
+	}
+
+	// Try to extract real inode from underlying filesystem
+	if sys := fi.Sys(); sys != nil {
+		// Try Unix syscall.Stat_t (works on Unix systems with real filesystems)
+		if s, ok := sys.(*syscall.Stat_t); ok && s.Ino != 0 {
+			return s.Ino
+		}
+		// Try wanix portable stat (used by virtualizing filesystems)
+		if s, ok := sys.(*pstat.Stat); ok && s.Ino != 0 {
+			return s.Ino
+		}
+	}
+
+	// Fallback to hash-based inode for virtual/remote filesystems
+	return fakeIno(path)
 }
 
 func applyStat(out *fuse.Attr, fi iofs.FileInfo) {
@@ -23,7 +47,7 @@ func applyStat(out *fuse.Attr, fi iofs.FileInfo) {
 	}
 	out.Mtime = uint64(fi.ModTime().Unix())
 	out.Mtimensec = uint32(fi.ModTime().UnixNano())
-	out.Mode = uint32(fi.Mode())
+	out.Mode = pstat.FileModeToUnixMode(fi.Mode())
 	out.Size = uint64(fi.Size())
 }
 
