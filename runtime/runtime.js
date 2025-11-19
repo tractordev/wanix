@@ -10,6 +10,8 @@ import untar from "js-untar";
 import wasmExecGo from "./wasm/wasm_exec.go.js";
 import wasmExecTinygo from "./wasm/wasm_exec.tinygo.js";
 
+export { duplex };
+
 export class WanixRuntime extends WanixHandle {
     constructor(config = {}) {
         const sys = new MessageChannel();
