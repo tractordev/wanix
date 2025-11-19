@@ -4,6 +4,7 @@ import (
 	"io/fs"
 
 	"tractor.dev/wanix/cap"
+	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/task"
 	"tractor.dev/wanix/vfs"
 )
@@ -66,3 +67,6 @@ func (k *K) NewRoot() (*task.Resource, error) {
 
 	return p, nil
 }
+
+var ControlFile = internal.ControlFile
+var FieldFile = internal.FieldFile
