@@ -26,9 +26,10 @@ import (
 var v86Bundle []byte
 
 type VM struct {
-	id     string
-	kind   string
-	serial *serialReadWriter
+	id      string
+	kind    string
+	serial  *serialReadWriter
+	shmpipe *jsutil.PortReadWriter
 }
 
 func New(id, kind string) wanix.Resource {
@@ -85,6 +86,7 @@ func TryPatch(ctx context.Context, serial io.ReadWriter, serialFile *fskit.Strea
 
 func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	serialFile := fskit.NewStreamFile(r.serial, r.serial, nil, fs.FileMode(0644))
+	shmpipeFile := fskit.NewStreamFile(r.shmpipe, r.shmpipe, nil, fs.FileMode(0644))
 	fsys := fskit.MapFS{
 		"ctl": internal.ControlFile(&cli.Command{
 			Usage: "ctl",
@@ -98,7 +100,8 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 						log.Println("vm start:", err)
 						return
 					}
-					serialport, _ := makeVM(r.ID(), options, false)
+					serialport, shmpipe := makeVM(r.ID(), options, true)
+					r.shmpipe = shmpipe
 					r.serial = newSerialReadWriter(serialport)
 					if err := TryPatch(ctx, r.serial, serialFile); err != nil {
 						log.Println("vm start:", err)
@@ -110,9 +113,13 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if r.serial != nil {
 		fsys["ttyS0"] = fskit.FileFS(serialFile, "ttyS0")
 	}
+	if r.shmpipe != nil {
+		fsys["shmpipe0"] = fskit.FileFS(shmpipeFile, "shmpipe0")
+	}
 	return fs.OpenContext(ctx, fsys, name)
 }
 
+// careful, not running in worker will break text inputs on page
 func makeVM(id string, options map[string]any, inWorker bool) (js.Value, *jsutil.PortReadWriter) {
 	var src []any
 	var readyChannel js.Value

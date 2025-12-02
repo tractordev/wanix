@@ -55,7 +55,7 @@ self.onmessage = async (e) => {
 	});
 	serial.onmessage = (e) => vm.serial_send_bytes(0, e.data);
 	vm.add_listener("serial0-output-byte", (c) => serial.postMessage(c));
-	if (window) {
+	if (globalThis.window) {
 		window.vm = vm;
 	}
 }
