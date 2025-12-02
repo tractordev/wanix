@@ -344,41 +344,21 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 		return nil, translateError("readdir", name, err)
 	}
 
-	return readDirEntries(fsys.root, f, name)
-}
-
-// readDirEntries is a helper that reads all directory entries from a p9.File
-func readDirEntries(root p9.File, f p9.File, dirPath string) ([]fs.DirEntry, error) {
-	var dirents []p9.Dirent
-	offset := uint64(0)
-
-	for {
-		d, err := f.Readdir(offset, ^uint32(0)) // Read all
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
-		}
-		if len(d) == 0 {
-			break
-		}
-		dirents = append(dirents, d...)
-		offset = d[len(d)-1].Offset
+	dirents, err := f.Readdir(0, 65535) // max uint32 breaks p9kit server
+	if err != nil {
+		return nil, translateError("readdir", name, err)
 	}
 
-	var entries []fs.DirEntry
+	entries := make([]fs.DirEntry, 0, len(dirents))
 	for _, entry := range dirents {
-		walkPath := append(walkParts(dirPath), entry.Name)
-		_, child, err := root.Walk(walkPath)
+		// To fully mimic os.DirFS semantics, we can Walk and Stat, but for now just minimal implementation:
+		fi, err := fileInfo(f, entry.Name)
 		if err != nil {
-			continue // Skip entries we can't walk to
+			continue // Skip entries we can't stat
 		}
-
-		if fi, err := fileInfo(child, entry.Name); err == nil {
-			entries = append(entries, fi.(fs.DirEntry))
+		if dirEntry, ok := fi.(fs.DirEntry); ok {
+			entries = append(entries, dirEntry)
 		}
-		child.Close()
 	}
 	return entries, nil
 }
@@ -389,6 +369,7 @@ type remoteFile struct {
 	root   p9.File
 	path   []string
 	offset int64
+	iter   *fskit.DirIter
 }
 
 func (f *remoteFile) Read(p []byte) (n int, err error) {
@@ -454,8 +435,28 @@ func (f *remoteFile) Stat() (fs.FileInfo, error) {
 }
 
 func (f *remoteFile) ReadDir(n int) ([]fs.DirEntry, error) {
-	// Use shared helper to avoid duplication
-	return readDirEntries(f.root, f.file, strings.Join(f.path, "/"))
+	if f.iter == nil {
+		f.iter = fskit.NewDirIter(func() ([]fs.DirEntry, error) {
+			dirents, err := f.file.Readdir(0, 65535) // max uint32 breaks p9kit server
+			if err != nil {
+				return nil, translateError("readdir", f.name, err)
+			}
+
+			entries := make([]fs.DirEntry, 0, len(dirents))
+			for _, entry := range dirents {
+				// To fully mimic os.DirFS semantics, we can Walk and Stat, but for now just minimal implementation:
+				fi, err := fileInfo(f.file, entry.Name)
+				if err != nil {
+					continue // Skip entries we can't stat
+				}
+				if dirEntry, ok := fi.(fs.DirEntry); ok {
+					entries = append(entries, dirEntry)
+				}
+			}
+			return entries, nil
+		})
+	}
+	return f.iter.ReadDir(n)
 }
 
 func fileInfo(f p9.File, name string) (fs.FileInfo, error) {

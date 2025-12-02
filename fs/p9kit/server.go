@@ -336,7 +336,7 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 		}
 
 		// Stop if we've gone past the requested range or filled the output slice
-		if len(p9Ents) >= int(count) || cursor > offset+uint64(count) {
+		if int(count) >= 0 && (len(p9Ents) >= int(count) || cursor > offset+uint64(count)) {
 			break
 		}
 
