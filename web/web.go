@@ -18,6 +18,7 @@ import (
 	"tractor.dev/wanix/task"
 	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/vm"
+	"tractor.dev/wanix/web/caches"
 	"tractor.dev/wanix/web/dom"
 	"tractor.dev/wanix/web/fsa"
 	"tractor.dev/wanix/web/runtime"
@@ -31,6 +32,7 @@ func New(k *wanix.K) fskit.MapFS {
 	webfs := fskit.MapFS{
 		"dom":    dom.New(k),
 		"vm":     vm.New(),
+		"caches": caches.New(),
 		"worker": workerfs,
 		"opfs":   opfs,
 	}
