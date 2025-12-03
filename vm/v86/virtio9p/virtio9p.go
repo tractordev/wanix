@@ -14,6 +14,10 @@ import (
 )
 
 func Serve(fsys fs.FS, inst js.Value, debug bool) {
+	Setup(fsys, inst, debug)()
+}
+
+func Setup(fsys fs.FS, inst js.Value, debug bool) func() {
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 
@@ -73,7 +77,9 @@ func Serve(fsys fs.FS, inst js.Value, debug bool) {
 		o = append(o, p9.WithServerLogger(ulog.Log))
 	}
 	srv := p9.NewServer(p9kit.Attacher(fsys, p9kit.WithMemAttrStore()), o...)
-	if err := srv.Handle(inR, outW); err != nil {
-		log.Fatal(err)
+	return func() {
+		if err := srv.Handle(inR, outW); err != nil {
+			log.Fatal(err)
+		}
 	}
 }

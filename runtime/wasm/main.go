@@ -18,11 +18,11 @@ import (
 	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/vfs/ramfs"
 	"tractor.dev/wanix/vm"
+	"tractor.dev/wanix/vm/v86/virtio9p"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
 	"tractor.dev/wanix/web/jsutil"
 	"tractor.dev/wanix/web/runtime"
-	"tractor.dev/wanix/web/virtio9p"
 )
 
 func main() {
