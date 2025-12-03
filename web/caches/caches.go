@@ -3,13 +3,14 @@
 // Package caches provides a filesystem that exposes the browser's Cache API.
 // Top-level directories represent cache names. Within each cache, URLs are
 // represented as a nested directory structure: host/path/to/file.
-// Supports reading cached content and deleting entries.
+// Supports reading, writing, and deleting cached entries.
 package caches
 
 import (
 	"bytes"
 	"context"
 	"net/url"
+	"os"
 	"path"
 	"sort"
 	"strings"
@@ -34,6 +35,7 @@ func New() *FS {
 var _ fs.FS = (*FS)(nil)
 var _ fs.ReadDirFS = (*FS)(nil)
 var _ fs.RemoveFS = (*FS)(nil)
+var _ fs.OpenFileFS = (*FS)(nil)
 
 // caches returns the global caches object
 func caches() js.Value {
@@ -87,6 +89,101 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	return fsys.openPath(cacheName, subPath)
 }
 
+// OpenFile opens a file with the specified flags.
+func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "openfile", Path: name, Err: fs.ErrNotExist}
+	}
+
+	// Check for write/create flags
+	isWrite := flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC) != 0
+
+	if !isWrite {
+		// Read-only, use regular Open
+		return fsys.Open(name)
+	}
+
+	// Writing requires at least cache/host/path structure
+	parts := strings.SplitN(name, "/", 2)
+	if len(parts) < 2 {
+		return nil, &fs.PathError{Op: "openfile", Path: name, Err: fs.ErrInvalid}
+	}
+
+	cacheName := parts[0]
+	subPath := parts[1]
+
+	// Validate the path has at least host/file structure
+	if !strings.Contains(subPath, "/") {
+		return nil, &fs.PathError{Op: "openfile", Path: name, Err: fs.ErrInvalid}
+	}
+
+	// Find existing URL or determine the URL for new file
+	existingURL, _ := fsys.findURLForPath(cacheName, subPath)
+	requestURL := existingURL
+	if requestURL == "" {
+		requestURL = fsys.pathToURL(subPath)
+	}
+
+	// Check if file exists (for O_EXCL)
+	if flag&os.O_EXCL != 0 && existingURL != "" {
+		return nil, &fs.PathError{Op: "openfile", Path: name, Err: fs.ErrExist}
+	}
+
+	// Create a writable file
+	var existingData []byte
+
+	// If not truncating, try to load existing data
+	if flag&os.O_TRUNC == 0 && existingURL != "" {
+		cache, err := jsutil.AwaitErr(caches().Call("open", cacheName))
+		if err == nil {
+			response, err := jsutil.AwaitErr(cache.Call("match", existingURL))
+			if err == nil && !response.IsUndefined() && !response.IsNull() {
+				arrayBuffer, err := jsutil.AwaitErr(response.Call("arrayBuffer"))
+				if err == nil {
+					uint8Array := js.Global().Get("Uint8Array").New(arrayBuffer)
+					existingData = make([]byte, uint8Array.Length())
+					js.CopyBytesToGo(existingData, uint8Array)
+				}
+			}
+		}
+	}
+
+	// Create the cache entry immediately so stat works after open
+	// This ensures the file "exists" even before Close is called
+	cache, err := jsutil.AwaitErr(caches().Call("open", cacheName))
+	if err != nil {
+		return nil, &fs.PathError{Op: "openfile", Path: name, Err: err}
+	}
+
+	// Create an initial response with the existing or empty data
+	uint8Array := js.Global().Get("Uint8Array").New(len(existingData))
+	if len(existingData) > 0 {
+		js.CopyBytesToJS(uint8Array, existingData)
+	}
+	response := js.Global().Get("Response").New(uint8Array, map[string]any{
+		"status":     200,
+		"statusText": "OK",
+		"headers": map[string]any{
+			"Content-Length": len(existingData),
+		},
+	})
+	_, err = jsutil.AwaitErr(cache.Call("put", requestURL, response))
+	if err != nil {
+		return nil, &fs.PathError{Op: "openfile", Path: name, Err: err}
+	}
+
+	return &writableFile{
+		fsys:       fsys,
+		cacheName:  cacheName,
+		subPath:    subPath,
+		name:       path.Base(subPath),
+		requestURL: requestURL,
+		data:       existingData,
+		dirty:      false,
+		append:     flag&os.O_APPEND != 0,
+	}, nil
+}
+
 // ReadDir reads the named directory.
 func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	if !fs.ValidPath(name) {
@@ -118,8 +215,9 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Return empty slice for empty directories (not an error)
 	if entries == nil {
-		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrNotExist}
+		return []fs.DirEntry{}, nil
 	}
 	return entries, nil
 }
@@ -277,6 +375,24 @@ func (fsys *FS) urlToPath(rawURL string) string {
 	return p
 }
 
+// pathToURL converts a filesystem path to a URL.
+// It infers the scheme: http for localhost/127.0.0.1, https otherwise.
+// Example: "localhost:8788/bundles/file.tar" -> "http://localhost:8788/bundles/file.tar"
+func (fsys *FS) pathToURL(filePath string) string {
+	// Extract host from path
+	parts := strings.SplitN(filePath, "/", 2)
+	host := parts[0]
+
+	// Infer scheme
+	scheme := "https"
+	hostWithoutPort := strings.Split(host, ":")[0]
+	if hostWithoutPort == "localhost" || hostWithoutPort == "127.0.0.1" || hostWithoutPort == "0.0.0.0" {
+		scheme = "http"
+	}
+
+	return scheme + "://" + filePath
+}
+
 // findURLForPath finds the full URL that matches the given path (without scheme).
 // It searches through all cache entries to find a match.
 func (fsys *FS) findURLForPath(cacheName, filePath string) (string, error) {
@@ -389,13 +505,20 @@ func (fsys *FS) openPath(cacheName, subPath string) (fs.File, error) {
 		}
 	}
 
-	// Check if it's a directory
+	// Check if it's a directory with entries
 	entries, err := fsys.listEntriesAt(cacheName, subPath)
 	if err != nil {
 		return nil, &fs.PathError{Op: "open", Path: path.Join(cacheName, subPath), Err: err}
 	}
 	if entries != nil {
 		return fskit.DirFile(fskit.Entry(path.Base(subPath), fs.ModeDir|0755), entries...), nil
+	}
+
+	// For caches filesystem, treat host-only paths as virtual directories
+	// This allows opening host directories when they're empty
+	if !strings.Contains(subPath, "/") {
+		// Just a host, treat as empty directory
+		return fskit.DirFile(fskit.Entry(path.Base(subPath), fs.ModeDir|0755)), nil
 	}
 
 	return nil, &fs.PathError{Op: "open", Path: path.Join(cacheName, subPath), Err: fs.ErrNotExist}
@@ -442,12 +565,20 @@ func (fsys *FS) statPath(cacheName, subPath string) (fs.FileInfo, error) {
 		}
 	}
 
-	// Check if it's a directory
+	// Check if it's a directory with entries
 	entries, err := fsys.listEntriesAt(cacheName, subPath)
 	if err != nil {
 		return nil, &fs.PathError{Op: "stat", Path: path.Join(cacheName, subPath), Err: err}
 	}
 	if entries != nil {
+		return fskit.Entry(path.Base(subPath), fs.ModeDir|0755), nil
+	}
+
+	// For caches filesystem, treat host-only paths as virtual directories
+	// This allows creating files when the host directory is empty
+	// A host-only path is like "localhost:8788" (no slash after the host)
+	if !strings.Contains(subPath, "/") {
+		// Just a host, treat as directory
 		return fskit.Entry(path.Base(subPath), fs.ModeDir|0755), nil
 	}
 
@@ -475,7 +606,7 @@ func (fsys *FS) responseToFile(response js.Value, name string) (fs.File, error) 
 	}, nil
 }
 
-// cachedFile implements fs.File for a cached response.
+// cachedFile implements fs.File for a cached response (read-only).
 type cachedFile struct {
 	name   string
 	data   []byte
@@ -502,6 +633,101 @@ func (f *cachedFile) Close() error {
 
 func (f *cachedFile) Seek(offset int64, whence int) (int64, error) {
 	return f.reader.Seek(offset, whence)
+}
+
+// writableFile implements fs.File for writing to the cache.
+type writableFile struct {
+	fsys       *FS
+	cacheName  string
+	subPath    string
+	name       string
+	requestURL string
+	data       []byte
+	offset     int64
+	dirty      bool
+	append     bool
+}
+
+var _ fs.File = (*writableFile)(nil)
+
+func (f *writableFile) Stat() (fs.FileInfo, error) {
+	return &cachedFileInfo{
+		name: f.name,
+		size: int64(len(f.data)),
+	}, nil
+}
+
+func (f *writableFile) Read(p []byte) (int, error) {
+	if f.offset >= int64(len(f.data)) {
+		return 0, fs.ErrClosed
+	}
+	n := copy(p, f.data[f.offset:])
+	f.offset += int64(n)
+	return n, nil
+}
+
+func (f *writableFile) Write(p []byte) (int, error) {
+	if f.append {
+		f.data = append(f.data, p...)
+	} else {
+		// Grow data slice if necessary
+		end := f.offset + int64(len(p))
+		if end > int64(len(f.data)) {
+			newData := make([]byte, end)
+			copy(newData, f.data)
+			f.data = newData
+		}
+		copy(f.data[f.offset:], p)
+		f.offset = end
+	}
+	f.dirty = true
+	return len(p), nil
+}
+
+func (f *writableFile) Seek(offset int64, whence int) (int64, error) {
+	var newOffset int64
+	switch whence {
+	case 0: // io.SeekStart
+		newOffset = offset
+	case 1: // io.SeekCurrent
+		newOffset = f.offset + offset
+	case 2: // io.SeekEnd
+		newOffset = int64(len(f.data)) + offset
+	}
+	if newOffset < 0 {
+		return 0, fs.ErrInvalid
+	}
+	f.offset = newOffset
+	return newOffset, nil
+}
+
+func (f *writableFile) Close() error {
+	if !f.dirty {
+		return nil
+	}
+
+	// Open the cache
+	cache, err := jsutil.AwaitErr(caches().Call("open", f.cacheName))
+	if err != nil {
+		return err
+	}
+
+	// Create a Uint8Array from the data
+	uint8Array := js.Global().Get("Uint8Array").New(len(f.data))
+	js.CopyBytesToJS(uint8Array, f.data)
+
+	// Create a Response with the data
+	response := js.Global().Get("Response").New(uint8Array, map[string]any{
+		"status":     200,
+		"statusText": "OK",
+		"headers": map[string]any{
+			"Content-Length": len(f.data),
+		},
+	})
+
+	// Store in cache using the URL we determined at open time
+	_, err = jsutil.AwaitErr(cache.Call("put", f.requestURL, response))
+	return err
 }
 
 // cachedFileInfo implements fs.FileInfo for a cached file.
