@@ -26,10 +26,11 @@ import (
 var v86Bundle []byte
 
 type VM struct {
-	id      string
-	kind    string
-	serial  *serialReadWriter
-	shmpipe *jsutil.PortReadWriter
+	id         string
+	kind       string
+	serial     *serialReadWriter
+	screenport js.Value
+	shmpipe    *jsutil.PortReadWriter
 }
 
 func New(id, kind string) wanix.Resource {
@@ -100,12 +101,35 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 						log.Println("vm start:", err)
 						return
 					}
-					serialport, shmpipe := makeVM(r.ID(), options, true)
+					serialport, screenport, shmpipe := makeVM(r.ID(), options, false)
+					r.screenport = screenport
 					r.shmpipe = shmpipe
 					r.serial = newSerialReadWriter(serialport)
 					if err := TryPatch(ctx, r.serial, serialFile); err != nil {
 						log.Println("vm start:", err)
 					}
+				case "update-screen":
+					if r.screenport.IsUndefined() {
+						log.Println("vm update-screen: screenport not found")
+						return
+					}
+					channel := js.Global().Get("MessageChannel").New()
+					js.Global().Get("top").Call("postMessage", map[string]any{
+						"type":  "load",
+						"token": args[1],
+						"reply": channel.Get("port1"),
+					}, "*", []any{channel.Get("port1")})
+					channel.Get("port2").Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
+						screen := args[0].Get("data").Get("transfers").Index(0)
+						input := args[0].Get("data").Get("transfers").Index(1)
+						r.screenport.Call("postMessage", map[string]any{
+							"id":     "screen", // we dont even use id but to validate the message
+							"screen": screen,
+							"input":  input,
+						}, []any{screen, input})
+						return nil
+					}))
+
 				}
 			},
 		}),
@@ -120,7 +144,7 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 }
 
 // careful, not running in worker will break text inputs on page
-func makeVM(id string, options map[string]any, inWorker bool) (js.Value, *jsutil.PortReadWriter) {
+func makeVM(id string, options map[string]any, inWorker bool) (js.Value, js.Value, *jsutil.PortReadWriter) {
 	var src []any
 	var readyChannel js.Value
 	if inWorker {
@@ -159,7 +183,14 @@ func makeVM(id string, options map[string]any, inWorker bool) (js.Value, *jsutil
 
 	ready := make(chan js.Value)
 	readyReceiver.Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
-		ready <- args[0].Get("data").Get("shmPort")
+		if !args[0].Get("data").Get("shmPort").IsUndefined() {
+			ready <- args[0].Get("data").Get("shmPort")
+		}
+		if !args[0].Get("data").Get("audio").IsUndefined() {
+			if !js.Global().Get("handleAudio").IsUndefined() {
+				js.Global().Get("handleAudio").Invoke(args[0].Get("data"))
+			}
+		}
 		return nil
 	}))
 	sys := runtime.Instance().Call("createPort")
@@ -179,13 +210,20 @@ func makeVM(id string, options map[string]any, inWorker bool) (js.Value, *jsutil
 		"p9":      p9ch.Get("port2"),
 		"serial":  serialch.Get("port2"),
 		"options": options,
-		"screen":  runtime.Instance().Get("screen"),
 	}
 	transfer := []any{sys, p9ch.Get("port2"), serialch.Get("port2")}
+	if !runtime.Instance().Get("screen").IsUndefined() {
+		data["screen"] = runtime.Instance().Get("screen")
+		transfer = append(transfer, runtime.Instance().Get("screen"))
+	}
+	if !runtime.Instance().Get("input").IsUndefined() {
+		data["input"] = runtime.Instance().Get("input").Get("port")
+		transfer = append(transfer, runtime.Instance().Get("input").Get("port"))
+	}
 	readySender.Call("postMessage", data, transfer)
 	bigpipe := jsutil.NewPortReadWriter(<-ready)
 
-	return serialch.Get("port1"), bigpipe
+	return serialch.Get("port1"), readySender, bigpipe
 }
 
 // todo: replace with PortReadWriter
