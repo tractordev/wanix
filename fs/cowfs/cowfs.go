@@ -27,6 +27,7 @@
 package cowfs
 
 import (
+	"context"
 	"crypto/sha1"
 	"errors"
 	"fmt"
@@ -241,16 +242,17 @@ func (u *FS) resolvePath(path string) (string, error) {
 // shouldCopy determines if a file needs to be copied from base to overlay.
 // Returns true if the file exists in base but not in overlay.
 // Returns false if already in overlay or doesn't exist in base.
+// Uses Lstat to properly handle symlinks without following them.
 func (u *FS) shouldCopy(name string) (bool, error) {
-	// Already in overlay?
-	if _, err := fs.Stat(u.Overlay, name); err == nil {
+	// Already in overlay? (use Lstat to not follow symlinks)
+	if _, err := fs.Lstat(u.Overlay, name); err == nil {
 		return false, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return false, err
 	}
 
-	// Exists in base?
-	if _, err := fs.Stat(u.Base, name); err == nil {
+	// Exists in base? (use Lstat to not follow symlinks)
+	if _, err := fs.Lstat(u.Base, name); err == nil {
 		return true, nil
 	} else if errors.Is(err, fs.ErrNotExist) {
 		return false, fs.ErrNotExist
@@ -348,16 +350,16 @@ func (u *FS) Rename(oldname, newname string) error {
 	}
 	// Note: Do NOT resolve newname through renames - POSIX rename overwrites newname itself
 
-	// 2. Check if source exists in base and overlay
+	// 2. Check if source exists in base and overlay (use Lstat to not follow symlinks)
 	srcInBase := false
-	if _, err := fs.Stat(u.Base, src); err == nil {
+	if _, err := fs.Lstat(u.Base, src); err == nil {
 		srcInBase = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 
 	srcInOverlay := false
-	if _, err := fs.Stat(u.Overlay, src); err == nil {
+	if _, err := fs.Lstat(u.Overlay, src); err == nil {
 		srcInOverlay = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -369,7 +371,8 @@ func (u *FS) Rename(oldname, newname string) error {
 	}
 
 	// 4. Handle existing destination: remove if in overlay, tombstone if in base
-	statInfo, overlayErr := fs.Stat(u.Overlay, newname)
+	// Use Lstat to not follow symlinks
+	statInfo, overlayErr := fs.Lstat(u.Overlay, newname)
 	if overlayErr == nil {
 		// Destination exists in overlay - remove it
 		if statInfo.IsDir() {
@@ -386,7 +389,7 @@ func (u *FS) Rename(oldname, newname string) error {
 		return overlayErr
 	}
 
-	_, baseErr := fs.Stat(u.Base, newname)
+	_, baseErr := fs.Lstat(u.Base, newname)
 	if baseErr == nil {
 		// Destination exists in base - tombstone it
 		if err := u.tombstone(newname); err != nil {
@@ -483,8 +486,9 @@ func (u *FS) Remove(name string) error {
 	}
 
 	// 2. Check if file exists in base (we'll need this info)
+	// Use Lstat to not follow symlinks
 	existsInBase := false
-	if _, err := fs.Stat(u.Base, target); err == nil {
+	if _, err := fs.Lstat(u.Base, target); err == nil {
 		existsInBase = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		log.Println("stat base error", err)
@@ -492,8 +496,9 @@ func (u *FS) Remove(name string) error {
 	}
 
 	// 3. Check if file exists in overlay
+	// Use Lstat to not follow symlinks
 	existsInOverlay := false
-	if _, err := fs.Stat(u.Overlay, target); err == nil {
+	if _, err := fs.Lstat(u.Overlay, target); err == nil {
 		existsInOverlay = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		log.Println("stat overlay error", err)
@@ -520,14 +525,14 @@ func (u *FS) Remove(name string) error {
 		return fs.ErrNotExist
 	}
 
-	// 6. Check if it's a directory
+	// 6. Check if it's a directory (use Lstat to not follow symlinks)
 	isDir := false
 	if existsInOverlay {
-		if info, err := fs.Stat(u.Overlay, target); err == nil {
+		if info, err := fs.Lstat(u.Overlay, target); err == nil {
 			isDir = info.IsDir()
 		}
 	} else if existsInBase {
-		if info, err := fs.Stat(u.Base, target); err == nil {
+		if info, err := fs.Lstat(u.Base, target); err == nil {
 			isDir = info.IsDir()
 		}
 	}
@@ -661,7 +666,8 @@ func (u *FS) Symlink(oldname, newname string) error {
 	}
 
 	// 3. Handle existing file at target path (remove overlay, tombstone base)
-	if _, err := fs.Stat(u.Overlay, newpath); err == nil {
+	// Use Lstat to not follow symlinks
+	if _, err := fs.Lstat(u.Overlay, newpath); err == nil {
 		if err := fs.Remove(u.Overlay, newpath); err != nil {
 			return err
 		}
@@ -669,7 +675,7 @@ func (u *FS) Symlink(oldname, newname string) error {
 		return err
 	}
 
-	if _, err := fs.Stat(u.Base, newpath); err == nil {
+	if _, err := fs.Lstat(u.Base, newpath); err == nil {
 		// Hide base entry
 		if err := u.tombstone(newpath); err != nil {
 			return err
@@ -705,14 +711,15 @@ func (u *FS) Mkdir(name string, perm os.FileMode) error {
 	// log.Println("Mkdir", name, perm)
 
 	// 2. Check if directory already exists in either layer
-	if _, err := fs.Stat(u.Overlay, path); err == nil {
+	// Use Lstat to not follow symlinks
+	if _, err := fs.Lstat(u.Overlay, path); err == nil {
 		return fs.ErrExist
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
 
 	existsInBase := false
-	if _, err := fs.Stat(u.Base, path); err == nil {
+	if _, err := fs.Lstat(u.Base, path); err == nil {
 		existsInBase = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -779,9 +786,17 @@ func (u *FS) Create(name string) (fs.File, error) {
 // The path is resolved through rename chains before processing.
 // Prefers overlay, falls back to base. Returns fs.ErrNotExist if tombstoned.
 func (u *FS) Stat(name string) (os.FileInfo, error) {
+	return u.StatContext(context.Background(), name)
+}
+
+// StatContext returns file information for the named file with context support.
+// Respects the NoFollow context flag for symlink handling.
+// The path is resolved through rename chains before processing.
+// Prefers overlay, falls back to base. Returns fs.ErrNotExist if tombstoned.
+func (u *FS) StatContext(ctx context.Context, name string) (os.FileInfo, error) {
 	// 0. Normalize path
 	name = filepath.Clean(name)
-	// log.Println("Stat", name)
+	// log.Println("StatContext", name, "follow:", fs.FollowSymlinks(ctx))
 
 	// 1. Resolve rename chain
 	path, err := u.resolvePath(name)
@@ -794,15 +809,21 @@ func (u *FS) Stat(name string) (os.FileInfo, error) {
 		return nil, fs.ErrNotExist
 	}
 
+	// Choose stat function based on whether we should follow symlinks
+	statFn := fs.Stat
+	if !fs.FollowSymlinks(ctx) {
+		statFn = fs.Lstat
+	}
+
 	// 3. Try overlay first
-	if fi, err := fs.Stat(u.Overlay, path); err == nil {
+	if fi, err := statFn(u.Overlay, path); err == nil {
 		return fi, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 
 	// 4. Fallback to base
-	fi, err := fs.Stat(u.Base, path)
+	fi, err := statFn(u.Base, path)
 	if err != nil {
 		return nil, err
 	}
@@ -901,16 +922,16 @@ func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) 
 		}
 	}
 
-	// 2. Check existence in both layers
+	// 2. Check existence in both layers (use Lstat to not follow symlinks)
 	existsInOverlay := false
-	if _, err := fs.Stat(u.Overlay, path); err == nil {
+	if _, err := fs.Lstat(u.Overlay, path); err == nil {
 		existsInOverlay = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 
 	existsInBase := false
-	if _, err := fs.Stat(u.Base, path); err == nil {
+	if _, err := fs.Lstat(u.Base, path); err == nil {
 		existsInBase = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
@@ -921,7 +942,7 @@ func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) 
 	exclusive := flag&os.O_EXCL != 0
 	if creating && exclusive {
 		baseExists := false
-		if _, err := fs.Stat(u.Base, path); err == nil {
+		if _, err := fs.Lstat(u.Base, path); err == nil {
 			if _, dead := u.tombstones.Load(path); !dead {
 				baseExists = true
 			}
