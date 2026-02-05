@@ -19,6 +19,7 @@ import (
 	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web/caches"
+	"tractor.dev/wanix/web/dl"
 	"tractor.dev/wanix/web/dom"
 	"tractor.dev/wanix/web/fsa"
 	"tractor.dev/wanix/web/runtime"
@@ -35,6 +36,7 @@ func New(k *wanix.K) fskit.MapFS {
 		"caches": caches.New(),
 		"worker": workerfs,
 		"opfs":   opfs,
+		"dl":     dl.New(),
 	}
 	if !runtime.Instance().Get("_sw").IsUndefined() {
 		webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
