@@ -79,37 +79,37 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 						el.Set("className", "wanix-terminal")
 						term := js.Global().Get("Terminal").New(map[string]any{
 							"fontFamily": `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
-							"fontSize":   "24",
-							"theme": map[string]any{
-								// Background colors (columns 40m-47m)
-								"background": "#3f3f3f", // Default background
-								"black":      "#4d4d4d", // 40m - Dark gray/black
-								"red":        "#6f5050", // 41m - Dark red
-								"green":      "#63b38b", // 42m - Green
-								"yellow":     "#efdeb1", // 43m - Teal/cyan
-								"blue":       "#51606f", // 44m - Dark blue/navy
-								"magenta":    "#db8ec2", // 45m - Purple/magenta
-								"cyan":       "#8ed0d2", // 46m - Light blue/cyan
-								"white":      "#dcdccd", // 47m - Light gray
+							// "fontSize":   "24",
+							// "theme": map[string]any{
+							// 	// Background colors (columns 40m-47m)
+							// 	"background": "#3f3f3f", // Default background
+							// 	"black":      "#4d4d4d", // 40m - Dark gray/black
+							// 	"red":        "#6f5050", // 41m - Dark red
+							// 	"green":      "#63b38b", // 42m - Green
+							// 	"yellow":     "#efdeb1", // 43m - Teal/cyan
+							// 	"blue":       "#51606f", // 44m - Dark blue/navy
+							// 	"magenta":    "#db8ec2", // 45m - Purple/magenta
+							// 	"cyan":       "#8ed0d2", // 46m - Light blue/cyan
+							// 	"white":      "#dcdccd", // 47m - Light gray
 
-								// Foreground colors (regular and bright variants)
-								"foreground":    "#d9d9ca", // Default text color
-								"brightBlack":   "#4e4e4e", // Bright black/gray
-								"brightRed":     "#b69393", // Bright red
-								"brightGreen":   "#64b58d", // Bright green
-								"brightYellow":  "#ffeec1", // Bright yellow
-								"brightBlue":    "#91a2b3", // Bright blue
-								"brightMagenta": "#ffb3ea", // Bright magenta
-								"brightCyan":    "#aaeef1", // Bright cyan
-								"brightWhite":   "#eeedde", // Bright white
+							// 	// Foreground colors (regular and bright variants)
+							// 	"foreground":    "#d9d9ca", // Default text color
+							// 	"brightBlack":   "#4e4e4e", // Bright black/gray
+							// 	"brightRed":     "#b69393", // Bright red
+							// 	"brightGreen":   "#64b58d", // Bright green
+							// 	"brightYellow":  "#ffeec1", // Bright yellow
+							// 	"brightBlue":    "#91a2b3", // Bright blue
+							// 	"brightMagenta": "#ffb3ea", // Bright magenta
+							// 	"brightCyan":    "#aaeef1", // Bright cyan
+							// 	"brightWhite":   "#eeedde", // Bright white
 
-								// Other properties
-								"cursor":                      "#ffffff",
-								"cursorAccent":                "#000000",
-								"selectionBackground":         "#4444ff",
-								"selectionForeground":         "#ffffff",
-								"selectionInactiveBackground": "#666666",
-							},
+							// 	// Other properties
+							// 	"cursor":                      "#ffffff",
+							// 	"cursorAccent":                "#000000",
+							// 	"selectionBackground":         "#4444ff",
+							// 	"selectionForeground":         "#ffffff",
+							// 	"selectionInactiveBackground": "#666666",
+							// },
 						})
 						el.Set("term", term)
 						fitAddon := js.Global().Get("FitAddon").Get("FitAddon").New()
