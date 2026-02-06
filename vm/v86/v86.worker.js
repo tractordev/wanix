@@ -23,7 +23,7 @@ const inputHandler = (e) => {
 			break;
 	}
 };
-self.onmessage = async (e) => {
+thisWorker.onmessage = async (e) => {
 	if (!e.data.id) {
 		return;
 	}
@@ -75,14 +75,14 @@ self.onmessage = async (e) => {
 	vm.add_listener("emulator-ready", function() {
 		const channel = new SharedMemoryChannel(vm);
 		vm.shmPort = channel.getUserPort();
-		self.postMessage({ shmPort: vm.shmPort }, [vm.shmPort]);
+		thisWorker.postMessage({ shmPort: vm.shmPort }, [vm.shmPort]);
 
 		// vm.bus.register("dac-send-data", (data) => {
-		// 	self.postMessage({ audio: {left: data[0], right: data[1] } }, [data[0].buffer, data[1].buffer]);
+		// 	thisWorker.postMessage({ audio: {left: data[0], right: data[1] } }, [data[0].buffer, data[1].buffer]);
 		// 	// console.log("dac-send-data", data);
 		// });
 		// vm.bus.register("dac-tell-sampling-rate", (data) => {
-		// 	self.postMessage({ audio: {rate: data} });
+		// 	thisWorker.postMessage({ audio: {rate: data} });
 		// 	// console.log("dac-tell-sampling-rate", data);
 		// });
 		// setInterval(() => {

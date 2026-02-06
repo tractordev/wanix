@@ -108,6 +108,13 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 					if err := TryPatch(ctx, r.serial, serialFile); err != nil {
 						log.Println("vm start:", err)
 					}
+					// fsys, _, ok := fs.Origin(ctx)
+					// if ok {
+					// 	cachedfs := metacache.New(fsys)
+					// 	srv := p9.NewServer(p9kit.Attacher(cachedfs, p9kit.WithMemAttrStore()), p9.WithServerLogger(ulog.Log))
+					// 	log.Println("starting 9p server for shmpipe")
+					// 	go srv.Handle(shmpipe, shmpipe)
+					// }
 				case "update-screen":
 					if r.screenport.IsUndefined() {
 						log.Println("vm update-screen: screenport not found")
@@ -148,12 +155,12 @@ func makeVM(id string, options map[string]any, inWorker bool) (js.Value, js.Valu
 	var src []any
 	var readyChannel js.Value
 	if inWorker {
-		src = []any{string(v86Bundle)}
+		src = []any{"var thisWorker = self; var process = undefined;", string(v86Bundle)}
 	} else {
 		readyChannel = js.Global().Get("MessageChannel").New()
 		// todo: this is a bit of a hack, but it works
 		js.Global().Set("vmReadyPort", readyChannel.Get("port2"))
-		src = []any{"var self = window.vmReadyPort; var process = undefined;", string(v86Bundle)}
+		src = []any{"var thisWorker = window.vmReadyPort; var process = undefined;", string(v86Bundle)}
 	}
 	blob := js.Global().Get("Blob").New(js.ValueOf(src), js.ValueOf(map[string]any{"type": "text/javascript"}))
 	url := js.Global().Get("URL").Call("createObjectURL", blob)
