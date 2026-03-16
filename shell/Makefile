@@ -1,7 +1,7 @@
 DOCKER_CMD		?= $(shell command -v podman || command -v docker)
 
 bundle.tgz: bundle
-	tar -C bundle -czf bundle.tgz .
+    $(DOCKER_CMD) export wanix-shell-export | gzip > bundle.tgz
 
 bundle:
 	$(DOCKER_CMD) build -t wanix-shell-build --platform linux/386 -f Dockerfile .
