@@ -34,7 +34,13 @@ self.addEventListener("fetch", async (event) => {
     }
 
     const req = event.request;
+    const url = new URL(req.url);
     
+    // Don't cache dynamic filesystem paths
+    if (url.pathname.startsWith("/:/")) {
+        event.respondWith(handleRequest(req));
+        return;
+    } 
     event.respondWith(cache.match(req).then(async (resp) => {
         if (resp) {
             // console.log("ServiceWorker: cached", req.url);
@@ -106,7 +112,7 @@ async function handleRequest(req) {
         
     } catch (error) {
         if (error.message === 'Timeout') {
-            listener = undefined;
+            console.warn("ServiceWorker: timeout for", req.url);
         } else {
             console.warn("ServiceWorker:", error);
         }
