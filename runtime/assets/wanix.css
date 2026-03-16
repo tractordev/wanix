@@ -6,6 +6,7 @@ html, body {
     overflow: hidden;
     position: relative;
     box-sizing: border-box;
+    background-color: #3f3f3f;
 }
 
 .wanix-terminal {
