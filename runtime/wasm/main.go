@@ -21,12 +21,15 @@ import (
 	"tractor.dev/wanix/vm/v86/virtio9p"
 	"tractor.dev/wanix/web"
 	"tractor.dev/wanix/web/api"
+	"tractor.dev/wanix/web/dom/xterm"
 	"tractor.dev/wanix/web/jsutil"
 	"tractor.dev/wanix/web/runtime"
 )
 
 func main() {
 	log.SetFlags(log.Lshortfile)
+
+	xterm.Load()
 
 	inst := runtime.Instance()
 
