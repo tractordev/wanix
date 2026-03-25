@@ -91,11 +91,25 @@ func main() {
 
 	inst.Set("createPort", js.FuncOf(func(this js.Value, args []js.Value) any {
 		ch := js.Global().Get("MessageChannel").New()
-		go api.PortResponder(inst.Call("_portConn", ch.Get("port1")), root)
+		port := inst.Call("_portConn", ch.Get("port1"))
+		wr := &jsutil.Writer{Value: port}
+		rd := &jsutil.Reader{Value: port}
+		sess, err := mux.DialIO(wr, rd)
+		if err != nil {
+			log.Fatal(err)
+		}
+		go api.PortResponder(sess, root)
 		return ch.Get("port2")
 	}))
 
-	go api.PortResponder(inst.Call("_portConn", inst.Get("_sys").Get("port1")), root)
+	port := inst.Call("_portConn", inst.Get("_sys").Get("port1"))
+	wr := &jsutil.Writer{Value: port}
+	rd := &jsutil.Reader{Value: port}
+	sess, err := mux.DialIO(wr, rd)
+	if err != nil {
+		log.Fatal(err)
+	}
+	go api.PortResponder(sess, root)
 
 	// this is still a bit of a hack and wip
 	export9p := inst.Get("config").Get("export9p")

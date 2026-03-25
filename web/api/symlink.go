@@ -1,5 +1,3 @@
-//go:build js && wasm
-
 package api
 
 import (
@@ -17,4 +15,3 @@ func (s *syscaller) symlink(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 }
-

@@ -1,5 +1,3 @@
-//go:build js && wasm
-
 package api
 
 import (
@@ -30,5 +28,7 @@ func (s *syscaller) readDir(r rpc.Responder, c *rpc.Call) {
 		}
 		entries = append(entries, name)
 	}
+
 	r.Return(entries)
+	log.Println("ReadDir returned")
 }

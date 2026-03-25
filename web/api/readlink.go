@@ -1,5 +1,3 @@
-//go:build js && wasm
-
 package api
 
 import (
@@ -19,4 +17,3 @@ func (s *syscaller) readlink(r rpc.Responder, c *rpc.Call) {
 
 	r.Return(target)
 }
-

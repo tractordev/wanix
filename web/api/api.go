@@ -1,18 +1,12 @@
-//go:build js && wasm
-
 package api
 
 import (
-	"log"
-	"syscall/js"
-
 	"tractor.dev/toolkit-go/duplex/codec"
 	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/toolkit-go/duplex/rpc"
 	"tractor.dev/toolkit-go/duplex/talk"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/task"
-	"tractor.dev/wanix/web/jsutil"
 )
 
 type syscaller struct {
@@ -26,14 +20,7 @@ type openFile struct {
 	path string
 }
 
-func PortResponder(port js.Value, root *task.Resource) {
-	wr := &jsutil.Writer{Value: port}
-	rd := &jsutil.Reader{Value: port}
-	sess, err := mux.DialIO(wr, rd)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func PortResponder(sess mux.Session, root *task.Resource) {
 	syscaller := &syscaller{
 		task:      root,
 		fds:       make(map[int]*openFile),
