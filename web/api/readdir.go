@@ -30,5 +30,4 @@ func (s *syscaller) readDir(r rpc.Responder, c *rpc.Call) {
 	}
 
 	r.Return(entries)
-	log.Println("ReadDir returned")
 }
