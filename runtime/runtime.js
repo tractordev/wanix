@@ -19,6 +19,7 @@ export class WanixRuntime extends WanixHandle {
         this.config = config;
         this._id = Math.random().toString(36).substring(2, 15);
         this._sys = sys;
+        this._sw = new MessageChannel();
         this._ready = new Promise(resolve => this._wasmReady = resolve);
 
         if (!window.__wanix) {

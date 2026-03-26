@@ -40,7 +40,6 @@ func New(k *wanix.K) fskit.MapFS {
 	}
 	if !runtime.Instance().Get("_sw").IsUndefined() {
 		webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
-		webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
 	}
 
 	k.Cap.Register("pickerfs", func(_ *cap.Resource) (cap.Mounter, error) {
