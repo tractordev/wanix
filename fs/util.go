@@ -61,6 +61,7 @@ func DirExists(fsys FS, path string) (bool, error) {
 	return false, err
 }
 
+// deprecated? this doesnt always work because Open does not support O_APPEND
 func AppendFile(fsys FS, filename string, data []byte) error {
 	f, err := fsys.Open(filename)
 	if err != nil {
