@@ -2,7 +2,6 @@ package term
 
 import (
 	"context"
-	"log"
 	"strconv"
 	"sync"
 
@@ -25,11 +24,11 @@ type programFile struct {
 // 	return n, err
 // }
 
-func (p *programFile) Close() error {
-	// log.Println("close program file")
-	// p.once.Do(p.remove)
-	return p.PortFile.Close()
-}
+// func (p *programFile) Close() error {
+// 	log.Println("close program file")
+// 	p.once.Do(p.remove)
+// 	return p.PortFile.Close()
+// }
 
 // Resource is one terminal instance (paths data, program, winch).
 // MapFS is embedded so ResolveFS reaches winchFS (for fs.OpenFile with O_WRONLY, etc.).
@@ -146,12 +145,10 @@ func (d *Service) Alloc() (rid string, err error) {
 		hub:   hub,
 		end:   progPF.Port,
 	}
-	log.Println("resources", d.resources)
 	return rid, nil
 }
 
 func (d *Service) remove(rid string) {
-	log.Println("remove", rid)
 	d.mu.Lock()
 	res, err := d.Get(rid)
 	if err != nil {
