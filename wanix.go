@@ -4,9 +4,9 @@ import (
 	"io/fs"
 
 	"tractor.dev/wanix/cap"
+	"tractor.dev/wanix/fs/vfs"
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/task"
-	"tractor.dev/wanix/vfs"
 )
 
 type Resource interface {

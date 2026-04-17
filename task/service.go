@@ -7,9 +7,9 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/pipe"
+	"tractor.dev/wanix/fs/vfs"
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/vfs"
-	"tractor.dev/wanix/vfs/pipe"
 )
 
 type Service struct {

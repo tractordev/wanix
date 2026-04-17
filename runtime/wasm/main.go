@@ -5,22 +5,23 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"fmt"
 	"log"
+	"strings"
 	"syscall/js"
 
 	"github.com/hugelgupf/p9/p9"
 	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/wanix"
+	"tractor.dev/wanix/api"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/memfs"
 	"tractor.dev/wanix/fs/p9kit"
+	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/fs/tarfs"
-	"tractor.dev/wanix/vfs/pipe"
-	"tractor.dev/wanix/vfs/ramfs"
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/vm/v86/virtio9p"
 	"tractor.dev/wanix/web"
-	"tractor.dev/wanix/web/api"
 	"tractor.dev/wanix/web/dom/xterm"
 	"tractor.dev/wanix/web/jsutil"
 	"tractor.dev/wanix/web/runtime"
@@ -38,7 +39,7 @@ func main() {
 	k.AddModule("#vm", vm.New())
 	k.AddModule("#pipe", &pipe.Allocator{})
 	k.AddModule("#|", &pipe.Allocator{}) // alias for #pipe
-	k.AddModule("#ramfs", &ramfs.Allocator{})
+	k.AddModule("#ramfs", &memfs.Allocator{})
 
 	root, err := k.NewRoot()
 	if err != nil {
@@ -56,6 +57,19 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 
+	inst.Set("createPort", js.FuncOf(func(this js.Value, args []js.Value) any {
+		ch := js.Global().Get("MessageChannel").New()
+		port := inst.Call("_portConn", ch.Get("port1"))
+		wr := &jsutil.Writer{Value: port}
+		rd := &jsutil.Reader{Value: port}
+		sess, err := mux.DialIO(wr, rd)
+		if err != nil {
+			log.Fatal(err)
+		}
+		go api.PortResponder(sess, root)
+		return ch.Get("port2")
+	}))
+
 	bundleBytes := inst.Get("_bundle")
 	if !bundleBytes.IsUndefined() {
 		jsBuf := js.Global().Get("Uint8Array").New(bundleBytes)
@@ -72,6 +86,49 @@ func main() {
 		}
 		root.Namespace().Bind(rw, ".", "#bundle")
 		// root.Bind("#bundle", "bundle")
+	} else {
+		bundleURL := inst.Get("_bundleURL")
+		if !bundleURL.IsUndefined() {
+			bundle, err := jsutil.FetchToReader(bundleURL.String())
+			if err != nil {
+				log.Fatal(err)
+			}
+			bundleFS := tarfs.From(tar.NewReader(bundle))
+			rw := memfs.New()
+			if err := fs.CopyFS(bundleFS, ".", rw, "."); err != nil {
+				log.Fatal(err)
+			}
+			root.Namespace().Bind(rw, ".", "#bundle")
+			root.Bind("#bundle", "bundle")
+
+			// setup vm
+			vmraw, err := fs.ReadFile(root.Namespace(), "vm/new/default")
+			if err != nil {
+				log.Fatal(err)
+			}
+			vm := strings.TrimSpace(string(vmraw))
+			if err := root.Bind("#console/data1", fmt.Sprintf("vm/%s/ttyS0", vm)); err != nil {
+				log.Fatal(err)
+			}
+			cmdline := []string{
+				"init=/bin/init",
+				"rw",
+				"root=host9p",
+				"rootfstype=9p",
+				fmt.Sprintf("rootflags=trans=virtio,version=9p2000.L,aname=bundle/rootfs,cache=none,msize=131072", vm),
+				"loglevel=3",
+			}
+			ctlcmd := []string{
+				"start",
+				"-m", "1G",
+				"-append", fmt.Sprintf("'%s'", strings.Join(cmdline, " ")),
+			}
+			// boot vm as early as possible
+			log.Println("booting vm")
+			if err := fs.WriteFile(root.Namespace(), fmt.Sprintf("vm/%s/ctl", vm), []byte(strings.Join(ctlcmd, " ")), 0755); err != nil {
+				log.Fatal(err)
+			}
+		}
 	}
 
 	// r2fs := httpfs.New("https://r2fs.proteco.workers.dev/", nil)
@@ -88,19 +145,6 @@ func main() {
 	// if err := root.Namespace().Bind(sfs, ".", "#data"); err != nil {
 	// 	log.Fatal(err)
 	// }
-
-	inst.Set("createPort", js.FuncOf(func(this js.Value, args []js.Value) any {
-		ch := js.Global().Get("MessageChannel").New()
-		port := inst.Call("_portConn", ch.Get("port1"))
-		wr := &jsutil.Writer{Value: port}
-		rd := &jsutil.Reader{Value: port}
-		sess, err := mux.DialIO(wr, rd)
-		if err != nil {
-			log.Fatal(err)
-		}
-		go api.PortResponder(sess, root)
-		return ch.Get("port2")
-	}))
 
 	port := inst.Call("_portConn", inst.Get("_sys").Get("port1"))
 	wr := &jsutil.Writer{Value: port}

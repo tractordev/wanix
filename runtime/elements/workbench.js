@@ -125,6 +125,9 @@ export function serializeWorkbenchProfile(profile) {
       super();
       this._loaded = false;
       this.port = undefined;
+      this.extpath = this.getAttribute("extpath");
+      this.extname = this.getAttribute("extname");
+      this.folder = this.getAttribute("folder");
     }
   
     connectedCallback() {
@@ -179,8 +182,9 @@ export function serializeWorkbenchProfile(profile) {
       const ch = new MessageChannel();
       this.port = ch.port2;
       this.port.onmessage = async (event) => {
-        const port = await portCb();
-        event.data.port.postMessage({ wanix: port }, [port]);
+        const obj = await portCb();
+        event.data.port.postMessage(obj, [...Object.values(obj)]);
+   
     };
   
       const pageUrl = new URL(window.location.href);
@@ -204,32 +208,32 @@ export function serializeWorkbenchProfile(profile) {
       }
   
       const config = {
-        messagePorts: new Map([["progrium.apptron-system", ch.port1]]),
+        messagePorts: new Map([[this.extname, ch.port1]]),
         productConfiguration: {
-          extensionEnabledApiProposals: { "progrium.apptron-system": ["ipc"] },
+          extensionEnabledApiProposals: { [this.extname]: ["ipc"] },
           webviewContentExternalBaseUrlTemplate,
         },
-        configurationDefaults: {
-          "workbench.colorTheme": "Tractor Dark",
-          "workbench.secondarySideBar.defaultVisibility": "hidden",
-          "workbench.statusBar.visible": false,
-          "workbench.layoutControl.enabled": false,
-          "window.commandCenter": false,
-          "workbench.startupEditor": "none",
-          "workbench.activityBar.location": "hidden",
-          "workbench.tips.enabled": false,
-          "workbench.welcomePage.walkthroughs.openOnInstall": false,
-          "problems.visibility": false,
-          "editor.minimap.enabled": false,
-          "terminal.integrated.tabs.showActions": false,
-        },
+        // configurationDefaults: {
+        //   "workbench.tree.indent": 12,
+        //   "workbench.secondarySideBar.defaultVisibility": "visible", //"hidden",
+        //   "workbench.statusBar.visible": false,
+        //   "workbench.layoutControl.enabled": false,
+        //   "window.commandCenter": false,
+        //   "workbench.startupEditor": "none",
+        //   "workbench.activityBar.location": "hidden",
+        //   "workbench.tips.enabled": false,
+        //   "workbench.welcomePage.walkthroughs.openOnInstall": false,
+        //   "problems.visibility": false,
+        //   "editor.minimap.enabled": false,
+        //   "terminal.integrated.tabs.showActions": false,
+        //   "workbench.panel.opensMaximized": "always",
+        // },
         developmentOptions: { logLevel: 0 },
         additionalBuiltinExtensions: [
-          { scheme, authority: pageUrl.host, path: "/local/system" },
-        //   { scheme, authority: pageUrl.host, path: "/preview" },
+          { scheme, authority: pageUrl.host, path: this.extpath },
         ],
-        profile: DEFAULT_PROFILE,
-        folderUri: { scheme: "wanix", path: "/project" },
+        // profile: DEFAULT_PROFILE,
+        // folderUri: { scheme: "wanix", path: this.folder },
       };
   
       require(["vs/workbench/workbench.web.main"], (wb) => {
@@ -237,14 +241,15 @@ export function serializeWorkbenchProfile(profile) {
           ...config,
           workspaceProvider: {
             trusted: true,
-            workspace: { folderUri: wb.URI.revive(config.folderUri) },
+            workspace: { folderUri: wb.URI.parse(this.folder) },
             open(workspace, options) {
-              console.log("openFolder requested", workspace);
+            //   console.log("openFolder requested", workspace);
               return Promise.resolve(true);
             },
           },
         });
-        this.dispatchEvent(new CustomEvent("vscode-ready"));
+        // console.log("workbench ready?");
+        // this.dispatchEvent(new CustomEvent("workbench-ready"));
       });
     }
   }

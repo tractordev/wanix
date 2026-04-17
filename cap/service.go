@@ -7,7 +7,7 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/memfs"
-	"tractor.dev/wanix/vfs"
+	"tractor.dev/wanix/fs/vfs"
 )
 
 type Allocator func(*Resource) (Mounter, error)

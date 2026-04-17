@@ -1,12 +1,10 @@
-package ramfs
+package memfs
 
 import (
 	"context"
 	"io/fs"
 
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/fs/memfs"
-	"tractor.dev/wanix/vfs"
 )
 
 // Allocator allows binding a fresh MemFS per bind operation.
@@ -21,7 +19,5 @@ func (a *Allocator) OpenContext(ctx context.Context, name string) (fs.File, erro
 }
 
 func (a *Allocator) BindAllocFS(name string) (fs.FS, error) {
-	return memfs.New(), nil
+	return New(), nil
 }
-
-var _ vfs.BindAllocator = (*Allocator)(nil)

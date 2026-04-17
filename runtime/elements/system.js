@@ -11,6 +11,10 @@ export class System extends HTMLElement {
         const config = this._getConfigFromAttributes();
         
         this.runtime = new WanixRuntime(config);
+
+        if (this.hasAttribute("bundle")) {
+            this.runtime._bundleURL = this.getAttribute("bundle");
+        }
         
         this._readyPromise = this.runtime.ready().then(() => {
             this.dispatchEvent(new CustomEvent("ready", { 
@@ -32,9 +36,9 @@ export class System extends HTMLElement {
         if (this.hasAttribute("wasm")) {
             config.wasm = this.getAttribute("wasm");
         }
-        if (this.hasAttribute("bundle")) {
-            config.bundle = this.getAttribute("bundle");
-        }
+        // if (this.hasAttribute("bundle")) {
+        //     config.bundle = this.getAttribute("bundle");
+        // }
         if (this.hasAttribute("network")) {
             config.network = this.getAttribute("network");
         }

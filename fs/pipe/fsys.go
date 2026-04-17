@@ -6,7 +6,7 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/vfs"
+	"tractor.dev/wanix/fs/vfs"
 )
 
 const (

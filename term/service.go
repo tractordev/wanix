@@ -7,7 +7,7 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/vfs/pipe"
+	"tractor.dev/wanix/fs/pipe"
 )
 
 type programFile struct {

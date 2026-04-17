@@ -8,7 +8,7 @@ import (
 	"strings"
 	"syscall/js"
 
-	"tractor.dev/wanix/vfs/pipe"
+	"tractor.dev/wanix/fs/pipe"
 )
 
 func Log(args ...any) {

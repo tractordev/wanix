@@ -9,8 +9,8 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/vfs"
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/vfs"
 )
 
 // contextKey is a value for use with context.WithValue. It's used as

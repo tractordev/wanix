@@ -15,8 +15,8 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/web/jsutil"
 )
 

@@ -1,7 +1,6 @@
 
 import * as duplex from "@progrium/duplex";
 import { setupConsoleHelpers } from "./helpers.js";
-import { setupWio } from "./wio.js";
 import { WanixHandle } from "./handle.js";
 
 import untar from "js-untar";

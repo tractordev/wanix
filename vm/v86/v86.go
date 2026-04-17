@@ -16,8 +16,8 @@ import (
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/vfs/pipe"
 	"tractor.dev/wanix/web/jsutil"
 	"tractor.dev/wanix/web/runtime"
 )
@@ -201,6 +201,9 @@ func makeVM(id string, options map[string]any, inWorker bool) (js.Value, js.Valu
 		return nil
 	}))
 	sys := runtime.Instance().Call("createPort")
+	if sys.IsUndefined() {
+		log.Fatal("createPort is undefined")
+	}
 	serialch := js.Global().Get("MessageChannel").New()
 	p9ch := js.Global().Get("MessageChannel").New()
 	p9ch.Get("port1").Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {

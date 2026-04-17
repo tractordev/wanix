@@ -4074,7 +4074,7 @@ var WanixHandle = class {
     return this.readable(fd);
   }
   async openWritable(name) {
-    const fd = await this.open(name);
+    const fd = await this.openFile(name, 1, 0);
     return this.writable(fd);
   }
   writable(fd) {
