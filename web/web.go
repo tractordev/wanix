@@ -3,14 +3,12 @@
 package web
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"strings"
 	"syscall/js"
 
 	"tractor.dev/wanix"
-	"tractor.dev/wanix/cap"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/pipe"
@@ -42,39 +40,6 @@ func New(k *wanix.K) fskit.MapFS {
 		webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
 		webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
 	}
-
-	k.Cap.Register("pickerfs", func(_ *cap.Resource) (cap.Mounter, error) {
-		return func(_ []string) (fs.FS, error) {
-			return fsa.ShowDirectoryPicker(), nil
-		}, nil
-	})
-
-	k.Cap.Register("ws", func(r *cap.Resource) (cap.Mounter, error) {
-		return func(args []string) (fs.FS, error) {
-			if len(args) == 0 {
-				return nil, fmt.Errorf("ws: no url provided")
-			}
-			ws := js.Global().Get("WebSocket").New(args[0])
-			ws.Set("binaryType", "arraybuffer")
-			df := &dataFile{
-				Value: ws,
-				buf:   pipe.NewBuffer(true),
-			}
-			ws.Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
-				go func() {
-					jsBuf := js.Global().Get("Uint8Array").New(args[0].Get("data"))
-					buf := make([]byte, jsBuf.Length())
-					n := js.CopyBytesToGo(buf, jsBuf)
-					df.buf.Write(buf[:n])
-				}()
-				return nil
-			}))
-			r.Extra["data"] = fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
-				return df, nil
-			})
-			return nil, nil
-		}, nil
-	})
 
 	k.Task.Register("wasi", func(p *task.Resource) error {
 		w, err := workerfs.Alloc(p)

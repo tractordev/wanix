@@ -3,7 +3,6 @@ package wanix
 import (
 	"io/fs"
 
-	"tractor.dev/wanix/cap"
 	"tractor.dev/wanix/fs/vfs"
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/task"
@@ -17,7 +16,6 @@ type Resource interface {
 type Factory func(id, kind string) Resource
 
 type K struct {
-	Cap  *cap.Service
 	Task *task.Service
 	Mod  map[string]fs.FS
 
@@ -29,7 +27,6 @@ type K struct {
 func New() *K {
 	nsch := make(chan *vfs.NS, 1)
 	return &K{
-		Cap:  cap.New(nsch),
 		Task: task.New(),
 		Mod:  make(map[string]fs.FS),
 		nsch: nsch,
@@ -52,9 +49,6 @@ func (k *K) NewRoot() (*task.Resource, error) {
 	k.NS = p.Namespace()
 	k.nsch <- k.NS
 	// bind hidden kernel devices
-	if err := p.Namespace().Bind(k.Cap, ".", "#cap"); err != nil {
-		return nil, err
-	}
 	if err := p.Namespace().Bind(k.Task, ".", "#task"); err != nil {
 		return nil, err
 	}
