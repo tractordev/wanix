@@ -9,7 +9,7 @@
 # by environment variables or by command line arguments (e.g. `make GOOS=linux`).
 #
 NAME			?= wanix
-VERSION 		?= v0.3-$(shell git rev-parse --short HEAD)
+VERSION 		?= v0.4-$(shell git rev-parse --short HEAD)
 GOARGS			?=
 GOOS			?= $(shell go env GOOS)
 GOARCH			?= $(shell go env GOARCH)
