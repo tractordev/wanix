@@ -8,7 +8,7 @@ import (
 	"sync"
 	"syscall/js"
 
-	"tractor.dev/wanix/web/jsutil"
+	"tractor.dev/wanix/jsutil"
 )
 
 //go:embed *.css *.js

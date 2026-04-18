@@ -13,7 +13,7 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/web/jsutil"
+	"tractor.dev/wanix/jsutil"
 )
 
 // statCacheEntry represents a cached stat result (similar to httpfs headCacheEntry)

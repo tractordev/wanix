@@ -18,7 +18,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/web/jsutil"
+	"tractor.dev/wanix/jsutil"
 )
 
 //go:embed v86.worker.min.js
