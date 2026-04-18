@@ -3949,7 +3949,7 @@ var Conn = class {
   }
 };
 
-// handle.js
+// api/handle.js
 var WanixHandle = class {
   constructor(port) {
     const sess = new Session(new Conn(port));

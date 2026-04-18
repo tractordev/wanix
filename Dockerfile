@@ -7,18 +7,18 @@ RUN apk add --no-cache \
     make
 
 FROM base AS js
-WORKDIR /build/runtime
-COPY ./runtime/package.json .
+WORKDIR /build
+COPY ./package.json .
 RUN npm install
-COPY ./runtime .
+COPY . .
 RUN esbuild index-handle.ts \
-    --outfile=assets/wanix.handle.js \
+    --outfile=dist/wanix.handle.js \
     --bundle \
     --external:util \
     --format=esm \
     --minify
 RUN esbuild index.ts \
-    --outfile=assets/wanix.min.js \
+    --outfile=dist/wanix.min.js \
     --bundle \
     --external:util \
     --loader:.go.js=text \
@@ -26,7 +26,7 @@ RUN esbuild index.ts \
     --format=esm \
     --minify
 RUN esbuild index.ts \
-    --outfile=assets/wanix.js \
+    --outfile=dist/wanix.js \
     --bundle \
     --external:util \
     --loader:.go.js=text \
@@ -52,7 +52,7 @@ COPY ./hack/cbor ./hack/cbor
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-COPY --from=js /build/runtime/wasi/worker/lib.js /build/runtime/wasi/worker/lib.js
+COPY --from=js /build/wasi/worker/lib.js /build/wasi/worker/lib.js
 RUN make wasm-tinygo
 
 FROM base AS go-base
@@ -63,7 +63,7 @@ RUN go mod download
 
 FROM go-base AS wasm-go
 COPY . .
-COPY --from=js /build/runtime/wasi/worker/lib.js /build/runtime/wasi/worker/lib.js
+COPY --from=js /build/wasi/worker/lib.js /build/wasi/worker/lib.js
 RUN make wasm-go
 
 
@@ -71,20 +71,20 @@ FROM go-base AS cmd
 COPY . .
 ARG GOOS=linux
 ARG GOARCH=amd64
-COPY --from=js /build/runtime/wasi/worker/lib.js /build/runtime/wasi/worker/lib.js
-COPY --from=js /build/runtime/assets/wanix.min.js /build/runtime/assets/wanix.min.js
-COPY --from=js /build/runtime/assets/wanix.handle.js /build/runtime/assets/wanix.handle.js
-COPY --from=wasm-go /build/runtime/assets/wanix.debug.wasm /build/runtime/assets/wanix.debug.wasm
-COPY --from=wasm-tinygo /build/runtime/assets/wanix.wasm /build/runtime/assets/wanix.wasm
+COPY --from=js /build/wasi/worker/lib.js /build/wasi/worker/lib.js
+COPY --from=js /build/dist/wanix.min.js /build/dist/wanix.min.js
+COPY --from=js /build/dist/wanix.handle.js /build/dist/wanix.handle.js
+COPY --from=wasm-go /build/dist/wanix.debug.wasm /build/dist/wanix.debug.wasm
+COPY --from=wasm-tinygo /build/dist/wanix.wasm /build/dist/wanix.wasm
 RUN make cmd
 
 FROM scratch AS runtime-dist
 WORKDIR /
-COPY --from=js /build/runtime/assets/wanix.min.js /wanix.min.js
-COPY --from=js /build/runtime/assets/wanix.js /wanix.js
-COPY --from=js /build/runtime/assets/wanix.handle.js /wanix.handle.js
-COPY --from=wasm-go /build/runtime/assets/wanix.debug.wasm /wanix.debug.wasm
-COPY --from=wasm-tinygo /build/runtime/assets/wanix.wasm /wanix.wasm
+COPY --from=js /build/dist/wanix.min.js /wanix.min.js
+COPY --from=js /build/dist/wanix.js /wanix.js
+COPY --from=js /build/dist/wanix.handle.js /wanix.handle.js
+COPY --from=wasm-go /build/dist/wanix.debug.wasm /wanix.debug.wasm
+COPY --from=wasm-tinygo /build/dist/wanix.wasm /wanix.wasm
 CMD ["true"]
 
 FROM scratch AS dist

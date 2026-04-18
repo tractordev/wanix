@@ -8,7 +8,7 @@ import (
 	"tractor.dev/wanix/vnd"
 )
 
-var Version string = "dev"
+var Version string
 
 type Resource interface {
 	fs.FS

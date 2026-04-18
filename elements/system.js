@@ -1,6 +1,6 @@
 import * as duplex from "@progrium/duplex";
-import { setupDevtools } from "../devtools.js";
-import { WanixHandle } from "../handle.js";
+import { setupDevtools } from "../api/devtools.js";
+import { WanixHandle } from "../api/handle.js";
 
 // text loaders set up by esbuild
 import wasmExecGo from "../wasm/wasm_exec.go.js";

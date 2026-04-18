@@ -5,4 +5,4 @@ export { EmptyFile, OpenEmptyFile } from "./empty.ts";
 export { WASI, WASIProcExit, ConsoleStdout } from "@bjorn3/browser_wasi_shim";
 export { applyPatchPollOneoff } from "./poll-oneoff.ts";
 
-export { WanixHandle } from "../handle.js";
+export { WanixHandle } from "../api/handle.js";
