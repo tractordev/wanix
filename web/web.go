@@ -14,34 +14,29 @@ import (
 	"tractor.dev/wanix/fs/pipe"
 	gojsworker "tractor.dev/wanix/runtime/gojs/worker"
 	wasiworker "tractor.dev/wanix/runtime/wasi/worker"
-	"tractor.dev/wanix/task"
-	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web/caches"
 	"tractor.dev/wanix/web/dl"
 	"tractor.dev/wanix/web/dom"
 	"tractor.dev/wanix/web/fsa"
-	"tractor.dev/wanix/web/runtime"
-	"tractor.dev/wanix/web/sw"
 	"tractor.dev/wanix/web/worker"
 )
 
-func New(k *wanix.K) fskit.MapFS {
-	workerfs := worker.New(k.Root)
+func New(root *wanix.Task) fskit.MapFS {
+	workerfs := worker.New(root)
 	opfs, _ := fsa.OPFS()
 	webfs := fskit.MapFS{
-		"dom":    dom.New(k),
-		"vm":     vm.New(),
+		"dom":    dom.New(),
 		"caches": caches.New(),
 		"worker": workerfs,
 		"opfs":   opfs,
 		"dl":     dl.New(),
 	}
-	if !runtime.Instance().Get("_sw").IsUndefined() {
-		webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
-		webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
-	}
+	// if !runtime.Instance().Get("_sw").IsUndefined() {
+	// 	webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
+	// 	webfs["sw"] = sw.Activate(runtime.Instance().Get("_sw"), k)
+	// }
 
-	k.Task.Register("wasi", func(p *task.Resource) error {
+	root.Register("wasi", func(p *wanix.Task) error {
 		w, err := workerfs.Alloc(p)
 		if err != nil {
 			return err
@@ -51,7 +46,7 @@ func New(k *wanix.K) fskit.MapFS {
 		return w.Start(args...)
 	})
 
-	k.Task.Register("gojs", func(p *task.Resource) error {
+	root.Register("gojs", func(p *wanix.Task) error {
 		w, err := workerfs.Alloc(p)
 		if err != nil {
 			return err

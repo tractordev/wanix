@@ -9,12 +9,11 @@ import (
 	"syscall/js"
 
 	"tractor.dev/toolkit-go/engine/cli"
+	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/task"
 	"tractor.dev/wanix/web/jsutil"
-	"tractor.dev/wanix/web/runtime"
 )
 
 type Resource struct {
@@ -22,7 +21,7 @@ type Resource struct {
 	state  string
 	src    string
 	worker js.Value
-	task   *task.Resource
+	task   *wanix.Task
 }
 
 func (r *Resource) ID() string {
@@ -68,7 +67,8 @@ func (r *Resource) Start(args ...string) error {
 		return nil
 	}))
 
-	sys := runtime.Instance().Call("createPort")
+	// TODO FIX ME
+	sys := "" // runtime.Instance().Call("createPort")
 
 	r.worker.Call("postMessage", map[string]any{"worker": map[string]any{
 		"id":  r.id,

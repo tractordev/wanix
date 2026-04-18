@@ -6,18 +6,18 @@ import (
 	"context"
 	"strconv"
 
+	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/task"
 )
 
 type Service struct {
 	resources map[string]fs.FS
 	nextID    int
-	task      *task.Resource
+	task      *wanix.Task
 }
 
-func New(task *task.Resource) *Service {
+func New(task *wanix.Task) *Service {
 	return &Service{
 		resources: make(map[string]fs.FS),
 		nextID:    0,
@@ -61,7 +61,7 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 	}, ctx, name)
 }
 
-func (d *Service) Alloc(t *task.Resource) (*Resource, error) {
+func (d *Service) Alloc(t *wanix.Task) (*Resource, error) {
 	if t == nil {
 		t = d.task
 	}

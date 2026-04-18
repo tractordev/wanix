@@ -19,7 +19,6 @@ import (
 	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/web/jsutil"
-	"tractor.dev/wanix/web/runtime"
 )
 
 //go:embed v86.worker.min.js
@@ -200,17 +199,17 @@ func makeVM(id string, options map[string]any, inWorker bool) (js.Value, js.Valu
 		}
 		return nil
 	}))
-	sys := runtime.Instance().Call("createPort")
+	sys := js.ValueOf("") //runtime.Instance().Call("createPort")
 	if sys.IsUndefined() {
 		log.Fatal("createPort is undefined")
 	}
 	serialch := js.Global().Get("MessageChannel").New()
 	p9ch := js.Global().Get("MessageChannel").New()
 	p9ch.Get("port1").Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
-		runtime.Instance().Call("_virtioHandle", args[0].Get("data"), js.FuncOf(func(this js.Value, args []js.Value) any {
-			p9ch.Get("port1").Call("postMessage", args[0])
-			return nil
-		}))
+		// runtime.Instance().Call("_virtioHandle", args[0].Get("data"), js.FuncOf(func(this js.Value, args []js.Value) any {
+		// 	p9ch.Get("port1").Call("postMessage", args[0])
+		// 	return nil
+		// }))
 		return nil
 	}))
 
@@ -222,14 +221,14 @@ func makeVM(id string, options map[string]any, inWorker bool) (js.Value, js.Valu
 		"options": options,
 	}
 	transfer := []any{sys, p9ch.Get("port2"), serialch.Get("port2")}
-	if !runtime.Instance().Get("screen").IsUndefined() {
-		data["screen"] = runtime.Instance().Get("screen")
-		transfer = append(transfer, runtime.Instance().Get("screen"))
-	}
-	if !runtime.Instance().Get("input").IsUndefined() {
-		data["input"] = runtime.Instance().Get("input").Get("port")
-		transfer = append(transfer, runtime.Instance().Get("input").Get("port"))
-	}
+	// if !runtime.Instance().Get("screen").IsUndefined() {
+	// 	data["screen"] = runtime.Instance().Get("screen")
+	// 	transfer = append(transfer, runtime.Instance().Get("screen"))
+	// }
+	// if !runtime.Instance().Get("input").IsUndefined() {
+	// 	data["input"] = runtime.Instance().Get("input").Get("port")
+	// 	transfer = append(transfer, runtime.Instance().Get("input").Get("port"))
+	// }
 	readySender.Call("postMessage", data, transfer)
 	bigpipe := jsutil.NewPortReadWriter(<-ready)
 

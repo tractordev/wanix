@@ -5,12 +5,12 @@ import (
 	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/toolkit-go/duplex/rpc"
 	"tractor.dev/toolkit-go/duplex/talk"
+	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
-	"tractor.dev/wanix/task"
 )
 
 type syscaller struct {
-	task      *task.Resource
+	task      *wanix.Task
 	fds       map[int]*openFile
 	fdCounter int
 }
@@ -20,7 +20,7 @@ type openFile struct {
 	path string
 }
 
-func PortResponder(sess mux.Session, root *task.Resource) {
+func PortResponder(sess mux.Session, root *wanix.Task) {
 	syscaller := &syscaller{
 		task:      root,
 		fds:       make(map[int]*openFile),

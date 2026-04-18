@@ -23,10 +23,10 @@ import (
 
 type Service struct {
 	active js.Value
-	k      *wanix.K
+	root   *wanix.Task
 }
 
-func Activate(ch js.Value, k *wanix.K) *Service {
+func Activate(ch js.Value, root *wanix.Task) *Service {
 	reg := jsutil.Await(jsutil.Get("navigator.serviceWorker").Call("getRegistration"))
 	if reg.IsUndefined() {
 		swPath := "./wanix-sw.js"
@@ -36,7 +36,7 @@ func Activate(ch js.Value, k *wanix.K) *Service {
 
 	d := &Service{
 		active: reg.Get("active"),
-		k:      k,
+		root:   root,
 	}
 	ch.Get("port2").Set("onmessage", js.FuncOf(d.handleMessage))
 
@@ -135,7 +135,7 @@ func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/:/") {
 		path := strings.TrimPrefix(r.URL.Path, "/:/")
 
-		entries, err := fs.ReadDir(d.k.NS, strings.TrimSuffix(path, "/"))
+		entries, err := fs.ReadDir(d.root.Namespace(), strings.TrimSuffix(path, "/"))
 		if err == nil {
 			if !strings.HasSuffix(r.URL.Path, "/") {
 				http.Redirect(w, r, r.URL.Path+"/", http.StatusTemporaryRedirect)
@@ -143,7 +143,7 @@ func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, entry := range entries {
 				if entry.Name() == "index.html" {
-					f, err := d.k.NS.Open(filepath.Join(path, entry.Name()))
+					f, err := d.root.Namespace().Open(filepath.Join(path, entry.Name()))
 					if err != nil {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
@@ -157,7 +157,7 @@ func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		b, err := fs.ReadFile(d.k.NS, path)
+		b, err := fs.ReadFile(d.root.Namespace(), path)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

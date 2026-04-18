@@ -3,10 +3,12 @@ package wanix
 import (
 	"io/fs"
 
-	"tractor.dev/wanix/fs/vfs"
+	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
-	"tractor.dev/wanix/task"
+	"tractor.dev/wanix/vnd"
 )
+
+var Version string = "dev"
 
 type Resource interface {
 	fs.FS
@@ -15,51 +17,26 @@ type Resource interface {
 
 type Factory func(id, kind string) Resource
 
-type K struct {
-	Task *task.Service
-	Mod  map[string]fs.FS
-
-	nsch chan *vfs.NS
-	NS   *vfs.NS
-	Root *task.Resource
-}
-
-func New() *K {
-	nsch := make(chan *vfs.NS, 1)
-	return &K{
-		Task: task.New(),
-		Mod:  make(map[string]fs.FS),
-		nsch: nsch,
-	}
-}
-
-func (k *K) AddModule(name string, mod fs.FS) {
-	k.Mod[name] = mod
-}
-
-func (k *K) NewRoot() (*task.Resource, error) {
-	p, err := k.Task.Alloc("ns", nil)
+func NewRoot() (*Task, error) {
+	t := NewTaskFS()
+	root, err := t.Alloc("", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// kludge: give the kernel a namespace / root proc
-	// for modules that need it (web/sw, web/worker)
-	k.Root = p
-	k.NS = p.Namespace()
-	k.nsch <- k.NS
-	// bind hidden kernel devices
-	if err := p.Namespace().Bind(k.Task, ".", "#task"); err != nil {
+	wanixfs := fskit.MapFS{
+		"version": fskit.RawNode([]byte(Version+"\n"), 0555),
+		"vnd":     vnd.Assets,
+	}
+	if err := root.Namespace().Bind(wanixfs, ".", "#wanix"); err != nil {
 		return nil, err
 	}
 
-	for name, mod := range k.Mod {
-		if err := p.Namespace().Bind(mod, ".", name); err != nil {
-			return nil, err
-		}
+	if err := root.Namespace().Bind(t, ".", "#task"); err != nil {
+		return nil, err
 	}
 
-	return p, nil
+	return root, nil
 }
 
 var ControlFile = internal.ControlFile
