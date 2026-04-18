@@ -1,5 +1,4 @@
 export * from "./wasi/mod.ts";
-export * from "./runtime.js";
 export * from "./elements/index.js";
 
 // helper to make websockets easier to use in go
