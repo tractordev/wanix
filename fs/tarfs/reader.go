@@ -28,7 +28,7 @@ func splitpath(name string) (dir, file string) {
 	return
 }
 
-func From(t *tar.Reader) *Reader {
+func From(t *tar.Reader) (*Reader, error) {
 	fsys := &Reader{files: make(map[string]map[string]*File)}
 	for {
 		hdr, err := t.Next()
@@ -36,7 +36,7 @@ func From(t *tar.Reader) *Reader {
 			break
 		}
 		if err != nil {
-			return nil
+			return nil, err
 		}
 
 		d, f := splitpath(hdr.Name)
@@ -77,7 +77,7 @@ func From(t *tar.Reader) *Reader {
 		fs:   fsys,
 	}
 
-	return fsys
+	return fsys, nil
 }
 
 func (fsys *Reader) Open(name string) (fs.File, error) {
