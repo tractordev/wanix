@@ -24,6 +24,15 @@ func Get(path string) (v js.Value) {
 	return
 }
 
+func ToSlice(v js.Value) []js.Value {
+	length := v.Length()
+	slice := make([]js.Value, length)
+	for i := 0; i < length; i++ {
+		slice[i] = v.Index(i)
+	}
+	return slice
+}
+
 func AsyncIter(iter js.Value, fn func(js.Value) error) (err error) {
 	var res js.Value
 	res, err = AwaitErr(iter.Call("next"))
@@ -86,6 +95,8 @@ func (w *Writer) Close() error {
 	return nil
 }
 
+// wraps a Go-style reader in JS to io.ReadCloser
+// NOT for use with ReadableStream
 type Reader struct {
 	js.Value
 	buf js.Value // optional reusable buffer
@@ -148,6 +159,7 @@ func (rw *ReadWriter) Close() (err error) {
 	return
 }
 
+// wraps a MessagePort as an io.ReadWriteCloser
 type PortReadWriter struct {
 	port js.Value
 	rbuf *pipe.Buffer
@@ -191,5 +203,78 @@ func (prw *PortReadWriter) Read(p []byte) (int, error) {
 }
 
 func (prw *PortReadWriter) Close() error {
+	return nil
+}
+
+// wraps a ReadableStream as an io.ReadCloser
+type ReadableStream struct {
+	reader   js.Value
+	closed   bool
+	leftover []byte
+}
+
+func NewReadableStream(stream js.Value) *ReadableStream {
+	reader := stream.Call("getReader")
+	return &ReadableStream{
+		reader:   reader,
+		closed:   false,
+		leftover: nil,
+	}
+}
+
+func (rsr *ReadableStream) Read(p []byte) (int, error) {
+	if rsr.closed {
+		return 0, io.EOF
+	}
+
+	// If there is leftover from a previous read, consume that first
+	if len(rsr.leftover) > 0 {
+		n := copy(p, rsr.leftover)
+		rsr.leftover = rsr.leftover[n:]
+		if len(rsr.leftover) == 0 {
+			rsr.leftover = nil
+		}
+		return n, nil
+	}
+
+	// Read from the readable stream
+	promise := rsr.reader.Call("read")
+	result, err := AwaitErr(promise)
+	if err != nil {
+		return 0, err
+	}
+	if result.IsUndefined() || !result.Truthy() {
+		return 0, io.EOF
+	}
+
+	if result.Get("done").Bool() {
+		rsr.closed = true
+		return 0, io.EOF
+	}
+
+	value := result.Get("value")
+	// value is a Uint8Array
+	if value.IsNull() || value.IsUndefined() {
+		return 0, io.EOF
+	}
+	length := value.Get("length").Int()
+	if length == 0 {
+		return 0, nil
+	}
+	buf := make([]byte, length)
+	js.CopyBytesToGo(buf, value)
+	n := copy(p, buf)
+	// If there is more data than we can return, save the leftover for next read
+	if n < len(buf) {
+		rsr.leftover = buf[n:]
+	}
+	return n, nil
+}
+
+func (rsr *ReadableStream) Close() error {
+	if !rsr.closed {
+		rsr.reader.Call("releaseLock")
+		rsr.closed = true
+	}
 	return nil
 }
