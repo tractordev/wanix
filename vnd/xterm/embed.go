@@ -11,7 +11,7 @@ import (
 	"tractor.dev/wanix/jsutil"
 )
 
-//go:embed *.css *.js
+//go:embed *.css
 var assets embed.FS
 
 func assetBlob(name, typ string) (js.Value, error) {
@@ -38,21 +38,5 @@ func Load() {
 			panic(err)
 		}
 		jsutil.LoadStylesheet(js.Global().Get("URL").Call("createObjectURL", xtermCSS).String())
-
-		fitJS, err := assetBlob("xterm-fit-0.8.0.min.js", "text/javascript")
-		if err != nil {
-			panic(err)
-		}
-		jsutil.LoadScript(js.Global().Get("URL").Call("createObjectURL", fitJS).String(), false)
-
-		xtermJS, err := assetBlob("xterm-5.3.0.min.js", "text/javascript")
-		if err != nil {
-			panic(err)
-		}
-		promise := jsutil.LoadScript(js.Global().Get("URL").Call("createObjectURL", xtermJS).String(), false)
-		_, err = jsutil.AwaitErr(promise)
-		if err != nil {
-			panic(err)
-		}
 	})
 }
