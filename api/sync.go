@@ -16,11 +16,11 @@ func (s *syscaller) sync(r rpc.Responder, c *rpc.Call) {
 		log.Panicf("arg 0 is not a uint64: %T %v", args[1], args[1])
 	}
 
-	f, ok := s.fds[int(fd)]
-	if !ok {
-		r.Return(fs.ErrInvalid)
+	f, _, err := s.task.FD(int(fd))
+	if err != nil {
+		r.Return(err)
 		return
 	}
 
-	r.Return(fs.Sync(f.file))
+	r.Return(fs.Sync(f))
 }

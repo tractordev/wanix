@@ -45,13 +45,13 @@ func (s *syscaller) ftruncate(r rpc.Responder, c *rpc.Call) {
 	}
 	size := int64(usize)
 
-	file, ok := s.fds[fd]
-	if !ok {
-		r.Return(fs.ErrInvalid)
+	_, path, err := s.task.FD(int(fd))
+	if err != nil {
+		r.Return(err)
 		return
 	}
 
-	err := fs.Truncate(s.task.Namespace(), file.path, size)
+	err = fs.Truncate(s.task.Namespace(), path, size)
 	if err != nil {
 		r.Return(err)
 		return

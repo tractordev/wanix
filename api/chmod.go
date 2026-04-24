@@ -43,13 +43,13 @@ func (s *syscaller) fchmod(r rpc.Responder, c *rpc.Call) {
 	}
 	mode := fs.FileMode(umode)
 
-	file, ok := s.fds[fd]
-	if !ok {
-		r.Return(fs.ErrInvalid)
+	_, path, err := s.task.FD(fd)
+	if err != nil {
+		r.Return(err)
 		return
 	}
 
-	err := fs.Chmod(s.task.Namespace(), file.path, mode)
+	err = fs.Chmod(s.task.Namespace(), path, mode)
 	if err != nil {
 		r.Return(err)
 		return

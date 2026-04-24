@@ -15,9 +15,8 @@ func (s *syscaller) open(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	s.fdCounter++
-	s.fds[s.fdCounter] = &openFile{file: f, path: args[0]}
-	r.Return(s.fdCounter)
+	fd := s.task.OpenFD(f, args[0])
+	r.Return(uint64(fd))
 }
 
 func (s *syscaller) create(r rpc.Responder, c *rpc.Call) {
@@ -30,9 +29,8 @@ func (s *syscaller) create(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	s.fdCounter++
-	s.fds[s.fdCounter] = &openFile{file: f, path: args[0]}
-	r.Return(s.fdCounter)
+	fd := s.task.OpenFD(f, args[0])
+	r.Return(uint64(fd))
 }
 
 func (s *syscaller) openFile(r rpc.Responder, c *rpc.Call) {
@@ -60,7 +58,6 @@ func (s *syscaller) openFile(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	s.fdCounter++
-	s.fds[s.fdCounter] = &openFile{file: f, path: path}
-	r.Return(s.fdCounter)
+	fd := s.task.OpenFD(f, path)
+	r.Return(uint64(fd))
 }

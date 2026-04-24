@@ -6,25 +6,15 @@ import (
 	"tractor.dev/toolkit-go/duplex/rpc"
 	"tractor.dev/toolkit-go/duplex/talk"
 	"tractor.dev/wanix"
-	"tractor.dev/wanix/fs"
 )
 
 type syscaller struct {
-	task      *wanix.Task
-	fds       map[int]*openFile
-	fdCounter int
+	task *wanix.Task
 }
 
-type openFile struct {
-	file fs.File
-	path string
-}
-
-func PortResponder(sess mux.Session, root *wanix.Task) {
+func Responder(sess mux.Session, task *wanix.Task) {
 	syscaller := &syscaller{
-		task:      root,
-		fds:       make(map[int]*openFile),
-		fdCounter: 3, // 0-2 reserved for stdio
+		task: task,
 	}
 
 	peer := talk.NewPeer(sess, codec.CBORCodec{})

@@ -55,13 +55,13 @@ func (s *syscaller) fchown(r rpc.Responder, c *rpc.Call) {
 	}
 	gid := int(ugid)
 
-	file, ok := s.fds[fd]
-	if !ok {
-		r.Return(fs.ErrInvalid)
+	_, path, err := s.task.FD(fd)
+	if err != nil {
+		r.Return(err)
 		return
 	}
 
-	err := fs.Chown(s.task.Namespace(), file.path, uid, gid)
+	err = fs.Chown(s.task.Namespace(), path, uid, gid)
 	if err != nil {
 		r.Return(err)
 		return

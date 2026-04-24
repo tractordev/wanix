@@ -12,6 +12,9 @@ export function setupDevtools(el) {
     globalThis.write = (name, content) => { 
         handle.writeFile(name, content); 
     };
+    globalThis.readlink = (name) => { 
+        handle.readlink(name).then(console.log); 
+    };
     globalThis.mkdir = (name) => { 
         handle.makeDir(name); 
     };
