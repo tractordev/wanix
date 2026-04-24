@@ -154,13 +154,7 @@ func TestWinchBroadcast(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for {
-		res.hub.mu.Lock()
-		n := len(res.hub.readers)
-		res.hub.mu.Unlock()
-		if n >= 2 {
-			break
-		}
+	for res.hub.SubscriberCount() < 2 {
 		runtime.Gosched()
 	}
 
