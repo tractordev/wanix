@@ -19,7 +19,7 @@ type Factory func(id, kind string) Resource
 
 func NewRoot() (*Task, error) {
 	t := NewTaskFS()
-	root, err := t.Alloc("", nil)
+	root, err := t.Alloc("auto", nil)
 	if err != nil {
 		return nil, err
 	}
