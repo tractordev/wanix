@@ -23,9 +23,7 @@ import (
 
 	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/toolkit-go/engine/cli"
-	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/p9kit"
-	"tractor.dev/wanix/runtime/assets"
 )
 
 func serveCmd() *cli.Command {
@@ -64,8 +62,6 @@ func serveCmd() *cli.Command {
 				fmt.Printf("Bundle available at: http://%s:%s\n", h, p)
 			}
 
-			fsys := fskit.UnionFS{assets.Dir, dirfs}
-
 			vn, err := vnet.New(&vnet.Configuration{
 				Debug:             false,
 				MTU:               1500,
@@ -94,18 +90,7 @@ func serveCmd() *cli.Command {
 				w.Header().Add("Cross-Origin-Embedder-Policy", "require-corp")
 				w.Header().Add("Access-Control-Allow-Origin", "*")
 
-				if r.URL.Path == "/wanix.wasm" {
-					w.Header().Add("Content-Type", "application/wasm")
-					// TODO: a flag to prefer debug
-					wasmFsys, err := assets.WasmFS(true)
-					if err != nil {
-						log.Fatal(err)
-					}
-					http.ServeFileFS(w, r, wasmFsys, "wanix.wasm")
-					return
-				}
-
-				http.FileServerFS(fsys).ServeHTTP(w, r)
+				http.FileServerFS(dirfs).ServeHTTP(w, r)
 			}))
 			http.ListenAndServe(listenAddr, nil)
 		},

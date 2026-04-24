@@ -21,8 +21,6 @@ func (m *Main) InitializeCLI(root *cli.Command) {
 	root.Usage = "wanix"
 	root.Version = Version
 	root.AddCommand(serveCmd())
-	root.AddCommand(exportCmd())
-	root.AddCommand(bundleCmd())
 
 }
 
