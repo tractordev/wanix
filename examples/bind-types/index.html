@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <script type="module" src="../../dist/wanix.min.js"></script>
+</head>
+<body>
+    
+    <!-- a wanix system is an empty root task/namespace -->
+    <wanix-system wasm="../../dist/wanix.wasm" debug>
+        
+        <!-- the default bind type is "ns" if not specified -->
+        <wanix-bind dst="task" src="#task"></wanix-bind>
+
+        <!-- type generally indicates where the src comes from -->
+        <wanix-bind type="ns" dst="web" src="#web"></wanix-bind>
+
+        <!-- the "fetch" type fetches a URL and writes it to the destination -->
+        <wanix-bind type="fetch" dst="myfile.txt" src="https://example.com/myfile.txt"></wanix-bind>
+
+        <!-- the "archive" type fetches an archive and mounts it as a directory -->
+        <wanix-bind type="archive" dst="root" src="https://example.com/rootfs.tar"></wanix-bind>
+
+        <!-- archives are great for layered filesystems -->
+        <wanix-bind type="archive" dst="root" src="https://example.com/rootfs-overlay1.tar"></wanix-bind>
+        <wanix-bind type="archive" dst="root" src="https://example.com/rootfs-overlay2.tar"></wanix-bind>
+
+        <!-- you can always bind specific files on top of those layers -->
+        <wanix-bind type="fetch" dst="root/boot/bzImage" src="https://example.com/bzImage"></wanix-bind>
+
+    </wanix-system>
+
+</body>
+</html>

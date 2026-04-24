@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <script type="module" src="../../dist/wanix.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- a wanix system is an empty root task/namespace -->
+    <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
+
+        <!-- this test program outputs args, env, wd, and files at root -->
+        <wanix-bind type="fetch" dst="gojs.wasm" src="../../test/gojs/gojscheck.wasm"></wanix-bind>
+
+        <!-- wanix-task defines processes, use start to run on ready, and term to allocate a terminal -->
+        <!-- id is used as an optional alias for the task making it easier to reference -->
+        <wanix-task id="demotask" type="gojs" cmd="gojs.wasm arg1 arg2" term start></wanix-task>
+
+        <!-- wanix-term renders an xterm.js attached to an existing or newly allocated terminal -->
+        <!-- a task with an allocated terminal gets a term binding to it that we can point to via path -->
+        <wanix-term path="#task/demotask/term"></wanix-term>
+
+    </wanix-system>
+    
+</body>
+</html>

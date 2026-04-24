@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <script type="module" src="../../dist/wanix.min.js"></script>
+</head>
+<body>
+    
+    <!-- a wanix system is an empty root task/namespace -->
+    <!-- debug adds devtools helpers for namespace inspection (list, read, etc)-->
+    <wanix-system wasm="../../dist/wanix.wasm" debug>
+
+        <!-- bind a ramfs to the root of the namespace -->
+        <!-- importantly, paths dont start with / and . is special for root -->
+        <wanix-bind dst="." src="#ramfs"></wanix-bind>
+        
+        <!-- now we can write files -->
+        <wanix-file dst="myfile.txt" mode="0666" encoding="utf-8">
+            Hello, world!
+        </wanix-file>
+
+        <!-- we can make hidden system names visible in the namespace -->
+        <wanix-bind dst="task" src="#task"></wanix-bind>
+        <wanix-bind dst="term" src="#term"></wanix-bind>
+        <wanix-bind dst="web" src="#web"></wanix-bind>
+        <wanix-bind dst="wanix" src="#wanix"></wanix-bind>
+
+        <!-- or just a specific part of a hidden namespace -->
+        <!-- #web/opfs is backed by OPFS browser storage API -->
+        <wanix-bind dst="opfs" src="#web/opfs"></wanix-bind>
+
+        <!-- some system names are cloned "instances" when you bind -->
+        <wanix-bind dst="mypipe" src="#pipe"></wanix-bind>
+        <wanix-bind dst="mysignal" src="#signal"></wanix-bind>
+
+        <!-- binding multiple directories to same destination unions them -->
+        <wanix-bind dst="union" src="#web"></wanix-bind>
+        <wanix-bind dst="union" src="#wanix"></wanix-bind>
+
+    </wanix-system>
+
+    <!-- the system element emits a ready event when the namespace is usable -->
+    <script>
+        const system = document.querySelector('wanix-system');
+        system.addEventListener('ready', async () => {
+            console.log(await system.root.readDir("."));
+        });
+    </script>
+</body>
+</html>
