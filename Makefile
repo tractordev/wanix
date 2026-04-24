@@ -27,13 +27,18 @@ link:
 	ln -fs "$(shell pwd)/.local/bin/$(NAME)" "$(LINK_BIN)/$(NAME)"
 .PHONY: link
 
-## Build Wanix and Wanix shell
-all: shell/bundle.tgz build
+## Build Wanix and ...
+all: build
 .PHONY: all
 
 ## Build Wanix (command and runtime)
 build: runtime cmd
 .PHONY: build
+
+## Build and run examples
+examples: $(DIST_DIR)/wanix.wasm $(DIST_DIR)/wanix.min.js $(DIST_DIR)/wanix.debug.wasm
+	go run ./examples/serve.go
+.PHONY: examples
 
 ## Build Wanix (command and runtime) using Docker
 build-docker:
@@ -85,10 +90,6 @@ js:
 	$(DOCKER_CMD) cp wanix-build-js:/build/dist/wanix.handle.js $(DIST_DIR)/wanix.handle.js
 .PHONY: js
 
-## Build shell bundle for Wanix (in Docker)
-bundle-shell:
-	make -C shell clean bundle.tgz
-.PHONY: bundle-shell
 
 ## Remove all built artifacts
 clean:
@@ -100,7 +101,6 @@ clean:
 	rm -f $(DIST_DIR)/wanix.js
 	rm -f wasi/worker/lib.js
 	rm -f gojs/worker/lib.js
-	make -C shell clean
 .PHONY: clean
 
 
@@ -125,9 +125,6 @@ $(DIST_DIR)/wanix.debug.wasm:
 
 $(DIST_DIR)/wanix.wasm:
 	make wasm-tinygo
-
-shell/bundle.tgz:
-	make bundle-shell
 
 .DEFAULT_GOAL := show-help
 
