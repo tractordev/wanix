@@ -14,6 +14,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/jsutil"
+	"tractor.dev/wanix/web/sys"
 )
 
 type Resource struct {
@@ -67,16 +68,16 @@ func (r *Resource) Start(args ...string) error {
 		return nil
 	}))
 
-	// TODO FIX ME
-	sys := "" // runtime.Instance().Call("createPort")
+	port := sys.Element().Call("openPort", r.task.ID())
 
 	r.worker.Call("postMessage", map[string]any{"worker": map[string]any{
-		"id":  r.id,
-		"sys": sys,
-		"cmd": strings.Join(args, " "),
-		"env": env,
-		"url": url,
-	}}, []any{sys})
+		"id":   r.id,
+		"tid":  r.task.ID(),
+		"port": port,
+		"cmd":  strings.Join(args, " "),
+		"env":  env,
+		"url":  url,
+	}}, []any{port})
 
 	r.state = "running"
 	return nil
