@@ -4,34 +4,27 @@ package main
 
 import (
 	"archive/tar"
-	"io/fs"
+	"io"
 	"log"
+	"path"
 	"strconv"
 	"syscall/js"
+
+	"tractor.dev/wanix/fs"
+	"tractor.dev/wanix/web/sys"
 
 	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/api"
 	"tractor.dev/wanix/fs/memfs"
 	"tractor.dev/wanix/fs/pipe"
+	"tractor.dev/wanix/fs/signal"
 	"tractor.dev/wanix/fs/tarfs"
 	"tractor.dev/wanix/jsutil"
 	"tractor.dev/wanix/term"
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web"
 )
-
-//go:wasmimport wanix getInstanceID
-func getInstanceID() int32
-
-func getElement() js.Value {
-	id := int(getInstanceID())
-	element := js.Global().Get("__wanix").Get(strconv.Itoa(id))
-	if element.IsUndefined() {
-		log.Panicf("no wanix element registered for id %d", id)
-	}
-	return element
-}
 
 func main() {
 	log.SetFlags(log.Lshortfile)
@@ -49,7 +42,7 @@ func main() {
 		{"#web", web.New(root)},
 		{"#vm", vm.New()},
 		{"#pipe", &pipe.Allocator{}},
-		{"#|", &pipe.Allocator{}},
+		{"#signal", &signal.Allocator{}},
 		{"#ramfs", &memfs.Allocator{}},
 	}
 	for _, b := range sysbindings {
@@ -58,7 +51,7 @@ func main() {
 		}
 	}
 
-	el := getElement()
+	el := sys.Element()
 	el.Set("openPort", js.FuncOf(func(this js.Value, args []js.Value) any {
 		ch := js.Global().Get("MessageChannel").New()
 		port := el.Call("__portWrap", ch.Get("port1"))
@@ -69,7 +62,16 @@ func main() {
 			log.Fatal(err)
 		}
 
-		go api.PortResponder(sess, root)
+		go func(sess mux.Session, args []js.Value) {
+			task := root
+			if len(args) > 0 {
+				t, err := root.Lookup(args[0].String())
+				if err == nil {
+					task = t
+				}
+			}
+			api.Responder(sess, task)
+		}(sess, args)
 
 		return ch.Get("port2")
 	}))
@@ -100,11 +102,62 @@ func main() {
 					return
 				}
 			}()
-		case "self":
+		case "fetch":
+			go func() {
+				resp, err := jsutil.AwaitErr(binding.Get("fetch"))
+				if err != nil {
+					log.Println("error fetching archive", err)
+					return
+				}
+				reader := jsutil.NewReadableStream(resp.Get("body"))
+				buf, err := io.ReadAll(reader)
+				if err != nil {
+					log.Println("error reading fetch", err)
+					return
+				}
+				filefs := memfs.New()
+				if err := fs.WriteFile(filefs, path.Base(dst), buf, 0644); err != nil {
+					log.Println("error writing fetch", err)
+					return
+				}
+				if err := root.Namespace().Bind(filefs, path.Base(dst), dst); err != nil {
+					log.Println("error binding fetch", err)
+					return
+				}
+			}()
+		case "ns":
 			if err := root.Bind(src, dst); err != nil {
 				log.Fatal(err)
 			}
 		default:
+		}
+	}
+
+	files, err := jsutil.AwaitErr(el.Get("files"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, file := range jsutil.ToSlice(files) {
+		dst := file.Get("dst").String()
+		mode := file.Get("mode").String()
+		encoding := file.Get("encoding").String()
+		content := file.Get("content").String()
+		// Convert mode string (like "644" or "0644") to int
+		perm, err := strconv.ParseInt(mode, 8, 32)
+		if err != nil {
+			log.Fatalf("invalid file mode %q: %v", mode, err)
+		}
+
+		var data []byte
+		switch encoding {
+		case "", "utf-8", "utf8":
+			data = []byte(content)
+		default:
+			log.Fatalf("unsupported encoding %q for file %s, skipping", encoding, dst)
+		}
+
+		if err := fs.WriteFile(root.Namespace(), dst, data, fs.FileMode(perm)); err != nil {
+			log.Fatalf("error writing file %s: %v", dst, err)
 		}
 	}
 
@@ -171,6 +224,6 @@ func main() {
 
 	// go virtio9p.Serve(root.Namespace(), inst, false)
 
-	getElement().Call("__wasmReady")
+	sys.Element().Call("__wasmReady")
 	select {}
 }
