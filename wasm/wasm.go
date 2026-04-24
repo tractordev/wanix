@@ -161,37 +161,6 @@ func main() {
 		}
 	}
 
-	// bundleBytes := inst.Get("_bundle")
-	// if !bundleBytes.IsUndefined() {
-	// 	jsBuf := js.Global().Get("Uint8Array").New(bundleBytes)
-	// 	b := make([]byte, jsBuf.Length())
-	// 	js.CopyBytesToGo(b, jsBuf)
-	// 	buf := bytes.NewBuffer(b)
-	// 	bundleFS := tarfs.From(tar.NewReader(buf))
-
-	// 	// ideally we could bind a memfs over bundleFS, but
-	// 	// that still doesn't seem to be working yet
-	// 	rw := memfs.New()
-	// 	if err := fs.CopyFS(bundleFS, ".", rw, "."); err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	root.Namespace().Bind(rw, ".", "#bundle")
-	// 	// root.Bind("#bundle", "bundle")
-	// } else {
-	// bundleURL := inst.Get("_bundleURL")
-	// if !bundleURL.IsUndefined() {
-	// 	bundle, err := jsutil.FetchToReader(bundleURL.String())
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	bundleFS := tarfs.From(tar.NewReader(bundle))
-	// 	rw := memfs.New()
-	// 	if err := fs.CopyFS(bundleFS, ".", rw, "."); err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	root.Namespace().Bind(rw, ".", "#bundle")
-	// 	root.Bind("#bundle", "bundle")
-
 	// 	// setup vm
 	// 	vmraw, err := fs.ReadFile(root.Namespace(), "vm/new/default")
 	// 	if err != nil {
