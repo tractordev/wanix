@@ -2,30 +2,29 @@ import {
     WanixHandle
 } from "./lib.js";
 
+const TASKNS = "#task";
+
 self.onmessage = async (e) => {
     if (!e.data.worker) return;
 
     console.log("gojs worker started");
-    const fs = new WanixHandle(e.data.worker.sys);
+    const fs = new WanixHandle(e.data.worker.port);
     globalThis.sys = fs;
-    const pid = e.data.worker.env.pid;
-    const env = (await fs.readText(`task/${pid}/env`)).trim().split("\n");
-    const args = (await fs.readText(`task/${pid}/cmd`)).trim().split(" ");
-    globalThis.cwd = (await fs.readText(`task/${pid}/dir`)).trim();
-    globalThis.stdin = await fs.open(`task/${pid}/.sys/fd0`);
-    globalThis.stdout = await fs.open(`task/${pid}/.sys/fd1`);
-    globalThis.stderr = await fs.open(`task/${pid}/.sys/fd2`);
+    const tid = e.data.worker.tid;
+    const env = (await fs.readText(`${TASKNS}/${tid}/env`)).trim().split("\n");
+    const args = (await fs.readText(`${TASKNS}/${tid}/cmd`)).trim().split(" ");
+    globalThis.cwd = (await fs.readText(`${TASKNS}/${tid}/dir`)).trim() || "/";
     const bin = await fs.readFile(args[0]); 
 
     const go = new Go();
     go.argv = args || [];
-    go.env = Object.fromEntries(env.map(line => {
+    go.env = Object.fromEntries(env.filter(line => line.includes("=")).map(line => {
         const idx = line.indexOf("=");
         if (idx === -1) return [line, ""];
         return [line.slice(0, idx), line.slice(idx + 1)];
     }));
     go.exit = async (code) => {
-        await fs.writeFile(`task/${pid}/exit`, code.toString());
+        await fs.writeFile(`${TASKNS}/${tid}/exit`, code.toString());
     };
     const result = await WebAssembly.instantiate(bin, go.importObject);
     const start = performance.now();
@@ -40,6 +39,7 @@ function log(...args) {
 
 
 function errback(cb, e) {
+    log("errback", e);
     const err = new Error(e);
     if (e.includes("does not exist")) {
         err.code = "ENOENT";
@@ -69,16 +69,18 @@ function cleanpath(path) {
     if (path.startsWith("./")) {
         path = path.slice(2);
     }
-    if (path === ".") {
-        path = "";
+    if (path === "/") {
+        return ".";
     }
     if (!path.startsWith("/")) {
         path = [globalThis.cwd, path].join("/");
     }
     path = path.replace(/\/+/g, '/'); // collapse multiple slashes
     path = path.replace(/^\/+/, ''); // remove leading slash
-    path = "vm/1/fsys/"+path;
     path = path.replace(/\/+$/, ''); // remove trailing slash(es)
+	if (path === "") {
+		path = ".";
+	}
     return path;
 }
 
@@ -117,11 +119,6 @@ function cleanpath(path) {
 					return;
 				}
                 try {
-                    if (fd === 1) {
-                        fd = stdout;
-                    } else if (fd === 2) {
-                        fd = stderr;
-                    }
                     if (position !== null) {
                         callback(null, await sys.writeAt(fd, buf, position));
                         return;
@@ -181,11 +178,6 @@ function cleanpath(path) {
 			async fstat(fd, callback) { 
                 log("fstat", fd);
                 try {
-                    if (fd === 1) {
-                        fd = stdout;
-                    } else if (fd === 2) {
-                        fd = stderr;
-                    }
                     const stat = await sys.fstat(fd);
                     callback(null, {
                         "mode":    stat.Mode,
@@ -265,10 +257,7 @@ function cleanpath(path) {
             },
 			async read(fd, buffer, offset, length, position, callback) { 
                 log("read", fd, buffer.length, offset, length, position);
-                try {   
-                    if (fd === 0) {
-                        fd = stdin;
-                    }
+                try {
                     const buf = await sys.read(fd, length);
                     if (buf === null) {
                         callback(null, 0);
@@ -584,11 +573,6 @@ function cleanpath(path) {
 					"runtime.wasmWrite": (sp) => {
 						sp >>>= 0;
 						let fd = getInt64(sp + 8);
-						if (fd === 1) {
-							fd = stdout;
-						} else if (fd === 2) {
-							fd = stderr;
-						}
 						const p = getInt64(sp + 16);
 						const n = this.mem.getInt32(sp + 24, true);
 						sys.write(fd, new Uint8Array(this._inst.exports.mem.buffer, p, n));
