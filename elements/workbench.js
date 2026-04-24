@@ -120,7 +120,7 @@ export function serializeWorkbenchProfile(profile) {
     }
   }
   
-  export class Workbench extends HTMLElement {
+  export class WorkbenchElement extends HTMLElement {
     constructor() {
       super();
       this._loaded = false;
@@ -254,5 +254,5 @@ export function serializeWorkbenchProfile(profile) {
     }
   }
   
-  customElements.define("wanix-workbench", Workbench);
+  customElements.define("wanix-workbench", WorkbenchElement);
   

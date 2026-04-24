@@ -1,11 +1,14 @@
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
 
-export class Terminal extends HTMLElement {
+export class TerminalElement extends HTMLElement {
     static get observedAttributes() {
-        return ["for", "src"];
+        return ["for", "path"];
     }
 
     constructor() {
         super();
+        this.path = this.getAttribute('path');
         this.term = null;
         this.fitAddon = null;
         this._resizeObserver = null;
@@ -17,21 +20,17 @@ export class Terminal extends HTMLElement {
     }
 
     connectedCallback() {
-        if (!window.Terminal) {
-            console.error("xterm.js Terminal not loaded");
-            return;
-        }
-
-        this.term = new window.Terminal({
+        this.term = new Terminal({
             fontFamily: `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
-            theme: {
-                background: "rgba(0, 0, 0, 0)",
-            },
+            // theme: {
+            //     background: "rgba(0, 0, 0, 0)",
+            //     foreground: "white",
+            // },
             ...this._getOptionsFromAttributes()
         });
 
-        if (window.FitAddon?.FitAddon) {
-            this.fitAddon = new window.FitAddon.FitAddon();
+        if (FitAddon) {
+            this.fitAddon = new FitAddon();
             this.term.loadAddon(this.fitAddon);
         }
 
@@ -43,6 +42,7 @@ export class Terminal extends HTMLElement {
                 this.fitAddon.fit();
             });
             this._resizeObserver.observe(this);
+            // this._resizeObserver.observe(this.parentElement);
         }
 
         this._connected = true;
@@ -54,6 +54,7 @@ export class Terminal extends HTMLElement {
         this.style.flex = "1";
         this.style.display = "flex";
         this.style.flexDirection = "column";
+        this.style.height = "100%";
     }
     
 
@@ -78,7 +79,7 @@ export class Terminal extends HTMLElement {
         if (name === "for") {
             this._resolveSystemRef();
             this._connectToSource();
-        } else if (name === "src") {
+        } else if (name === "path") {
             this._connectToSource();
         }
     }
@@ -87,25 +88,30 @@ export class Terminal extends HTMLElement {
         const forId = this.getAttribute("for");
         if (forId) {
             this._system = document.getElementById(forId);
+        } else {
+            this._system = this.closest('wanix-system') || document.querySelector('wanix-system');
         }
+        this._ready = new Promise(resolve => this._system.addEventListener('ready', resolve))
     }
 
     async _connectToSource() {
         if (!this._connected || !this.term) return;
 
-        const src = this.getAttribute("src");
-        if (!src || !this._system) return;
+        const dataPath = this.path + "/data";
+        if (!dataPath || !this._system) return;
 
         this._disconnectFromSource();
 
         try {
-            await this._system.ready();
+            await this._ready;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+       
 
-            const readable = await this._system.openReadable(src);
+            const readable = await this._system.root.openReadable(dataPath);
             this._reader = readable.getReader();
             this._readLoop();
 
-            const writable = await this._system.openWritable(src);
+            const writable = await this._system.root.openWritable(dataPath);
             this._writer = writable.getWriter();
 
             const encoder = new TextEncoder();
@@ -115,7 +121,7 @@ export class Terminal extends HTMLElement {
                 }
             });
         } catch (err) {
-            console.error("wanix-terminal: failed to connect to source:", err);
+            console.error("wanix-terminal: failed to connect to terminal:", err);
         }
     }
 
@@ -213,5 +219,5 @@ export class Terminal extends HTMLElement {
 }
 
 if (typeof window !== "undefined") {
-    customElements.define("wanix-terminal", Terminal);
+    customElements.define("wanix-term", TerminalElement);
 }
