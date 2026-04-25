@@ -37,6 +37,9 @@ build: runtime cmd
 
 ## Build and run examples
 examples: $(DIST_DIR)/wanix.wasm $(DIST_DIR)/wanix.min.js $(DIST_DIR)/wanix.debug.wasm
+	@for dir in $(shell find examples -type f -iname '[mM]akefile' -exec dirname {} \;); do \
+		$(MAKE) -C $$dir; \
+	done
 	go run ./examples/serve.go
 .PHONY: examples
 

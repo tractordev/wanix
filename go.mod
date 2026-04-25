@@ -1,6 +1,6 @@
 module tractor.dev/wanix
 
-go 1.25
+go 1.25.0
 
 replace github.com/hugelgupf/p9 => github.com/progrium/p9 v0.0.0-20251108235831-1c1dfeb38c1e
 
@@ -21,9 +21,8 @@ require (
 	github.com/hugelgupf/p9 v0.3.1-0.20240118043522-6f4f11e5296e
 	github.com/progrium/go-netstack v0.0.0-20240720002214-37b2b8227b91
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701
-	golang.org/x/net v0.39.0
-	golang.org/x/sys v0.32.0
-	golang.org/x/term v0.31.0
+	golang.org/x/net v0.46.0
+	golang.org/x/sys v0.42.0
 	tractor.dev/toolkit-go v0.0.0-20250103001615-9a6753936c19
 )
 
@@ -44,6 +43,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.6 // indirect
 	github.com/aws/smithy-go v1.23.0 // indirect
 	github.com/google/btree v1.1.2 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/inetaf/tcpproxy v0.0.0-20240214030015-3ce58045626c // indirect
 	github.com/miekg/dns v1.1.58 // indirect
@@ -52,8 +52,8 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/mod v0.18.0 // indirect
-	golang.org/x/sync v0.13.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
+	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
-	golang.org/x/tools v0.22.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 )

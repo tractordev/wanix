@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <script type="module" src="../../dist/wanix.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    
+    <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
+        <wanix-bind type="fetch" dst="repl.wasm" src="./repl.wasm"></wanix-bind>
+        <wanix-task id="repl" cmd="repl.wasm" type="gojs" term start></wanix-task>
+        <wanix-term path="#task/repl/term"></wanix-term>
+    </wanix-system>
+
+</body>
+</html>
