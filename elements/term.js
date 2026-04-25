@@ -115,9 +115,24 @@ export class TerminalElement extends HTMLElement {
             this._writer = writable.getWriter();
 
             const encoder = new TextEncoder();
+            let buffer = '';
             this._dataDisposable = this.term.onData((data) => {
-                if (this._writer) {
-                    this._writer.write(encoder.encode(data));
+                // may add line discipline as mode to terminals but for now we
+                // do as plan 9 and handle it here in "userspace"
+                if (data === '\r') {
+                    this.term.write('\r\n');           // echo newline
+                    if (this._writer) {
+                        this._writer.write(encoder.encode(buffer+"\n"));
+                    }
+                    buffer = '';
+                } else if (data === '\x7f') {   // backspace
+                    if (buffer.length > 0) {
+                      buffer = buffer.slice(0, -1);
+                      this.term.write('\b \b');
+                    }
+                } else {
+                    buffer += data;
+                    this.term.write(data);             // echo
                 }
             });
         } catch (err) {
