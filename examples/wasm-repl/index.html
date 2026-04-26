@@ -12,9 +12,13 @@
 </head>
 <body>
     
+    <!-- a wanix system is an empty root task/namespace -->
     <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
+        <!-- fetch the repl.wasm file and run it as a gojs task -->
         <wanix-bind type="fetch" dst="repl.wasm" src="./repl.wasm"></wanix-bind>
         <wanix-task id="repl" cmd="repl.wasm" type="gojs" term start></wanix-task>
+        
+        <!-- render the terminal for the repl -->
         <wanix-term path="#task/repl/term"></wanix-term>
     </wanix-system>
 
