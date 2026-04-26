@@ -7,11 +7,14 @@ import {
 	OpenFile,
 	File,
 	FileHandle,
+	ConsoleStdout,
 	Directory, 
 	DirectoryHandle, 
 	PreopenDirectory,
 	applyPatchPollOneoff
 } from "./lib.js";
+
+const TASKNS = "#task";
 
 self.onmessage = async (e) => {
     if (e.data.worker) {
@@ -24,32 +27,32 @@ self.onmessage = async (e) => {
 }
 
 async function initializeSyncWorker(e) {
-    const fs = new WanixHandle(e.data.worker.sys);
-    const pid = e.data.worker.env.pid;
-    const env = (await fs.readText(`task/${pid}/env`)).trim().split("\n");
-    const args = (await fs.readText(`task/${pid}/cmd`)).trim().split(" ");
+    const fs = new WanixHandle(e.data.worker.port);
+    const tid = e.data.worker.tid;
+    const env = (await fs.readText(`${TASKNS}/${tid}/env`)).trim().split("\n").filter(line => line.includes("="));
+    const args = (await fs.readText(`${TASKNS}/${tid}/cmd`)).trim().split(" ");
     const bin = await fs.readFile(args[0]);
     const buffer = new SharedArrayBuffer(16384);
     const call = new CallBuffer(buffer);
     const worker = new Worker(e.data.worker.url, {type: "module"});
-    worker.onmessage = messageHandler(fs, call, pid);    
+    worker.onmessage = messageHandler(fs, call, tid); 
     worker.postMessage({
         buffer, 
         bin,
         args,
         env,
-        stdin: `task/${pid}/.sys/fd0`,
-        stdout: `task/${pid}/.sys/fd1`,
-        stderr: `task/${pid}/.sys/fd2`,
+		stdin: `${TASKNS}/${tid}/fd/0`,
+		stdout: `${TASKNS}/${tid}/fd/1`,
+		stderr: `${TASKNS}/${tid}/fd/2`,
     });
 }
 
-function messageHandler(fs, call, pid) {
+function messageHandler(fs, call, tid) {
     return async (e) => {
         if (!e.data.method) {
             return;
         }
-        // console.log(e.data);
+        console.log(e.data);
         // const start = performance.now();
         switch (e.data.method) {
         case "path_open":
@@ -110,7 +113,7 @@ function messageHandler(fs, call, pid) {
             break;
 
         case "exit":
-            await fs.writeFile(`task/${pid}/exit`, e.data.code.toString());
+            await fs.writeFile(`${TASKNS}/${tid}/exit`, e.data.code.toString());
             call.respond(true);
             break;
         
@@ -126,6 +129,7 @@ async function runWasi(e) {
 	const caller = new CallBuffer(e.data.buffer);
 	const wasi = new WASI(e.data.args, e.data.env, [
 		new OpenEmptyFile(),
+		// new OpenFile(new File(new FileHandle(caller, e.data.stdin))),
 		new OpenFile(new File(new FileHandle(caller, e.data.stdout))),
 		new OpenFile(new File(new FileHandle(caller, e.data.stderr))),
 		new PreopenDirectory("/", new Directory(new DirectoryHandle(caller, "."))),
@@ -146,10 +150,22 @@ async function runWasi(e) {
         return 0;
     };
 
+	const wrapped = new Proxy(wasi.wasiImport, {
+		get(target, name) {
+		  const fn = target[name];
+		  if (typeof fn !== "function") return fn;
+		  return (...args) => {
+			const r = fn.apply(target, args);
+			if (r === 58) console.warn("NOTSUP from", name, args);
+			return r;
+		  };
+		}
+	  });
+
 	applyPatchPollOneoff(wasi);
 	const go = new Go(); // set up Go runtime (even for non-Go WASM)
 	const imports = Object.assign(go.importObject, {
-		"wasi_snapshot_preview1": wasi.wasiImport,
+		"wasi_snapshot_preview1": wrapped,
 	});
 
     const wasm = await WebAssembly.compile(e.data.bin);
