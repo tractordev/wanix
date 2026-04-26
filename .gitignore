@@ -5,3 +5,5 @@
 /wanix
 /local
 /.local
+/rc/rc
+/rc/rc.wasm
