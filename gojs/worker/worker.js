@@ -39,6 +39,7 @@ function log(...args) {
 
 
 function errback(cb, e) {
+    if (e instanceof Error) throw e;
     log("errback", e);
     const err = new Error(e);
     if (e.includes("does not exist")) {
@@ -274,7 +275,7 @@ function cleanpath(path) {
                 log("readdir", path);
                 try {
                     const entries = await sys.readDir(path);
-                    callback(null, entries.map(e => e.replace("/", "")));
+                    callback(null, (entries||[]).map(e => e.replace("/", "")));
                 } catch (e) {
                     errback(callback, e);
                 }
