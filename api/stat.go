@@ -6,6 +6,7 @@ import (
 
 	"tractor.dev/toolkit-go/duplex/rpc"
 	"tractor.dev/wanix/fs"
+	"tractor.dev/wanix/fs/pstat"
 )
 
 func (s *syscaller) stat(r rpc.Responder, c *rpc.Call) {
@@ -24,8 +25,9 @@ func (s *syscaller) stat(r rpc.Responder, c *rpc.Call) {
 		IsDir   bool
 		ModTime time.Time
 	}{
-		Size:    fi.Size(),
-		Mode:    uint32(fi.Mode()),
+		Size: fi.Size(),
+		Mode: pstat.FileModeToUnixMode(fi.Mode()),
+		// Mode:    uint32(fi.Mode()),
 		IsDir:   fi.IsDir(),
 		ModTime: fi.ModTime(),
 	})
@@ -47,8 +49,9 @@ func (s *syscaller) lstat(r rpc.Responder, c *rpc.Call) {
 		IsDir   bool
 		ModTime time.Time
 	}{
-		Size:    fi.Size(),
-		Mode:    uint32(fi.Mode()),
+		Size: fi.Size(),
+		Mode: pstat.FileModeToUnixMode(fi.Mode()),
+		// Mode:    uint32(fi.Mode()),
 		IsDir:   fi.IsDir(),
 		ModTime: fi.ModTime(),
 	})
@@ -82,8 +85,9 @@ func (s *syscaller) fstat(r rpc.Responder, c *rpc.Call) {
 		IsDir   bool
 		ModTime time.Time
 	}{
-		Size:    fi.Size(),
-		Mode:    uint32(fi.Mode()),
+		Size: fi.Size(),
+		Mode: pstat.FileModeToUnixMode(fi.Mode()),
+		// Mode:    uint32(fi.Mode()),
 		IsDir:   fi.IsDir(),
 		ModTime: fi.ModTime(),
 	})
