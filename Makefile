@@ -71,7 +71,7 @@ wasm: $(if $(WASM_DEBUG),wasm-go,) wasm-tinygo
 
 ## Build WASM module using TinyGo
 wasm-tinygo: wasi/worker/lib.js
-	tinygo build -ldflags="-X tractor.dev/wanix.Version=$(VERSION)" -target wasm -o $(DIST_DIR)/wanix.wasm ./wasm
+	tinygo build -ldflags="-X tractor.dev/wanix.Version=$(VERSION)" --no-debug -target wasm -o $(DIST_DIR)/wanix.wasm ./wasm
 	ls -lah $(DIST_DIR)/wanix.wasm
 .PHONY: wasm-tinygo
 
