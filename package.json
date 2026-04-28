@@ -1,4 +1,17 @@
 {
+    "name": "wanix",
+    "version": "0.4.0",
+    "type": "module",
+    "main": "dist/wanix.js",
+    "module": "index.ts",
+    "files": [
+        "dist/**/*.wasm",
+        "dist/**/*.js"
+    ],
+    "scripts": {
+        "build": "make runtime",
+        "prepublishOnly": "npm run build"
+    },
     "dependencies": {
         "@bjorn3/browser_wasi_shim": "^0.4.1",
         "@progrium/duplex": "^0.2.1",
