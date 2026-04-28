@@ -1,0 +1,12 @@
+{
+    "name": "wanix-extras",
+    "version": "0.4.0-alpha",
+    "files": [
+        "dist/**/*.wasm",
+        "dist/**/*.tgz"
+    ],
+    "scripts": {
+        "build": "make dist",
+        "prepublishOnly": "make dist"
+    }
+}

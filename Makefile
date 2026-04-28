@@ -19,7 +19,7 @@ DIST_DIR		?= dist
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
 
-export DOCKER_CMD 	?= $(shell command -v podman || command -v docker)
+export DOCKER_CMD 	?= $(shell command -v docker)
 
 ## Link/install the local Wanix command
 link:

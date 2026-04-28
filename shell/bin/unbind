@@ -1,2 +1,0 @@
-#!/bin/sh
-echo "unbind $1 vm/1/fsys/$2" >> /task/$(cat /task/self)/ctl
