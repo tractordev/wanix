@@ -254,5 +254,5 @@ export function serializeWorkbenchProfile(profile) {
     }
   }
   
-  customElements.define("wanix-workbench", WorkbenchElement);
+  customElements.define("wanix-bench", WorkbenchElement);
   

@@ -43,6 +43,10 @@ export class SystemElement extends NamespaceElement {
         return new WanixHandle(this.openPort(tid));
     }
 
+    get stdin() {
+        this.root.openWritable("#wanix/stdin/data");
+    }
+
     get root() {
         if (!this.__root) {
             this.__root = this.openHandle();
