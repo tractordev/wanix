@@ -1,7 +1,7 @@
 # Wanix
 [![Discord](https://img.shields.io/discord/415940907729420288?label=Discord)](https://discord.gg/nQbgRjEBU4) ![GitHub Sponsors](https://img.shields.io/github/sponsors/progrium?label=Sponsors)
 
-A virtual environment runtime for the web, inspired by Plan 9.
+A virtual environment toolkit for the web, inspired by Plan 9.
 
 **📺 [Wanix: The Spirit of Plan 9 in Wasm](https://www.youtube.com/watch?v=kGBeT8lwbo0)**
 
