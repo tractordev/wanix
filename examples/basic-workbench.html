@@ -1,19 +1,26 @@
+<!DOCTYPE html>
 <html>
 <head>
-  <title>Foobar</title>
-  <script src="../dist/wanix.min.js" type="module"></script>
-  <!-- <script src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-alpha/dist/wanix.min.js" type="module"></script> -->
+    <meta charset="utf-8"/>
+    <script src="../dist/wanix.min.js" type="module"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-alpha/dist/wanix.min.js" type="module"></script> -->
 </head>
-<body>
+<body style="height: 100vh;">
 
-<wanix-system wasm="../dist/wanix.debug.wasm" debug>
-  <wanix-bind type="archive" dst="root" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-alpha/dist/alpine-linux.tgz"></wanix-bind>
-  <wanix-bind type="fetch" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
+    <!-- a wanix system is an empty root task/namespace -->
+    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
 
-  <wanix-workbench workdir="root" assets="/workbench" term>
-    <wanix-task role="shell" type="gojs" cmd="rc.wasm"></wanix-task>
-  </wanix-workbench>
-</wanix-system>
+        <!-- bind an archive to the name root in the namespace -->
+        <wanix-bind type="archive" dst="root" src="../extras/dist/alpine-linux.tgz"></wanix-bind>
+
+        <!-- fetch the rc.wasm file -->
+        <wanix-bind type="fetch" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
+
+        <!-- set up workbench with terminal starting in the root directory with rc.wasm as the shell -->
+        <wanix-workbench workdir="root" assets="/workbench" term>
+            <wanix-task role="shell" type="gojs" cmd="rc.wasm"></wanix-task>
+        </wanix-workbench>
+    </wanix-system>
 
 </body>
 </html>
