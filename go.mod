@@ -15,6 +15,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.31.12
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.16
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.3
+	github.com/evanw/esbuild v0.28.0
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hanwen/go-fuse/v2 v2.7.2
@@ -22,7 +23,7 @@ require (
 	github.com/progrium/go-netstack v0.0.0-20240720002214-37b2b8227b91
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701
 	golang.org/x/net v0.46.0
-	golang.org/x/sys v0.42.0
+	golang.org/x/sys v0.43.0
 	tractor.dev/toolkit-go v0.0.0-20250103001615-9a6753936c19
 )
 
