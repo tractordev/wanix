@@ -78,7 +78,8 @@ export class TaskElement extends NamespaceElement {
             this.term = [this.termNS, termID].join("/");
             // should this binding be done in task vfs?
             await this.system.root.bind(this.term, [this.path, "term"].join("/"));
-            // this is def a hack, but it works for now
+            // this is def a hack, but it works for now.
+            // this is in addition to the above since aliased path needs its own binding.
             if (this.id) {
                 await this.system.root.bind(this.term, [this.taskNS, this.id, "term"].join("/"));
             }
