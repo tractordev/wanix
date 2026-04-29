@@ -11,6 +11,7 @@ export class WorkbenchElement extends HTMLElement {
       this.extension = this.getAttribute("extension") || "wanix.workbench";
       this.for = this.getAttribute('for');
       this.term = this.hasAttribute('term');
+      this.debug = this.hasAttribute('debug');
 
       this.workdir = this.getAttribute("workdir");
       if (this.workdir === "." || this.workdir === "/" || !this.workdir) {
@@ -174,7 +175,7 @@ export class WorkbenchElement extends HTMLElement {
         //   "terminal.integrated.tabs.showActions": false,
         //   "workbench.panel.opensMaximized": "always",
         },
-        developmentOptions: { logLevel: 0 },
+        developmentOptions: { logLevel: this.debug ? 2 : 0 },
         profile: DEFAULT_PROFILE,
       };
   
