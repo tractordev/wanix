@@ -390,7 +390,14 @@ function cleanpath(path) {
 			pid: -1,
 			ppid: -1,
 			umask() { throw enosys(); },
-			cwd() { return globalThis.cwd; },
+			cwd() {
+				let cwd = globalThis.cwd;
+				// cwd must be absolute
+				if (!cwd.startsWith("/")) {
+					cwd = "/" + cwd;
+				}
+				return cwd;
+			},
 			chdir(dir) {
                 globalThis.cwd = dir;
             },
