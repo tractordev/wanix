@@ -2,13 +2,13 @@
 <html>
 <head>
     <meta charset="utf-8"/>
-    <script type="module" src="../../dist/wanix.min.js"></script>
+    <script type="module" src="../dist/wanix.min.js"></script>
 </head>
 <body>
-    <p>Example currently broken... Be sure to read the comments in the source.</p>
+    <p>Uses fake URLs, may appear broken... Be sure to read the comments in the source.</p>
     
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system wasm="../../dist/wanix.wasm" debug>
+    <wanix-system wasm="../dist/wanix.wasm" debug>
         
         <!-- the default bind type is "ns" if not specified -->
         <wanix-bind dst="task" src="#task"></wanix-bind>

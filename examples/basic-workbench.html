@@ -1,0 +1,19 @@
+<html>
+<head>
+  <title>Foobar</title>
+  <script src="../dist/wanix.min.js" type="module"></script>
+  <!-- <script src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-alpha/dist/wanix.min.js" type="module"></script> -->
+</head>
+<body>
+
+<wanix-system wasm="../dist/wanix.debug.wasm" debug>
+  <wanix-bind type="archive" dst="root" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-alpha/dist/alpine-linux.tgz"></wanix-bind>
+  <wanix-bind type="fetch" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
+
+  <wanix-workbench workdir="root" assets="/workbench" term>
+    <wanix-task role="shell" type="gojs" cmd="rc.wasm"></wanix-task>
+  </wanix-workbench>
+</wanix-system>
+
+</body>
+</html>

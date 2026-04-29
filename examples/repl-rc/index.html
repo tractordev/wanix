@@ -4,21 +4,23 @@
     <meta charset="utf-8"/>
     <script type="module" src="../../dist/wanix.min.js"></script>
     <style>
-        body, html {
-            margin: 0;
-            height: 100%;
-        }
+        body, html { margin: 0; height: 100%; }
     </style>
 </head>
 <body>
     
+    <!-- a wanix system is an empty root task/namespace -->
     <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
+        <!-- bind the task, term, and web namespaces to the system -->
         <wanix-bind dst="task" src="#task"></wanix-bind>
         <wanix-bind dst="term" src="#term"></wanix-bind>
         <wanix-bind dst="web" src="#web"></wanix-bind>
 
+        <!-- fetch the rc.wasm file -->
         <wanix-bind type="fetch" dst="rc.wasm" src="./rc.wasm"></wanix-bind>
-        <wanix-task id="repl" cmd="rc.wasm" type="gojs" term start></wanix-task>
+        <!-- run the rc.wasm file as a gojs task in the web directory -->
+        <wanix-task id="repl" cmd="rc.wasm" type="gojs" workdir="web" term start></wanix-task>
+        <!-- render the terminal for the repl -->
         <wanix-term path="#task/repl/term"></wanix-term>
     </wanix-system>
 

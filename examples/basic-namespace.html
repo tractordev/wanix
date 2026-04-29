@@ -2,14 +2,14 @@
 <html>
 <head>
     <meta charset="utf-8"/>
-    <script type="module" src="../../dist/wanix.min.js"></script>
+    <script type="module" src="../dist/wanix.min.js"></script>
 </head>
 <body>
     <p>Output in DevTools console. Be sure to read the comments in the source.</p>
     
     <!-- a wanix system is an empty root task/namespace -->
     <!-- debug adds devtools helpers for namespace inspection (list, read, etc)-->
-    <wanix-system wasm="../../dist/wanix.wasm" debug>
+    <wanix-system wasm="../dist/wanix.wasm" debug>
 
         <!-- bind a ramfs to the root of the namespace -->
         <!-- importantly, paths dont start with / and . is special for root -->
