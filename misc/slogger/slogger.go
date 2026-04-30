@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"strings"
 
-	"tractor.dev/wanix/internal/glob"
+	"tractor.dev/wanix/misc/glob"
 )
 
 type HandlerOptions struct {

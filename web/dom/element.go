@@ -16,8 +16,8 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/pipe"
-	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/jsutil"
+	"tractor.dev/wanix/misc"
 )
 
 type Element struct {
@@ -77,7 +77,7 @@ func TryPatch(ctx context.Context, el *Element, termFile *fskit.StreamFile) erro
 
 func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	fsys := fskit.MapFS{
-		"ctl": internal.ControlFile(&cli.Command{
+		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(ctx *cli.Context, args []string) {
@@ -111,8 +111,8 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 				}
 			},
 		}),
-		"type": internal.FieldFile(r.typ),
-		"attrs": internal.FieldFile(
+		"type": misc.FieldFile(r.typ),
+		"attrs": misc.FieldFile(
 			// getter
 			func() (string, error) {
 				var builder strings.Builder
@@ -141,10 +141,10 @@ func (r *Element) OpenContext(ctx context.Context, name string) (fs.File, error)
 				return nil
 			},
 		),
-		"html": internal.FieldFile(func() (string, error) {
+		"html": misc.FieldFile(func() (string, error) {
 			return r.value.Get("outerHTML").String(), nil
 		}),
-		"text": internal.FieldFile(func() (string, error) {
+		"text": misc.FieldFile(func() (string, error) {
 			return r.value.Get("innerText").String(), nil
 		}),
 	}

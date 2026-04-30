@@ -1,6 +1,6 @@
 //go:build !js
 
-package internal
+package misc
 
 import "net/url"
 

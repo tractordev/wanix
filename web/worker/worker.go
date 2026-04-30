@@ -12,8 +12,8 @@ import (
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/jsutil"
+	"tractor.dev/wanix/misc"
 	"tractor.dev/wanix/web/sys"
 )
 
@@ -97,7 +97,7 @@ func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error
 
 func (r *Resource) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	fsys := fskit.MapFS{
-		"ctl": internal.ControlFile(&cli.Command{
+		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the worker",
 			Run: func(ctx *cli.Context, args []string) {
@@ -112,8 +112,8 @@ func (r *Resource) ResolveFS(ctx context.Context, name string) (fs.FS, string, e
 				}
 			},
 		}),
-		"state": internal.FieldFile(r.state),
-		"src": internal.FieldFile(r.src, func(data []byte) error {
+		"state": misc.FieldFile(r.state),
+		"src": misc.FieldFile(r.src, func(data []byte) error {
 			r.src = string(data)
 			return nil
 		}),

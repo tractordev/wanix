@@ -8,7 +8,7 @@ replace golang.org/x/sys => github.com/progrium/sys-wasm v0.0.0-20240620081741-5
 
 // patch on top of the feature/cbor-tinygo-beta branch
 // based on https://github.com/fxamacker/cbor/issues/686
-replace github.com/fxamacker/cbor/v2 => ./hack/cbor
+replace github.com/fxamacker/cbor/v2 => ./misc/cbor
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.39.2

@@ -48,7 +48,7 @@ WORKDIR /build
 USER root
 ENV GOFLAGS="-buildvcs=false"
 RUN git config --global --add safe.directory /build
-COPY ./hack/cbor ./hack/cbor
+COPY ./misc/cbor ./misc/cbor
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
@@ -57,7 +57,7 @@ RUN make wasm-tinygo
 
 FROM base AS go-base
 WORKDIR /build
-COPY ./hack/cbor ./hack/cbor
+COPY ./misc/cbor ./misc/cbor
 COPY go.mod go.sum ./
 RUN go mod download
 

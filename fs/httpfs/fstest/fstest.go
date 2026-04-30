@@ -10,8 +10,8 @@ import (
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/httpfs"
-	"tractor.dev/wanix/hack/fstest"
-	"tractor.dev/wanix/hack/slogger"
+	"tractor.dev/wanix/misc/fstest"
+	"tractor.dev/wanix/misc/slogger"
 )
 
 func main() {

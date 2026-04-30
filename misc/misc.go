@@ -1,4 +1,4 @@
-package internal
+package misc
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/internal/shlex"
+	"tractor.dev/wanix/misc/shlex"
 )
 
 func FieldFile(args ...any) fs.FS {

@@ -3,7 +3,7 @@ package slogger_test
 import (
 	"log/slog"
 
-	"tractor.dev/wanix/hack/slogger"
+	"tractor.dev/wanix/misc/slogger"
 )
 
 func ExampleNewWithOptions_includeErrors() {

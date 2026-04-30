@@ -17,8 +17,8 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/pipe"
-	"tractor.dev/wanix/internal"
 	"tractor.dev/wanix/jsutil"
+	"tractor.dev/wanix/misc"
 )
 
 //go:embed v86.worker.min.js
@@ -88,7 +88,7 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	serialFile := fskit.NewStreamFile(r.serial, r.serial, nil, fs.FileMode(0644))
 	shmpipeFile := fskit.NewStreamFile(r.shmpipe, r.shmpipe, nil, fs.FileMode(0644))
 	fsys := fskit.MapFS{
-		"ctl": internal.ControlFile(&cli.Command{
+		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
 			Run: func(_ *cli.Context, args []string) {

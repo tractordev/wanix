@@ -17,7 +17,7 @@ import (
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/internal"
+	"tractor.dev/wanix/misc"
 )
 
 type connState string
@@ -85,7 +85,7 @@ func (c *Conn) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 func (c *Conn) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	fsys := fskit.MapFS{
-		"ctl": internal.ControlFile(&cli.Command{
+		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the connection",
 			Run: func(ctx *cli.Context, args []string) {
@@ -123,9 +123,9 @@ func (c *Conn) ResolveFS(ctx context.Context, name string) (fs.FS, string, error
 				}
 			},
 		}),
-		"status": internal.FieldFile(func() (string, error) { return c.status(), nil }),
-		"local":  internal.FieldFile(func() (string, error) { return c.local(), nil }),
-		"remote": internal.FieldFile(func() (string, error) { return c.remote(), nil }),
+		"status": misc.FieldFile(func() (string, error) { return c.status(), nil }),
+		"local":  misc.FieldFile(func() (string, error) { return c.local(), nil }),
+		"remote": misc.FieldFile(func() (string, error) { return c.remote(), nil }),
 		"data": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			if name != "." {
 				return nil, fs.ErrNotExist
@@ -440,4 +440,3 @@ func (c *Conn) acceptOne(ctx context.Context) (string, error) {
 // Ensure listenFile implements fs.File
 var _ fs.File = (*listenFile)(nil)
 var _ = (io.Reader)((*listenFile)(nil))
-

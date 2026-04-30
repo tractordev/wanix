@@ -4,7 +4,7 @@ import (
 	"io/fs"
 
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/internal"
+	"tractor.dev/wanix/misc"
 	"tractor.dev/wanix/vnd"
 )
 
@@ -39,5 +39,5 @@ func NewRoot() (*Task, error) {
 	return root, nil
 }
 
-var ControlFile = internal.ControlFile
-var FieldFile = internal.FieldFile
+var ControlFile = misc.ControlFile
+var FieldFile = misc.FieldFile

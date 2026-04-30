@@ -12,7 +12,7 @@ import (
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/vfs"
-	"tractor.dev/wanix/internal"
+	"tractor.dev/wanix/misc"
 )
 
 // contextKey is a value for use with context.WithValue. It's used as
@@ -176,7 +176,7 @@ func (r *Task) Open(name string) (fs.File, error) {
 
 func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	return fs.Resolve(fskit.MapFS{
-		"ctl": internal.ControlFile(&cli.Command{
+		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the Task",
 			Run: func(ctx *cli.Context, args []string) {
@@ -200,15 +200,15 @@ func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error
 				}
 			},
 		}),
-		"id":   internal.FieldFile(r.ID()),
-		"type": internal.FieldFile(r.typ),
-		"cmd": internal.FieldFile(r.cmd, func(in []byte) error {
+		"id":   misc.FieldFile(r.ID()),
+		"type": misc.FieldFile(r.typ),
+		"cmd": misc.FieldFile(r.cmd, func(in []byte) error {
 			if len(in) > 0 {
 				r.cmd = strings.TrimSpace(string(in))
 			}
 			return nil
 		}),
-		"alias": internal.FieldFile(r.alias, func(in []byte) error {
+		"alias": misc.FieldFile(r.alias, func(in []byte) error {
 			if len(in) > 0 {
 				oldalias := r.alias
 				r.alias = strings.TrimSpace(string(in))
@@ -221,19 +221,19 @@ func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error
 			}
 			return nil
 		}),
-		"env": internal.FieldFile(strings.Join(r.env, "\n"), func(in []byte) error {
+		"env": misc.FieldFile(strings.Join(r.env, "\n"), func(in []byte) error {
 			if len(in) > 0 {
 				r.env = strings.Split(strings.TrimSpace(string(in)), "\n")
 			}
 			return nil
 		}),
-		"dir": internal.FieldFile(r.dir, func(in []byte) error {
+		"dir": misc.FieldFile(r.dir, func(in []byte) error {
 			if len(in) > 0 {
 				r.dir = strings.TrimSpace(string(in))
 			}
 			return nil
 		}),
-		"exit": internal.FieldFile(r.exit, func(in []byte) error {
+		"exit": misc.FieldFile(r.exit, func(in []byte) error {
 			if len(in) > 0 {
 				r.exit = strings.TrimSpace(string(in))
 				if r.closer != nil {
