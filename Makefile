@@ -107,6 +107,11 @@ clean:
 	make -C rc clean
 .PHONY: clean
 
+go.work: toolkit-go
+	go work init . ./toolkit-go
+
+toolkit-go:
+	git clone https://github.com/tractordev/toolkit-go
 
 wasi/worker/lib.js:
 	make js

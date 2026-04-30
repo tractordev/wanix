@@ -8,3 +8,6 @@
 /examples/dev.html
 /rc/rc
 /rc/rc.wasm
+/go.work.sum
+/go.work
+/toolkit-go
