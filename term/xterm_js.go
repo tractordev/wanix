@@ -2,7 +2,7 @@
 
 package term
 
-import "tractor.dev/wanix/vnd/xterm"
+import "tractor.dev/wanix/misc/xterm"
 
 func loadXtermCSS() {
 	xterm.Load()

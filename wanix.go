@@ -5,7 +5,6 @@ import (
 
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/misc"
-	"tractor.dev/wanix/vnd"
 )
 
 var Version string
@@ -26,7 +25,6 @@ func NewRoot() (*Task, error) {
 
 	wanixfs := fskit.MapFS{
 		"version": fskit.RawNode([]byte(Version+"\n"), 0555),
-		"vnd":     vnd.Assets,
 	}
 	if err := root.Namespace().Bind(wanixfs, ".", "#wanix"); err != nil {
 		return nil, err
