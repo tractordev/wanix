@@ -36,7 +36,7 @@ build: runtime cmd
 .PHONY: build
 
 ## Build and run examples
-examples: $(DIST_DIR)/wanix.wasm $(DIST_DIR)/wanix.min.js $(DIST_DIR)/wanix.debug.wasm
+examples: dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist
 	@for dir in $(shell find examples -type f -iname '[mM]akefile' -exec dirname {} \;); do \
 		$(MAKE) -C $$dir; \
 	done
@@ -83,6 +83,7 @@ wasm-go: wasi/worker/lib.js
 
 ## Build JavaScript modules (in Docker)
 js:
+	mkdir -p $(DIST_DIR)
 	$(DOCKER_CMD) build --load -t wanix-build-js --target js $(if $(wildcard $(DIST_DIR)/wanix.min.js),,--no-cache) -f Dockerfile .
 	$(DOCKER_CMD) rm -f wanix-build-js
 	$(DOCKER_CMD) create --name wanix-build-js wanix-build-js
@@ -96,26 +97,16 @@ js:
 
 ## Remove all built artifacts
 clean:
+	rm -rf dist
+	rm -rf node_modules
 	rm -f .local/bin/wanix
-	rm -f $(DIST_DIR)/wanix.min.js
-	rm -f $(DIST_DIR)/wanix.debug.wasm
-	rm -f $(DIST_DIR)/wanix.wasm
-	rm -f $(DIST_DIR)/wanix.handle.js
-	rm -f $(DIST_DIR)/wanix.js
 	rm -f wasi/worker/lib.js
 	rm -f gojs/worker/lib.js
+	make -C workbench clean
+	make -C extras clean
+	make -C rc clean
 .PHONY: clean
 
-
-DIST_TARGETS	:= $(foreach os, $(DIST_OS), $(foreach arch, $(DIST_ARCH), $(DIST_DIR)/$(NAME)_$(VERSION)_$(os)_$(arch)))
-$(DIST_TARGETS): $(DIST_DIR)/%:
-	GOOS=$(word 3, $(subst _, ,$@)) \
-	GOARCH=$(word 4, $(subst _, ,$@)) \
-	go build -ldflags="-X main.Version=$(VERSION)" $(GOARGS) -o $@ ./cmd/wanix
-
-## Build distribution binaries
-dist: $(DIST_TARGETS)
-.PHONY: dist
 
 wasi/worker/lib.js:
 	make js
@@ -128,6 +119,24 @@ $(DIST_DIR)/wanix.debug.wasm:
 
 $(DIST_DIR)/wanix.wasm:
 	make wasm-tinygo
+
+workbench/code:
+	make -C workbench
+
+extras/dist:
+	make -C extras
+
+
+## Build distribution binaries
+dist: $(DIST_TARGETS)
+.PHONY: dist
+
+DIST_ASSETS 	:= $(DIST_DIR)/wanix.wasm $(DIST_DIR)/wanix.min.js $(DIST_DIR)/wanix.debug.wasm $(DIST_DIR)/wanix.handle.js $(DIST_DIR)/wanix.js
+DIST_TARGETS	:= $(foreach os, $(DIST_OS), $(foreach arch, $(DIST_ARCH), $(DIST_DIR)/$(NAME)_$(VERSION)_$(os)_$(arch)))
+$(DIST_TARGETS): $(DIST_DIR)/%:
+	GOOS=$(word 3, $(subst _, ,$@)) \
+	GOARCH=$(word 4, $(subst _, ,$@)) \
+	go build -ldflags="-X main.Version=$(VERSION)" $(GOARGS) -o $@ ./cmd/wanix
 
 .DEFAULT_GOAL := show-help
 
