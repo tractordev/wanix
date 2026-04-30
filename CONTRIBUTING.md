@@ -9,10 +9,9 @@ We want contributing and first-time experiences to be as smooth as possible.
 
 ### Prerequisites
 
-You will need either Docker 20.10+ or Podman 5.5+ to build project dependencies. 
+You will need Docker 20.10+ (or Podman 5.5+) to build some project dependencies. 
 
 - [Docker 20.10+](https://docs.docker.com/get-docker/)
-- [Podman 5.5+](https://podman.io/get-started)
 
 You also want Go and, optionally but recommended, TinyGo.
 
@@ -85,32 +84,27 @@ If you have trouble getting Go or TinyGo configured properly. You can build both
 command and runtime entirely in container, use `make build-docker`. 
 
 
-### Build the Wanix Shell
-
-With Docker or Podman running, you can run this to build the shell bundle:
-
-```sh
-make shell
-```
-
-This will take a few minutes and use a lot of disk space, but typically only 
-needs to be done once. Make sure that if you're running containers in a VM, like
-on Mac with Docker Desktop, you allot the VM around **128GB disk storage** and
-**32GB RAM**. 
-
-It pulls a lot packages and may encounter transient network errors, so if
-there is an issue, try running it again before submitting an issue.
-
-
-### Running Wanix
-
-Finally, you can run `wanix serve` to serve the current directory with the
-Wanix runtime and index.html overlayed. If you run in the project root and
-built the shell bundle, you should get the shell by default in your browser.
-
 ## Directory Layout
 
-TODO
+```
+wanix/
+├── api/        # Wanix filesystem API over Duplex
+├── cmd/        # Wanix command-line tool
+├── elements/   # Wanix web components
+├── examples/   # Runnable local examples
+├── extras/     # Package of support files for CDN
+├── fs/         # General filesystem API and toolkit
+├── gojs/       # Web worker for `gojs` tasks
+├── misc/       # Support packages
+├── rc/         # Wanix shell based on Plan 9 shell
+├── term/       # Terminal device package
+├── test/       # Various test suites
+├── vm/         # Virtual machine device package
+├── wasi/       # Web worker for `wasi` tasks
+├── wasm/       # Default Wasm module for Wanix
+├── web/        # Web namespace packages
+└── workbench/  # VSCode based work environment
+```
 
 ---
 Something missing? Let us know via GitHub issue or Discord.
