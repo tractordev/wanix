@@ -11,7 +11,7 @@ WORKDIR /build
 COPY ./package.json .
 RUN npm install
 COPY . .
-RUN esbuild index-handle.ts \
+RUN esbuild ./api/handle.js \
     --outfile=dist/wanix.handle.js \
     --bundle \
     --external:util \
