@@ -11,7 +11,7 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/pipe"
 	gojsworker "tractor.dev/wanix/gojs/worker"
-	"tractor.dev/wanix/jsutil"
+	"tractor.dev/wanix/misc/jsutil"
 	wasiworker "tractor.dev/wanix/wasi/worker"
 	"tractor.dev/wanix/web/caches"
 	"tractor.dev/wanix/web/dl"

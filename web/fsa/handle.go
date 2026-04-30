@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"tractor.dev/wanix/fs"
-	"tractor.dev/wanix/jsutil"
+	"tractor.dev/wanix/misc/jsutil"
 )
 
 var (

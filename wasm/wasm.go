@@ -20,7 +20,7 @@ import (
 	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/fs/signal"
 	"tractor.dev/wanix/fs/tarfs"
-	"tractor.dev/wanix/jsutil"
+	"tractor.dev/wanix/misc/jsutil"
 	"tractor.dev/wanix/term"
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web"

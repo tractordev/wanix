@@ -16,9 +16,9 @@ import (
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
-	"tractor.dev/wanix/jsutil"
 	"tractor.dev/wanix/misc"
 	"tractor.dev/wanix/misc/httprecorder"
+	"tractor.dev/wanix/misc/jsutil"
 )
 
 type Service struct {

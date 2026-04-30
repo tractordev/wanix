@@ -9,7 +9,7 @@ import (
 	"syscall/js"
 
 	"tractor.dev/wanix/fs"
-	"tractor.dev/wanix/jsutil"
+	"tractor.dev/wanix/misc/jsutil"
 )
 
 // user selected directory
