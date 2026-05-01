@@ -1,6 +1,6 @@
 
 build:
-	GOOS=js GOARCH=wasm go build -o rc.wasm ./cmd/rc
+	GOWORK=off GOOS=js GOARCH=wasm go build -o ./rc.wasm ./cmd/rc
 .PHONY: build
 
 clean:
