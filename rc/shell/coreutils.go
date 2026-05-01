@@ -25,6 +25,8 @@ import (
 	"tractor.dev/wanix/rc/shell/compatfind"
 	"tractor.dev/wanix/rc/shell/compatgzip"
 	"tractor.dev/wanix/rc/shell/compatls"
+	"tractor.dev/wanix/rc/shell/compatstat"
+	"tractor.dev/wanix/rc/shell/openfile"
 )
 
 var coreutilsCommands = map[string]func() core.Command{
@@ -40,10 +42,13 @@ var coreutilsCommands = map[string]func() core.Command{
 	"mv":     func() core.Command { return mv.New() },
 	"rm":     func() core.Command { return rm.New() },
 	"ls":     func() core.Command { return compatls.New() },
+	"stat":   func() core.Command { return compatstat.New() },
 	"find":   func() core.Command { return compatfind.New() },
 	"gzip":   func() core.Command { return compatgzip.New("gzip") },
 	"gzcat":  func() core.Command { return compatgzip.New("gzcat") },
 	"gunzip": func() core.Command { return compatgzip.New("gunzip") },
+
+	"openfile": func() core.Command { return openfile.New() },
 }
 
 func urootCoreutilsMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
