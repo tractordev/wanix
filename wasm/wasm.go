@@ -11,6 +11,7 @@ import (
 	"syscall/js"
 
 	"tractor.dev/wanix/fs"
+	"tractor.dev/wanix/web/jsfs"
 	"tractor.dev/wanix/web/sys"
 
 	"tractor.dev/toolkit-go/duplex/mux"
@@ -44,6 +45,7 @@ func main() {
 		{"#pipe", &pipe.Allocator{}},
 		{"#signal", &signal.Allocator{}},
 		{"#ramfs", &memfs.Allocator{}},
+		{"#js", jsfs.NewFS(js.Global())},
 	}
 	for _, b := range sysbindings {
 		if err := root.Namespace().Bind(b.fsys, ".", b.dst); err != nil {

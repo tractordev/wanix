@@ -1,4 +1,5 @@
 
 build:
-	cd ../../rc && GOOS=js GOARCH=wasm go build -o ../examples/repl-rc/rc.wasm ./cmd/rc
+	make -C ../../rc build
+	cp ../../rc/rc.wasm rc.wasm
 .PHONY: build
