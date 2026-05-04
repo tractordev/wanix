@@ -4,12 +4,13 @@ import {
 
 const TASKNS = "#task";
 
-self.onmessage = async (e) => {
+self.addEventListener("message", async (e) => {
     if (!e.data.worker) return;
 
     console.log("gojs worker started");
     const fs = new WanixHandle(e.data.worker.port);
-    globalThis.sys = fs;
+    globalThis.worker = e.data.worker;
+    globalThis.sys = fs; // deprecated
     const tid = e.data.worker.tid;
     const env = (await fs.readText(`${TASKNS}/${tid}/env`)).trim().split("\n");
     const args = (await fs.readText(`${TASKNS}/${tid}/cmd`)).trim().split(" ");
@@ -31,7 +32,7 @@ self.onmessage = async (e) => {
     await go.run(result.instance);
     const end = performance.now();
     console.log(`gojs execution took ${end - start}ms`);
-}
+});
 
 function log(...args) {
     // console.log(...args);
