@@ -241,6 +241,27 @@ func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, mode ...BindMode) error {
 	return nil
 }
 
+// Bindings returns all fileinfo for bindings in a directory
+func (ns *NS) Bindings(name string) ([]fs.FileInfo, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "bindings", Path: name, Err: fs.ErrNotExist}
+	}
+	var result []fs.FileInfo
+	for path, refs := range ns.bindings {
+		if strings.HasPrefix(path, name+"/") {
+			fname := strings.Split(strings.TrimPrefix(path, name+"/"), "/")[0]
+			for _, ref := range refs {
+				fi, err := ref.fileInfo(context.Background(), fname)
+				if err != nil {
+					continue
+				}
+				result = append(result, fi)
+			}
+		}
+	}
+	return result, nil
+}
+
 func (ns *NS) Stat(name string) (fs.FileInfo, error) {
 	ctx := fs.WithOrigin(ns.ctx, ns, name, "stat")
 	return ns.StatContext(ctx, name)
