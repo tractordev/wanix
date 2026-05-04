@@ -20,15 +20,6 @@ import (
 	"tractor.dev/wanix/web/worker"
 )
 
-func startWorkerTask(svc *worker.Service, t *wanix.Task, blobURL string) error {
-	w, err := svc.Alloc(t)
-	if err != nil {
-		return err
-	}
-	args := append([]string{blobURL}, strings.Split(t.Cmd(), " ")...)
-	return w.Start(args...)
-}
-
 type gojsDriver struct {
 	svc *worker.Service
 }
@@ -39,7 +30,7 @@ func (d *gojsDriver) Check(t *wanix.Task) bool {
 }
 
 func (d *gojsDriver) Start(t *wanix.Task) error {
-	return startWorkerTask(d.svc, t, gojsworker.BlobURL())
+	return worker.StartTaskWorker(d.svc, t, gojsworker.BlobURL())
 }
 
 type wasiDriver struct {
@@ -52,7 +43,7 @@ func (d *wasiDriver) Check(t *wanix.Task) bool {
 }
 
 func (d *wasiDriver) Start(t *wanix.Task) error {
-	return startWorkerTask(d.svc, t, wasiworker.BlobURL())
+	return worker.StartTaskWorker(d.svc, t, wasiworker.BlobURL())
 }
 
 type jsDriver struct {
@@ -73,7 +64,7 @@ func (d *jsDriver) Start(t *wanix.Task) error {
 	js.CopyBytesToJS(jsBuf, data)
 	blob := js.Global().Get("Blob").New([]any{jsBuf}, js.ValueOf(map[string]any{"type": "text/javascript"}))
 	url := js.Global().Get("URL").Call("createObjectURL", blob)
-	return startWorkerTask(d.svc, t, url.String())
+	return worker.StartTaskWorker(d.svc, t, url.String())
 }
 
 func New(root *wanix.Task) fskit.MapFS {
