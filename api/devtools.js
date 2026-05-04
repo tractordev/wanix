@@ -30,6 +30,9 @@ export function setupDevtools(el) {
     globalThis.stat = (name) => { 
         handle.stat(name).then(console.log); 
     };
+    globalThis.lstat = (name) => { 
+        handle.lstat(name).then(console.log); 
+    };
     globalThis.tail = async (name) => {
         const fd = await handle.open(name);
         while (true) {
@@ -51,6 +54,7 @@ export function setupDevtools(el) {
         screen.appendChild(canvas);
         screen.id = 'screen';
         screen.style.display = 'none';
+        screen.style.border = '1px solid red';
         document.body.appendChild(screen);
     };
 
