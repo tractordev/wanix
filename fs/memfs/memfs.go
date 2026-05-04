@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"path"
 	"slices"
@@ -175,7 +176,14 @@ func (fsys *FS) StatContext(ctx context.Context, name string) (fi fs.FileInfo, e
 		if origin, fullname, ok := fs.Origin(ctx); ok {
 			if strings.HasPrefix(target, "/") {
 				target = target[1:]
+			} else if fullname == name {
+				// target is relative to the current directory
+				target = path.Join(path.Dir(name), target)
+				return fs.StatContext(ctx, fsys, target)
 			} else {
+				// not sure about this case. it assumes the target will be
+				// relative to the origin fs?
+				log.Println("DEBUG: touched weird case")
 				target = path.Join(strings.TrimSuffix(fullname, name), target)
 			}
 			return fs.StatContext(ctx, origin, target)
@@ -221,7 +229,14 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (f fs.File, err er
 			if origin, fullname, ok := fs.Origin(ctx); ok {
 				if strings.HasPrefix(target, "/") {
 					target = target[1:]
+				} else if fullname == name {
+					// target is relative to the current directory
+					target = path.Join(path.Dir(name), target)
+					return fs.OpenContext(ctx, fsys, target)
 				} else {
+					// not sure about this case. it assumes the target will be
+					// relative to the origin fs?
+					log.Println("DEBUG: touched weird case")
 					target = path.Join(strings.TrimSuffix(fullname, name), target)
 				}
 				return fs.OpenContext(ctx, origin, target)
