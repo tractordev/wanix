@@ -56,7 +56,7 @@ func (d *jsDriver) Check(t *wanix.Task) bool {
 }
 
 func (d *jsDriver) Start(t *wanix.Task) error {
-	data, err := fs.ReadFile(d.root.Namespace(), t.Arg(0))
+	data, err := fs.ReadFile(d.root.NS(), t.Arg(0))
 	if err != nil {
 		return err
 	}

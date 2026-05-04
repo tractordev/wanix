@@ -23,14 +23,13 @@ type Device struct {
 }
 
 func Drivers(t *wanix.Task) []string {
-	b, err := t.Namespace().Bindings("#vm")
+	b, err := t.NS().Bindings("#vm")
 	if err != nil {
 		log.Println("vm drivers:", err)
 		return nil
 	}
 	result := make([]string, 0, len(b))
 	for _, b := range b {
-		log.Println("vm driver:", b.Name())
 		name := strings.TrimSuffix(b.Name(), filepath.Ext(b.Name()))
 		result = append(result, name)
 	}

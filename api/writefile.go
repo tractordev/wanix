@@ -21,7 +21,7 @@ func (s *syscaller) writeFile(r rpc.Responder, c *rpc.Call) {
 		panic("arg 0 is not a []byte")
 	}
 
-	err := fs.WriteFile(s.task.Namespace(), name, data, 0x644)
+	err := fs.WriteFile(s.task.NS(), name, data, 0x644)
 	if err != nil {
 		r.Return(err)
 		return

@@ -24,13 +24,13 @@ func NewRoot() (*Task, error) {
 	}
 
 	wanixfs := fskit.MapFS{
-		"version": fskit.RawNode([]byte(Version+"\n"), 0555),
+		"version": fskit.RawNode([]byte(Version+"\n"), 0644),
 	}
-	if err := root.Namespace().Bind(wanixfs, ".", "#wanix"); err != nil {
+	if err := root.NS().Bind(wanixfs, ".", "#wanix"); err != nil {
 		return nil, err
 	}
 
-	if err := root.Namespace().Bind(t, ".", "#task"); err != nil {
+	if err := root.NS().Bind(t, ".", "#task"); err != nil {
 		return nil, err
 	}
 

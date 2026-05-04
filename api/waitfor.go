@@ -24,7 +24,7 @@ func (s *syscaller) waitFor(r rpc.Responder, c *rpc.Call) {
 
 	deadline := time.Now().Add(time.Duration(timeout) * time.Millisecond)
 	for time.Now().Before(deadline) {
-		exists, err := fs.Exists(s.task.Namespace(), path)
+		exists, err := fs.Exists(s.task.NS(), path)
 		if err != nil {
 			r.Return(err)
 			return

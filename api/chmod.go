@@ -20,7 +20,7 @@ func (s *syscaller) chmod(r rpc.Responder, c *rpc.Call) {
 	}
 	mode := fs.FileMode(umode)
 
-	err := fs.Chmod(s.task.Namespace(), path, mode)
+	err := fs.Chmod(s.task.NS(), path, mode)
 	if err != nil {
 		r.Return(err)
 		return
@@ -49,7 +49,7 @@ func (s *syscaller) fchmod(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	err = fs.Chmod(s.task.Namespace(), path, mode)
+	err = fs.Chmod(s.task.NS(), path, mode)
 	if err != nil {
 		r.Return(err)
 		return

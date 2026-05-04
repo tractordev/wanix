@@ -11,7 +11,7 @@ func (s *syscaller) readFile(r rpc.Responder, c *rpc.Call) {
 
 	// log.Println("ReadFile", args)
 
-	b, err := fs.ReadFile(s.task.Namespace(), args[0])
+	b, err := fs.ReadFile(s.task.NS(), args[0])
 	if err != nil {
 		r.Return(err)
 		return

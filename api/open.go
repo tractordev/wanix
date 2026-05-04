@@ -9,7 +9,7 @@ func (s *syscaller) open(r rpc.Responder, c *rpc.Call) {
 	var args []string
 	c.Receive(&args)
 
-	f, err := s.task.Namespace().Open(args[0])
+	f, err := s.task.NS().Open(args[0])
 	if err != nil {
 		r.Return(err)
 		return
@@ -23,7 +23,7 @@ func (s *syscaller) create(r rpc.Responder, c *rpc.Call) {
 	var args []string
 	c.Receive(&args)
 
-	f, err := fs.Create(s.task.Namespace(), args[0])
+	f, err := fs.Create(s.task.NS(), args[0])
 	if err != nil {
 		r.Return(err)
 		return
@@ -52,7 +52,7 @@ func (s *syscaller) openFile(r rpc.Responder, c *rpc.Call) {
 		panic("arg 2 is not a uint64")
 	}
 
-	f, err := fs.OpenFile(s.task.Namespace(), path, int(flags), fs.FileMode(mode))
+	f, err := fs.OpenFile(s.task.NS(), path, int(flags), fs.FileMode(mode))
 	if err != nil {
 		r.Return(err)
 		return

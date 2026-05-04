@@ -115,10 +115,10 @@ func (r *Task) ID() string {
 }
 
 func (r *Task) Context() context.Context {
-	return r.Namespace().Context()
+	return r.NS().Context()
 }
 
-func (r *Task) Namespace() *vfs.NS {
+func (r *Task) NS() *vfs.NS {
 	return r.ns
 }
 
@@ -183,7 +183,7 @@ func (r *Task) FD(fd int) (fs.File, string, error) {
 		return nil, "", fs.ErrInvalid
 	}
 	if fd < 3 {
-		stdfile, err := r.Namespace().Open(fmt.Sprintf("#task/%s/fd/%d", r.ID(), fd))
+		stdfile, err := r.NS().Open(fmt.Sprintf("#task/%s/fd/%d", r.ID(), fd))
 		if err != nil {
 			return nil, "", err
 		}

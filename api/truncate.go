@@ -22,7 +22,7 @@ func (s *syscaller) truncate(r rpc.Responder, c *rpc.Call) {
 	}
 	size := int64(usize)
 
-	err := fs.Truncate(s.task.Namespace(), path, size)
+	err := fs.Truncate(s.task.NS(), path, size)
 	if err != nil {
 		r.Return(err)
 		return
@@ -51,7 +51,7 @@ func (s *syscaller) ftruncate(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	err = fs.Truncate(s.task.Namespace(), path, size)
+	err = fs.Truncate(s.task.NS(), path, size)
 	if err != nil {
 		r.Return(err)
 		return

@@ -135,7 +135,7 @@ func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/:/") {
 		path := strings.TrimPrefix(r.URL.Path, "/:/")
 
-		entries, err := fs.ReadDir(d.root.Namespace(), strings.TrimSuffix(path, "/"))
+		entries, err := fs.ReadDir(d.root.NS(), strings.TrimSuffix(path, "/"))
 		if err == nil {
 			if !strings.HasSuffix(r.URL.Path, "/") {
 				http.Redirect(w, r, r.URL.Path+"/", http.StatusTemporaryRedirect)
@@ -143,7 +143,7 @@ func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, entry := range entries {
 				if entry.Name() == "index.html" {
-					f, err := d.root.Namespace().Open(filepath.Join(path, entry.Name()))
+					f, err := d.root.NS().Open(filepath.Join(path, entry.Name()))
 					if err != nil {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
@@ -157,7 +157,7 @@ func (d *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		b, err := fs.ReadFile(d.root.Namespace(), path)
+		b, err := fs.ReadFile(d.root.NS(), path)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

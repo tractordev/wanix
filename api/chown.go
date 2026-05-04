@@ -26,7 +26,7 @@ func (s *syscaller) chown(r rpc.Responder, c *rpc.Call) {
 	}
 	gid := int(ugid)
 
-	err := fs.Chown(s.task.Namespace(), path, uid, gid)
+	err := fs.Chown(s.task.NS(), path, uid, gid)
 	if err != nil {
 		r.Return(err)
 		return
@@ -61,7 +61,7 @@ func (s *syscaller) fchown(r rpc.Responder, c *rpc.Call) {
 		return
 	}
 
-	err = fs.Chown(s.task.Namespace(), path, uid, gid)
+	err = fs.Chown(s.task.NS(), path, uid, gid)
 	if err != nil {
 		r.Return(err)
 		return

@@ -13,7 +13,7 @@ func (s *syscaller) readDir(r rpc.Responder, c *rpc.Call) {
 
 	// log.Println("ReadDir", args)
 
-	dir, err := fs.ReadDir(s.task.Namespace(), args[0])
+	dir, err := fs.ReadDir(s.task.NS(), args[0])
 	if err != nil {
 		log.Println("err:", args[0], err)
 		r.Return(err)

@@ -21,7 +21,7 @@ func (s *syscaller) appendFile(r rpc.Responder, c *rpc.Call) {
 		panic("arg 0 is not a []byte")
 	}
 
-	err := fs.AppendFile(s.task.Namespace(), name, data)
+	err := fs.AppendFile(s.task.NS(), name, data)
 	if err != nil {
 		r.Return(err)
 		return

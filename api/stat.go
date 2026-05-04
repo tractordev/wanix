@@ -13,7 +13,7 @@ func (s *syscaller) stat(r rpc.Responder, c *rpc.Call) {
 	var args []string
 	c.Receive(&args)
 
-	fi, err := fs.Stat(s.task.Namespace(), args[0])
+	fi, err := fs.Stat(s.task.NS(), args[0])
 	if err != nil {
 		r.Return(err)
 		return
@@ -37,7 +37,7 @@ func (s *syscaller) lstat(r rpc.Responder, c *rpc.Call) {
 	var args []string
 	c.Receive(&args)
 
-	fi, err := fs.Lstat(s.task.Namespace(), args[0])
+	fi, err := fs.Lstat(s.task.NS(), args[0])
 	if err != nil {
 		r.Return(err)
 		return

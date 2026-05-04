@@ -29,7 +29,7 @@ func (s *syscaller) chtimes(r rpc.Responder, c *rpc.Call) {
 	}
 	mtime := time.Unix(int64(mtimeSec), int64((mtimeSec-float64(int64(mtimeSec)))*1e9))
 
-	err := fs.Chtimes(s.task.Namespace(), path, atime, mtime)
+	err := fs.Chtimes(s.task.NS(), path, atime, mtime)
 	if err != nil {
 		r.Return(err)
 		return
