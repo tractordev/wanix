@@ -84,10 +84,15 @@ export class TaskElement extends NamespaceElement {
                 await this.system.root.bind(this.term, [this.taskNS, this.id, "term"].join("/"));
             }
 
+            // otherwise it'll point to task 1 being cloned from root
+            await this.root.bind(this.path, "#task/self");
+            await this.root.bind(this.term, "#task/self/term");
+
             const program = [this.term, "program"].join("/");
             await this.root.bind(program, [this.path, "fd/0"].join("/"));
             await this.root.bind(program, [this.path, "fd/1"].join("/"));
             await this.root.bind(program, [this.path, "fd/2"].join("/"));
+            
         } else {
             await this.root.bind("#web/console", [this.path, "fd/1"].join("/"));
             await this.root.bind("#web/console", [this.path, "fd/2"].join("/"));

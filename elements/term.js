@@ -2,9 +2,6 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 
 export class TerminalElement extends HTMLElement {
-    static get observedAttributes() {
-        return ["for", "path"];
-    }
 
     constructor() {
         super();
@@ -17,6 +14,7 @@ export class TerminalElement extends HTMLElement {
         this._writer = null;
         this._dataDisposable = null;
         this._connected = false;
+        this.raw = this.hasAttribute('raw');
     }
 
     connectedCallback() {
@@ -104,7 +102,11 @@ export class TerminalElement extends HTMLElement {
 
         try {
             await this._ready;
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await this._system.root.waitFor(dataPath);
+
+            if (this._system) {
+                this._system.__updateTerminals(this);
+            }
        
 
             const readable = await this._system.root.openReadable(dataPath);
@@ -117,6 +119,10 @@ export class TerminalElement extends HTMLElement {
             const encoder = new TextEncoder();
             let buffer = '';
             this._dataDisposable = this.term.onData((data) => {
+                if (this.raw) {
+                    this._writer.write(encoder.encode(data));
+                    return;
+                }
                 // may add line discipline as mode to terminals but for now we
                 // do as plan 9 and handle it here in "userspace"
                 if (data === '\r') {

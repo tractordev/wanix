@@ -22,18 +22,23 @@ export class SystemElement extends NamespaceElement {
         this.__readyPromise = new Promise(resolve => this.__wasmReady = resolve);
         this.__readyPromise.then(() => {
             this.isReady = true;
-            this.dispatchEvent(new CustomEvent("ready", {
-                bubbles: true
-            }));
             if (this.debug) {
                 setupDevtools(this);
             }
+            this.dispatchEvent(new CustomEvent("ready", {
+                bubbles: true
+            }));
         });
         this.__portWrap = (port) => new duplex.PortConn(port);
         this.__root = null;
     }
 
     openPort(tid="") {
+        // replaced by wasm
+        throw new Error("wasm not ready");
+    }
+
+    open9P(tid="") {
         // replaced by wasm
         throw new Error("wasm not ready");
     }
