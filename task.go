@@ -43,7 +43,7 @@ type Task struct {
 	ns     *vfs.NS
 	id     int
 	alias  string
-	typ    string
+	kind   string
 	cmd    string
 	env    []string
 	exit   string
@@ -52,7 +52,20 @@ type Task struct {
 	fdIdx  int
 	closer func()
 	fsys   *TaskFS
+	worker any
 	mu     sync.Mutex
+}
+
+func SetWorker(t *Task, worker any) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.worker = worker
+}
+
+func GetWorker(t *Task) any {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.worker
 }
 
 type openFile struct {
@@ -61,11 +74,9 @@ type openFile struct {
 	// more?
 }
 
-// kludge: this would imply task specific registration, but its global.
-// this is until we have a better registration system.
-func (t *Task) Register(kind string, driver TaskDriver) {
-	t.fsys.types[kind] = driver
-}
+// NewRoot returns a task, so we dont really have the TaskFS
+// in the public API. For now we have a couple methods that normally
+// make more sense on TaskFS, but are on Task.
 
 func (t *Task) Lookup(rid string) (*Task, error) {
 	t.fsys.mu.Lock()
@@ -75,6 +86,21 @@ func (t *Task) Lookup(rid string) (*Task, error) {
 		return nil, fs.ErrNotExist
 	}
 	return tt.(*Task), nil
+}
+
+func (t *Task) Tasks() (tasks []*Task) {
+	t.fsys.mu.Lock()
+	defer t.fsys.mu.Unlock()
+	for _, tt := range t.fsys.resources {
+		tasks = append(tasks, tt.(*Task))
+	}
+	return tasks
+}
+
+// kludge: this would imply task specific registration, but its global.
+// this is until we have a better registration system.
+func (t *Task) Register(kind string, driver TaskDriver) {
+	t.fsys.types[kind] = driver
 }
 
 func (t *Task) Start() error {
@@ -201,7 +227,7 @@ func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error
 			},
 		}),
 		"id":   misc.FieldFile(r.ID()),
-		"type": misc.FieldFile(r.typ),
+		"kind": misc.FieldFile(r.kind),
 		"cmd": misc.FieldFile(r.cmd, func(in []byte) error {
 			if len(in) > 0 {
 				r.cmd = strings.TrimSpace(string(in))
@@ -285,7 +311,7 @@ func NewTaskFS() *TaskFS {
 		defer d.mu.Unlock()
 		for kind, driver := range d.types {
 			if driver.Check(t) {
-				t.typ = kind
+				t.kind = kind
 				return driver.Start(t)
 			}
 		}
@@ -314,7 +340,7 @@ func (d *TaskFS) Alloc(kind string, parent *Task) (*Task, error) {
 		fsys:   d,
 		driver: driver,
 		id:     d.nextID,
-		typ:    kind,
+		kind:   kind,
 		fds:    make(map[int]*openFile),
 		fdIdx:  3,
 	}
