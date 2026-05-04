@@ -160,6 +160,16 @@ func (ns *NS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error)
 	return ns, name, nil
 }
 
+func (ns *NS) UnbindAll() error {
+	// all but special bindings for now
+	for k := range ns.bindings {
+		if len(k) == 0 || k[0] != '#' {
+			delete(ns.bindings, k)
+		}
+	}
+	return nil
+}
+
 func (ns *NS) Unbind(src fs.FS, srcPath, dstPath string) error {
 	if !fs.ValidPath(srcPath) {
 		return &fs.PathError{Op: "unbind", Path: srcPath, Err: fs.ErrNotExist}
