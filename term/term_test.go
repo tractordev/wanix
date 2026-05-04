@@ -12,7 +12,7 @@ import (
 
 func TestNewAllocatesID(t *testing.T) {
 	ctx := context.Background()
-	s := New()
+	s := New(nil)
 	f, err := fs.OpenContext(ctx, s, "new")
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +30,7 @@ func TestNewAllocatesID(t *testing.T) {
 
 func TestDataProgramPipe(t *testing.T) {
 	ctx := context.Background()
-	s := New()
+	s := New(nil)
 	newf, err := fs.OpenContext(ctx, s, "new")
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +66,7 @@ func TestDataProgramPipe(t *testing.T) {
 
 func TestProgramEOFRemoves(t *testing.T) {
 	ctx := context.Background()
-	s := New()
+	s := New(nil)
 	newf, err := fs.OpenContext(ctx, s, "new")
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestProgramEOFRemoves(t *testing.T) {
 
 func TestWinchBroadcast(t *testing.T) {
 	ctx := context.Background()
-	s := New()
+	s := New(nil)
 	newf, err := fs.OpenContext(ctx, s, "new")
 	if err != nil {
 		t.Fatal(err)

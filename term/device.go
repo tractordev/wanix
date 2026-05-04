@@ -5,72 +5,33 @@ import (
 	"strconv"
 	"sync"
 
+	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/fs/signal"
 )
 
-type programFile struct {
-	*pipe.PortFile
-	prev byte // last input byte seen, for cross-call lookbehind
-}
-
-func (c *programFile) Write(p []byte) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	buf := make([]byte, 0, len(p)+len(p)/16)
-	prev := c.prev
-	for _, b := range p {
-		if b == '\n' && prev != '\r' {
-			buf = append(buf, '\r')
-		}
-		buf = append(buf, b)
-		prev = b
-	}
-	if _, err := c.PortFile.Write(buf); err != nil {
-		return 0, err
-	}
-	c.prev = prev
-	return len(p), nil
-}
-
-// Resource is one terminal instance (paths data, program, winch).
-// MapFS is embedded so ResolveFS reaches the signal FS (for fs.OpenFile with O_WRONLY, etc.).
-type Resource struct {
-	fskit.MapFS
-	hub *signal.Broadcaster
-	end *pipe.Port
-}
-
-func (r *Resource) shutdown() {
-	r.hub.Close()
-	if r.end != nil {
-		r.end.Close()
-	}
-}
-
-type Service struct {
+type Device struct {
 	mu        sync.RWMutex
 	resources map[string]fs.FS
 	nextID    int
-
-	AllocHook func(s *Service, rid string) error
+	root      *wanix.Task
 }
 
-func New() *Service {
-	return &Service{
+func New(root *wanix.Task) *Device {
+	return &Device{
 		resources: make(map[string]fs.FS),
 		nextID:    0,
+		root:      root,
 	}
 }
 
-func (d *Service) Open(name string) (fs.File, error) {
+func (d *Device) Open(name string) (fs.File, error) {
 	return d.OpenContext(context.Background(), name)
 }
 
-func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	fsys, rname, err := d.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
@@ -78,11 +39,11 @@ func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error)
 	return fs.OpenContext(ctx, fsys, rname)
 }
 
-func (d *Service) Stat(name string) (fs.FileInfo, error) {
+func (d *Device) Stat(name string) (fs.FileInfo, error) {
 	return d.StatContext(context.Background(), name)
 }
 
-func (d *Service) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+func (d *Device) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
 	fsys, rname, err := d.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
@@ -90,7 +51,7 @@ func (d *Service) StatContext(ctx context.Context, name string) (fs.FileInfo, er
 	return fs.StatContext(ctx, fsys, rname)
 }
 
-func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (d *Device) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	return fs.Resolve(fskit.UnionFS{
 		fskit.MapFS{
 			"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
@@ -101,12 +62,6 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 							rid, err := d.Alloc()
 							if err != nil {
 								return err
-							}
-							if d.AllocHook != nil {
-								err = d.AllocHook(d, rid)
-								if err != nil {
-									return err
-								}
 							}
 							fskit.SetData(n, []byte(rid+"\n"))
 							return nil
@@ -120,7 +75,7 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 	}, ctx, name)
 }
 
-func (d *Service) Get(rid string) (*Resource, error) {
+func (d *Device) Get(rid string) (*Resource, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	res, ok := d.resources[rid]
@@ -130,7 +85,7 @@ func (d *Service) Get(rid string) (*Resource, error) {
 	return res.(*Resource), nil
 }
 
-func (d *Service) Alloc() (rid string, err error) {
+func (d *Device) Alloc() (rid string, err error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -146,11 +101,13 @@ func (d *Service) Alloc() (rid string, err error) {
 	// }
 	progWrap := &programFile{PortFile: progPF}
 	root := fskit.MapFS{
+		"id":      fskit.RawNode([]byte(rid+"\n"), 0555),
 		"data":    fskit.FileFS(dataPF, "data"),
 		"program": fskit.FileFS(progWrap, "program"),
 		"winch":   signal.NewFS(hub),
 	}
 	d.resources[rid] = &Resource{
+		id:    rid,
 		MapFS: root,
 		hub:   hub,
 		end:   progPF.Port,
@@ -158,7 +115,7 @@ func (d *Service) Alloc() (rid string, err error) {
 	return rid, nil
 }
 
-func (d *Service) remove(rid string) {
+func (d *Device) remove(rid string) {
 	d.mu.Lock()
 	res, err := d.Get(rid)
 	if err != nil {
