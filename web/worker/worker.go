@@ -17,6 +17,23 @@ import (
 	"tractor.dev/wanix/web/sys"
 )
 
+func FromTask(t *wanix.Task) js.Value {
+	w := wanix.GetWorker(t)
+	if w == nil {
+		return js.Undefined()
+	}
+	return w.(js.Value)
+}
+
+func StartTaskWorker(svc *Service, t *wanix.Task, blobURL string) error {
+	w, err := svc.Alloc(t)
+	if err != nil {
+		return err
+	}
+	args := append([]string{blobURL}, strings.Split(t.Cmd(), " ")...)
+	return w.Start(args...)
+}
+
 type Resource struct {
 	id     int
 	state  string
@@ -68,16 +85,20 @@ func (r *Resource) Start(args ...string) error {
 		return nil
 	}))
 
+	wanix.SetWorker(r.task, r.worker)
+
 	port := sys.Element().Call("openPort", r.task.ID())
+	p9 := sys.Element().Call("open9P", r.task.ID())
 
 	r.worker.Call("postMessage", map[string]any{"worker": map[string]any{
 		"id":   r.id,
 		"tid":  r.task.ID(),
 		"port": port,
+		"p9":   p9,
 		"cmd":  strings.Join(args, " "),
 		"env":  env,
 		"url":  url,
-	}}, []any{port})
+	}}, []any{port, p9})
 
 	r.state = "running"
 	return nil
