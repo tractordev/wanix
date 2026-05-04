@@ -4,6 +4,7 @@ package main
 
 import (
 	"archive/tar"
+	"fmt"
 	"io"
 	"log"
 	"path"
@@ -11,14 +12,10 @@ import (
 	"syscall/js"
 
 	"github.com/hugelgupf/p9/p9"
-	"tractor.dev/wanix/fs"
-	"tractor.dev/wanix/web/jsfs"
-	"tractor.dev/wanix/web/sys"
-	"tractor.dev/wanix/web/worker"
-
 	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/api"
+	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/memfs"
 	"tractor.dev/wanix/fs/p9kit"
 	"tractor.dev/wanix/fs/pipe"
@@ -28,6 +25,9 @@ import (
 	"tractor.dev/wanix/term"
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web"
+	"tractor.dev/wanix/web/jsfs"
+	"tractor.dev/wanix/web/sys"
+	"tractor.dev/wanix/web/worker"
 )
 
 func main() {
@@ -51,15 +51,15 @@ func main() {
 		{"#js", jsfs.NewFS(js.Global())},
 	}
 	for _, b := range sysbindings {
-		if err := root.Namespace().Bind(b.fsys, ".", b.dst); err != nil {
+		if err := root.NS().Bind(b.fsys, ".", b.dst); err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	el := sys.Element()
-	el.Set("openPort", js.FuncOf(func(this js.Value, args []js.Value) any {
+	el.Set("_openPort", js.FuncOf(func(this js.Value, args []js.Value) any {
 		ch := js.Global().Get("MessageChannel").New()
-		port := el.Call("__portWrap", ch.Get("port1"))
+		port := el.Call("_portWrap", ch.Get("port1"))
 		wr := &jsutil.Writer{Value: port}
 		rd := &jsutil.Reader{Value: port}
 		sess, err := mux.DialIO(wr, rd)
@@ -81,7 +81,7 @@ func main() {
 		return ch.Get("port2")
 	}))
 
-	el.Set("open9P", js.FuncOf(func(this js.Value, args []js.Value) any {
+	el.Set("_open9P", js.FuncOf(func(this js.Value, args []js.Value) any {
 		ch := NewP9Channel()
 
 		go func() {
@@ -94,7 +94,7 @@ func main() {
 			}
 			var o []p9.ServerOpt
 			// o = append(o, p9.WithServerLogger(ulog.Log))
-			srv := p9.NewServer(p9kit.Attacher(task.Namespace(), p9kit.WithMemAttrStore()), o...)
+			srv := p9.NewServer(p9kit.Attacher(task.NS(), p9kit.WithMemAttrStore()), o...)
 			if err := srv.Handle(ch.Reader(), ch.Writer()); err != nil {
 				log.Fatal(err)
 			}
@@ -103,7 +103,7 @@ func main() {
 		return ch.Port()
 	}))
 
-	el.Set("__updateTerminals", js.FuncOf(func(this js.Value, args []js.Value) any {
+	el.Set("_updateTerminals", js.FuncOf(func(this js.Value, args []js.Value) any {
 		// termEl := args[0]
 		for _, task := range root.Tasks() {
 			w := worker.FromTask(task)
@@ -117,99 +117,128 @@ func main() {
 		return js.Undefined()
 	}))
 
-	bindings, err := jsutil.AwaitErr(el.Get("bindings"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, binding := range jsutil.ToSlice(bindings) {
-		dst := binding.Get("dst").String()
-		src := binding.Get("src").String()
-		typ := binding.Get("type").String()
-		switch typ {
-		case "archive":
-			go func() {
-				v, err := jsutil.AwaitErr(binding.Get("archive"))
-				if err != nil {
-					log.Println("error fetching archive", err)
-					return
-				}
-				archiveFS, err := tarfs.From(tar.NewReader(jsutil.NewReadableStream(v)))
-				if err != nil {
-					log.Println("error creating archive filesystem", err)
-					return
-				}
-				rwfs := memfs.New()
-				// t := time.Now()
-				if err := fs.CopyFS(archiveFS, ".", rwfs, "."); err != nil {
-					log.Println("error copying archive to memory filesystem", err)
-					return
-				}
-				// log.Println("copied archive to memory filesystem in", time.Since(t))
-				if err := root.Namespace().Bind(rwfs, ".", dst); err != nil {
-					log.Println("error binding archive", err)
-					return
-				}
-			}()
-		case "fetch":
-			go func() {
-				resp, err := jsutil.AwaitErr(binding.Get("fetch"))
-				if err != nil {
-					log.Println("error fetching archive", err)
-					return
-				}
-				reader := jsutil.NewReadableStream(resp.Get("body"))
-				buf, err := io.ReadAll(reader)
-				if err != nil {
-					log.Println("error reading fetch", err)
-					return
-				}
-				filefs := memfs.New()
-				if err := fs.WriteFile(filefs, path.Base(dst), buf, 0644); err != nil {
-					log.Println("error writing fetch", err)
-					return
-				}
-				if err := root.Namespace().Bind(filefs, path.Base(dst), dst); err != nil {
-					log.Println("error binding fetch", err)
-					return
-				}
-			}()
-		case "ns":
-			if err := root.Bind(src, dst); err != nil {
-				log.Fatal(err)
-			}
-		default:
-		}
-	}
-
-	files, err := jsutil.AwaitErr(el.Get("files"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, file := range jsutil.ToSlice(files) {
-		dst := file.Get("dst").String()
-		mode := file.Get("mode").String()
-		encoding := file.Get("encoding").String()
-		content := file.Get("content").String()
-		// Convert mode string (like "644" or "0644") to int
-		perm, err := strconv.ParseInt(mode, 8, 32)
+	el.Set("_setupNamespace", js.FuncOf(func(this js.Value, args []js.Value) any {
+		taskID := args[0].String()
+		baseFS := args[1].String()
+		bindings := jsutil.ToSlice(args[2])
+		task, err := root.Lookup(taskID)
 		if err != nil {
-			log.Fatalf("invalid file mode %q: %v", mode, err)
+			log.Fatal(err)
 		}
+		var resolve, reject js.Value
+		promise := js.Global().Get("Promise").New(js.FuncOf(func(this js.Value, args []js.Value) any {
+			resolve = args[0]
+			reject = args[1]
+			return js.Undefined()
+		}))
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					reject.Invoke(js.ValueOf(r))
+				}
+			}()
+			if taskID != "1" { // leave root namespace alone
+				_ = baseFS
+				// if err := task.NS().UnbindAll(); err != nil {
+				// 	log.Println("error unbinding namespace", err)
+				// 	return
+				// }
+				// if baseFS != "" && baseFS != "<null>" { // todo: better way to handle <null> upstream?
+				// 	if err := task.NS().Bind(root.NS(), baseFS, "."); err != nil {
+				// 		log.Println("error binding base filesystem", err, "baseFS", baseFS, "taskID", taskID)
+				// 		return
+				// 	}
+				// }
+			}
+			for _, binding := range bindings {
+				dst := binding.Get("dst").String()
+				src := binding.Get("src").String()
+				typ := binding.Get("type").String()
+				// union := binding.Get("union").String()
 
-		var data []byte
-		switch encoding {
-		case "", "utf-8", "utf8":
-			data = []byte(content)
-		default:
-			log.Fatalf("unsupported encoding %q for file %s, skipping", encoding, dst)
-		}
+				var mode fs.FileMode
+				if !binding.Get("mode").IsUndefined() {
+					// Convert mode string (like "644" or "0644") to int
+					modeStr := binding.Get("mode").String()
+					m, err := strconv.ParseInt(modeStr, 8, 32)
+					if err != nil {
+						log.Fatalf("invalid file mode %q: %v", modeStr, err)
+					}
+					mode = fs.FileMode(m)
+				}
 
-		if err := fs.WriteFile(root.Namespace(), dst, data, fs.FileMode(perm)); err != nil {
-			log.Fatalf("error writing file %s: %v", dst, err)
-		}
-	}
+				switch typ {
+				case "archive":
+					v, err := jsutil.AwaitErr(binding.Get("data"))
+					if err != nil {
+						log.Println("error fetching archive", err)
+						return
+					}
+					archiveFS, err := tarfs.From(tar.NewReader(jsutil.NewReadableStream(v)))
+					if err != nil {
+						log.Println("error creating archive filesystem", err)
+						return
+					}
+					rwfs := memfs.New()
+					// t := time.Now()
+					if err := fs.CopyFS(archiveFS, ".", rwfs, "."); err != nil {
+						log.Println("error copying archive to memory filesystem", err)
+						return
+					}
+					// log.Println("copied archive to memory filesystem in", time.Since(t))
+					if err := task.NS().Bind(rwfs, ".", dst); err != nil {
+						log.Println("error binding archive", err)
+						return
+					}
+				case "fetch":
+					v, err := jsutil.AwaitErr(binding.Get("data"))
+					if err != nil {
+						log.Println("error fetching", err)
+						return
+					}
+					buf, err := io.ReadAll(jsutil.NewReadableStream(v))
+					if err != nil {
+						log.Println("error reading fetch", err)
+						return
+					}
+					filefs := memfs.New()
+					if err := fs.WriteFile(filefs, path.Base(dst), buf, mode); err != nil {
+						log.Println("error writing fetch", err)
+						return
+					}
+					if err := task.NS().Bind(filefs, path.Base(dst), dst); err != nil {
+						log.Println("error binding fetch", err)
+						return
+					}
+				case "file":
+					v, err := jsutil.AwaitErr(binding.Get("data"))
+					if err != nil {
+						log.Println("error fetching", err)
+						return
+					}
+					buf, err := io.ReadAll(jsutil.NewReadableStream(v))
+					if err != nil {
+						log.Println("error reading fetch", err)
+						return
+					}
+					if err := fs.WriteFile(task.NS(), dst, buf, mode); err != nil {
+						log.Fatalf("error writing file %s: %v", dst, err)
+					}
+				case "ns":
+					// jsutil.Log("binding ns", src, dst, task.ID())
+					if err := task.Bind(src, dst); err != nil {
+						log.Fatal(err)
+					}
+				default:
+					reject.Invoke(fmt.Errorf("unknown binding type %q", typ))
+				}
+			}
+			resolve.Invoke(js.Undefined())
+		}()
+		return promise
+	}))
 
-	sys.Element().Call("__wasmReady")
+	sys.Element().Call("_wasmReady")
 
 	select {}
 }

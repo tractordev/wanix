@@ -87,8 +87,8 @@ func (r *Resource) Start(args ...string) error {
 
 	wanix.SetWorker(r.task, r.worker)
 
-	port := sys.Element().Call("openPort", r.task.ID())
-	p9 := sys.Element().Call("open9P", r.task.ID())
+	port := sys.Element().Call("_openPort", r.task.ID())
+	p9 := sys.Element().Call("_open9P", r.task.ID())
 
 	r.worker.Call("postMessage", map[string]any{"worker": map[string]any{
 		"id":   r.id,

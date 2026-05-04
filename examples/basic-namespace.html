@@ -9,16 +9,16 @@
     
     <!-- a wanix system is an empty root task/namespace -->
     <!-- debug adds devtools helpers for namespace inspection (list, read, etc)-->
-    <wanix-system wasm="../dist/wanix.wasm" debug>
+    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
 
         <!-- bind a ramfs to the root of the namespace -->
         <!-- importantly, paths dont start with / and . is special for root -->
         <wanix-bind dst="." src="#ramfs"></wanix-bind>
         
         <!-- now we can write files -->
-        <wanix-file dst="myfile.txt" mode="0666" encoding="utf-8">
+        <wanix-bind dst="myfile.txt" type="file" mode="0666">
             Hello, world!
-        </wanix-file>
+        </wanix-bind>
 
         <!-- we can make hidden system names visible in the namespace -->
         <wanix-bind dst="task" src="#task"></wanix-bind>

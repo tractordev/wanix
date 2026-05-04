@@ -26,6 +26,7 @@ func main() {
 		return nil
 	}))
 
+	// NOTE: weird call Get on string error when file doesnt exist
 	v86wasm, err := jsutil.AwaitErr(js.Global().Get("sys").Call("readFile", "#vm/v86/v86.wasm"))
 	if err != nil {
 		log.Fatal(err)
@@ -38,7 +39,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// weird call Get on string error when file doesnt exist
 	bzImage, err := jsutil.AwaitErr(js.Global().Get("sys").Call("readFile", "boot/bzImage"))
 	if err != nil {
 		log.Fatal(err)

@@ -16,6 +16,11 @@
         <!-- type generally indicates where the src comes from -->
         <wanix-bind type="ns" dst="web" src="#web"></wanix-bind>
 
+        <!-- file bind type writes the content of the element to the destination -->
+        <wanix-bind dst="myfile.txt" type="file" mode="0666">
+            Hello, world!
+        </wanix-bind>
+
         <!-- the "fetch" type fetches a URL and writes it to the destination -->
         <wanix-bind type="fetch" dst="myfile.txt" src="https://example.com/myfile.txt"></wanix-bind>
 

@@ -1,32 +1,14 @@
+import { WanixElement } from "./base.js";
 
 const DEFAULT_ASSETS = new URL('workbench/', import.meta.url).href;
   
-export class WorkbenchElement extends HTMLElement {
-
+export class WorkbenchElement extends WanixElement {
     constructor() {
       super();
       this._loaded = false;
       this._parsed = false;
       this.port = undefined;
-      this.extension = this.getAttribute("extension") || "wanix.workbench";
-      this.for = this.getAttribute('for');
-      this.term = this.hasAttribute('term');
-      this.debug = this.hasAttribute('debug');
-
-      this.workdir = this.getAttribute("workdir");
-      if (this.workdir === "." || this.workdir === "/" || !this.workdir) {
-        this.workdir = "";
-      }
-
-      this.taskNS = "#task";
-      if (this.hasAttribute('task-ns')) {
-        this.taskNS = this.getAttribute('task-ns');
-      }
-
-      this.termNS = "#term";
-      if (this.hasAttribute('term-ns')) {
-        this.termNS = this.getAttribute('term-ns');
-      }
+      this.tasks = {}; // task role -> task element
     }
 
     get assets() {
@@ -36,44 +18,30 @@ export class WorkbenchElement extends HTMLElement {
     }
   
     connectedCallback() {
+      super.connectedCallback();
+
       this.style.flex = "1";
       this.style.minHeight = "100%";
       this.style.display = "flex";
       this.style.flexDirection = "column";
 
-      if (this.for) {
-        this.system = document.getElementById(this.for);
-      } else {
-        this.system = this.closest('wanix-system');
-      }
+      this.extension = this.getAttribute("extension") || "wanix.workbench";
 
-      if (this._parsed) {
-        return;
-      }
-      if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', () => this.parseChildren(), { once: true });
-      } else {
-          this.parseChildren();
+      this.fsys = this.hasAttribute('fsys'); // todo: use this
+
+      this.debug = this.hasAttribute('debug');
+      this._term = this.hasAttribute('term');
+
+      this.wd = this.getAttribute("wd");
+      if (this.wd === "." || this.wd === "/" || !this.wd) {
+        this.wd = "";
       }
     }
 
-    parseChildren() {
-      this._parsed = true;
-      this.shellTask = this.querySelector(':scope > wanix-task[role="shell"]');
-      
-      if (this.system) {
-        const sendPort = async () => {
-          const port = await this.system.openPort();
-          this.load(() => ({wanix: port}));
-        }
-        if (this.system.isReady) {
-          sendPort();
-        } else {
-          this.system.addEventListener('ready', async (e) => {
-            sendPort();
-          });
-        }
-      }
+    async _awake() {
+      this.tasks["shell"] = this.querySelector(':scope > wanix-task[role="shell"]');
+      const port = await this._system._openPort(); // todo: should workbench have a task?
+      this.load(() => ({wanix: port}));
     }
   
     /** Load and mount the workbench. Idempotent. */
@@ -129,12 +97,16 @@ export class WorkbenchElement extends HTMLElement {
         const obj = await portCb();
         const transfer = [...Object.values(obj)];
         obj["config"] = {
-          term: this.term,
-          taskNS: this.taskNS,
-          termNS: this.termNS,
-          taskCmd: this.shellTask?.cmd,
-          taskType: this.shellTask?.type,
-          workdir: this.shellTask?.workdir || this.workdir,
+          term: this._term,
+          ns: {
+            task: this._taskpath,
+            term: this._termpath,
+          },
+          shell: {
+            cmd: this.tasks["shell"]?.cmd,
+            type: this.tasks["shell"]?.type,
+            wd: this.tasks["shell"]?.wd || this.wd,
+          },
         };
         event.data.port.postMessage(obj, transfer);
       };
@@ -188,7 +160,7 @@ export class WorkbenchElement extends HTMLElement {
           },
           workspaceProvider: {
             trusted: true,
-            workspace: { folderUri: wb.URI.parse(`wanix:/${this.workdir}`) },
+            workspace: { folderUri: wb.URI.parse(`wanix:/${this.wd}`) },
             open(workspace, options) {
               console.log("todo: handle openFolder", workspace, options);
               return Promise.resolve(true);
@@ -209,35 +181,6 @@ export class WorkbenchElement extends HTMLElement {
   
   customElements.define("wanix-workbench", WorkbenchElement);
   
-    
-  /**
-   * Resolves the workbench asset base: attribute `base` (path on current origin, or absolute URL).
-   * Bundled scripts live under `{base}/out/...`.
-   *
-   * When `base` is set explicitly, the URL must be treated as a directory: if the path has no
-   * trailing `/`, relative joins like `out/` would otherwise replace the last segment (e.g.
-   * `/local/vscode` + `out/` → `/local/out/` instead of `/local/vscode/out/`).
-   */
-  function resolveAssetBase(el) {
-    const raw = el.getAttribute("assets");
-    const explicit = raw != null && raw.trim() !== "";
-    const value = explicit ? raw.trim() : window.location.toString();
-    try {
-      const url = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(value)
-        ? new URL(value)
-        : new URL(value, window.location.origin);
-      if (explicit && !url.pathname.endsWith("/")) {
-        url.pathname += "/";
-      }
-      return url;
-    } catch {
-      const fallback = new URL(window.location.pathname, window.location.origin);
-      if (explicit && !fallback.pathname.endsWith("/")) {
-        fallback.pathname += "/";
-      }
-      return fallback;
-    }
-}
 
 
 /**

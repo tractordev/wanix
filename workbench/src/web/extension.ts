@@ -8,11 +8,15 @@ declare const navigator: unknown;
 
 type Config = {
 	term?: boolean;
-	taskCmd?: string;
-	taskType?: string;
-	taskNS?: string;
-	termNS?: string;
-	workdir?: string;
+	ns?: {
+		task: string;
+		term: string;
+	}
+	shell?: {
+		cmd: string;
+		type: string;
+		wd: string;
+	}
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -38,7 +42,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	port.postMessage({type: "_port", port: channel.port1}, [channel.port1]);
 
 	bridge.ready.then((fsys) => {
-		if (config.taskCmd) {
+		if (config.shell) {
 			context.subscriptions.push(vscode.commands.registerCommand('workbench.createTerminal', async () => {
 				const term = vscode.window.createTerminal({ 
 					name: 'Shell', 
@@ -58,12 +62,12 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 async function createTerminal(fsys: any, config: Config) {
-	const termID = (await fsys.readText(`${config.termNS}/new`)).trim();
-    const termPath = [config.termNS, termID].join("/");
-	const taskID = (await fsys.readText(`${config.taskNS}/new/${config.taskType}`)).trim();
-	const taskPath = [config.taskNS, taskID].join("/");
-	await fsys.writeFile(`${taskPath}/cmd`, config.taskCmd);
-	await fsys.writeFile(`${taskPath}/dir`, config.workdir);
+	const termID = (await fsys.readText(`${config.ns?.term}/new`)).trim();
+    const termPath = [config.ns?.term, termID].join("/");
+	const taskID = (await fsys.readText(`${config.ns?.task}/new/${config.shell?.type}`)).trim();
+	const taskPath = [config.ns?.task, taskID].join("/");
+	await fsys.writeFile(`${taskPath}/cmd`, config.shell?.cmd);
+	await fsys.writeFile(`${taskPath}/dir`, config.shell?.wd);
 	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPath}/program ${taskPath}/fd/0`);
 	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPath}/program ${taskPath}/fd/1`);
 	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPath}/program ${taskPath}/fd/2`);

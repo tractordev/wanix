@@ -17,7 +17,7 @@
         <wanix-bind type="fetch" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
 
         <!-- set up workbench with terminal starting in the root directory with rc.wasm as the shell -->
-        <wanix-workbench workdir="root" assets="/workbench" term>
+        <wanix-workbench wd="root" assets="/workbench" term>
             <wanix-task role="shell" type="gojs" cmd="rc.wasm"></wanix-task>
         </wanix-workbench>
     </wanix-system>

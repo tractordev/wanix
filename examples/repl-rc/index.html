@@ -17,7 +17,7 @@
         <!-- fetch the rc.wasm file -->
         <wanix-bind type="fetch" dst="rc.wasm" src="./rc.wasm"></wanix-bind>
         <!-- run the rc.wasm file as a gojs task in the web directory -->
-        <wanix-task id="repl" cmd="rc.wasm" type="gojs" workdir="web" term start></wanix-task>
+        <wanix-task id="repl" cmd="rc.wasm" type="gojs" wd="web" term start></wanix-task>
         <!-- render the terminal for the repl -->
         <wanix-term path="#task/repl/term"></wanix-term>
     </wanix-system>

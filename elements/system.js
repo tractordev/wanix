@@ -1,7 +1,7 @@
 import * as duplex from "@progrium/duplex";
 import { setupDevtools } from "../api/devtools.js";
 import { WanixHandle } from "../api/handle.js";
-import { NamespaceElement } from "./namespace.js";
+import { WanixElement } from "./base.js";
 
 // text loaders set up by esbuild
 import wasmExecGo from "../wasm/wasm_exec.go.js";
@@ -11,16 +11,17 @@ let instanceID = 0;
 
 const DEFAULT_WASM = new URL('./wanix.wasm', import.meta.url).href;
 
-export class SystemElement extends NamespaceElement {
+export class SystemElement extends WanixElement {
     constructor() {
         super();
         instanceID++;
         this.instanceID = instanceID;
         this.isReady = false;
-        this.debug = this.hasAttribute('debug');
+        this.debug = false;
         
-        this.__readyPromise = new Promise(resolve => this.__wasmReady = resolve);
-        this.__readyPromise.then(() => {
+        this._ready = new Promise(resolve => this._wasmReady = resolve);
+        this._ready.then(() => {
+            this._setupNamespace("1", "", this.querySelectorAll(':scope > wanix-bind'));
             this.isReady = true;
             if (this.debug) {
                 setupDevtools(this);
@@ -29,23 +30,28 @@ export class SystemElement extends NamespaceElement {
                 bubbles: true
             }));
         });
-        this.__portWrap = (port) => new duplex.PortConn(port);
-        this.__root = null;
+        this._portWrap = (port) => new duplex.PortConn(port);
+        this._root = null;
     }
 
-    openPort(tid="") {
+    _setupNamespace(tid="", baseFS="", bindings=[]) {
         // replaced by wasm
         throw new Error("wasm not ready");
     }
 
-    open9P(tid="") {
+    _openPort(tid="") {
+        // replaced by wasm
+        throw new Error("wasm not ready");
+    }
+
+    _open9P(tid="") {
         // replaced by wasm
         throw new Error("wasm not ready");
     }
 
     // no tid means the root task
     openHandle(tid) {
-        return new WanixHandle(this.openPort(tid));
+        return new WanixHandle(this._openPort(tid));
     }
 
     get stdin() {
@@ -53,10 +59,10 @@ export class SystemElement extends NamespaceElement {
     }
 
     get root() {
-        if (!this.__root) {
-            this.__root = this.openHandle();
+        if (!this._root) {
+            this._root = this.openHandle();
         }
-        return this.__root;
+        return this._root;
     }
 
     get wasm() {
@@ -105,6 +111,8 @@ export class SystemElement extends NamespaceElement {
         }
         window.__wanix[this.instanceID] = this;
 
+        this.debug = this.hasAttribute('debug');
+
         fetch(this.wasm)
             .then(r => r.arrayBuffer())
             .then(this.load.bind(this))
@@ -116,6 +124,7 @@ export class SystemElement extends NamespaceElement {
                 }));
             });
     }
+
 }
 
 if (typeof window !== "undefined") {

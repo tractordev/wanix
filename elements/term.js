@@ -1,24 +1,35 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { WanixElement } from "./base.js";
 
-export class TerminalElement extends HTMLElement {
+export class TerminalElement extends WanixElement {
+    #resizeObserver;
+    #reader;
+    #writer;
+    #dataDisposable;
 
     constructor() {
         super();
-        this.path = this.getAttribute('path');
-        this.term = null;
-        this.fitAddon = null;
-        this._resizeObserver = null;
-        this._system = null;
-        this._reader = null;
-        this._writer = null;
-        this._dataDisposable = null;
-        this._connected = false;
-        this.raw = this.hasAttribute('raw');
+        this.rid = null; // not used yet, see path
+
+        this._term = null;
+        this._fitAddon = null;
+        this.#resizeObserver = null;
+        this.#reader = null;
+        this.#writer = null;
+        this.#dataDisposable = null;
     }
 
     connectedCallback() {
-        this.term = new Terminal({
+        super.connectedCallback();
+
+        // this should be optional and cause
+        // allocation if no path attribute
+        this.path = this.getAttribute('path');
+
+        this.raw = this.hasAttribute('raw');
+
+        this._term = new Terminal({
             fontFamily: `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
             // theme: {
             //     background: "rgba(0, 0, 0, 0)",
@@ -27,27 +38,16 @@ export class TerminalElement extends HTMLElement {
             ...this._getOptionsFromAttributes()
         });
 
-        if (FitAddon) {
-            this.fitAddon = new FitAddon();
-            this.term.loadAddon(this.fitAddon);
-        }
+        this._fitAddon = new FitAddon();
+        this._term.loadAddon(this._fitAddon);
+        this._term.open(this);
 
-        this.term.open(this);
-
-        if (this.fitAddon) {
-            this.fitAddon.fit();
-            this._resizeObserver = new ResizeObserver(() => {
-                this.fitAddon.fit();
-            });
-            this._resizeObserver.observe(this);
-            // this._resizeObserver.observe(this.parentElement);
-        }
-
-        this._connected = true;
-        this._resolveSystemRef();
-        this._connectToSource();
-
-        this.dispatchEvent(new CustomEvent("ready", { detail: { term: this.term } }));
+        this._fitAddon.fit();
+        this.#resizeObserver = new ResizeObserver(() => {
+            this._fitAddon.fit();
+        });
+        this.#resizeObserver.observe(this);
+        // this._resizeObserver.observe(this.parentElement);
 
         this.style.flex = "1";
         this.style.display = "flex";
@@ -57,125 +57,104 @@ export class TerminalElement extends HTMLElement {
     
 
     disconnectedCallback() {
-        this._connected = false;
-        this._disconnectFromSource();
-        if (this._resizeObserver) {
-            this._resizeObserver.disconnect();
-            this._resizeObserver = null;
+        super.disconnectedCallback();
+
+        this.disconnect();
+        if (this.#resizeObserver) {
+            this.#resizeObserver.disconnect();
+            this.#resizeObserver = null;
         }
-        if (this.term) {
-            this.term.dispose();
-            this.term = null;
+        if (this._term) {
+            this._term.dispose();
+            this._term = null;
         }
-        this.fitAddon = null;
-        this._system = null;
+        this._fitAddon = null;
     }
 
-    attributeChangedCallback(name, oldValue, newValue) {
-        if (oldValue === newValue) return;
-
-        if (name === "for") {
-            this._resolveSystemRef();
-            this._connectToSource();
-        } else if (name === "path") {
-            this._connectToSource();
-        }
+    _awake() {
+        this.connect();
     }
 
-    _resolveSystemRef() {
-        const forId = this.getAttribute("for");
-        if (forId) {
-            this._system = document.getElementById(forId);
-        } else {
-            this._system = this.closest('wanix-system') || document.querySelector('wanix-system');
-        }
-        this._ready = new Promise(resolve => this._system.addEventListener('ready', resolve))
-    }
-
-    async _connectToSource() {
-        if (!this._connected || !this.term) return;
+    async connect() {
+        if (!this._term) return;
 
         const dataPath = this.path + "/data";
         if (!dataPath || !this._system) return;
 
-        this._disconnectFromSource();
+        this.disconnect();
 
         try {
-            await this._ready;
             await this._system.root.waitFor(dataPath);
-
-            if (this._system) {
-                this._system.__updateTerminals(this);
-            }
+            
+            // todo: use this for kvm updates
+            this._system._updateTerminals(this);
        
 
             const readable = await this._system.root.openReadable(dataPath);
-            this._reader = readable.getReader();
+            this.#reader = readable.getReader();
             this._readLoop();
 
             const writable = await this._system.root.openWritable(dataPath);
-            this._writer = writable.getWriter();
+            this.#writer = writable.getWriter();
 
             const encoder = new TextEncoder();
             let buffer = '';
-            this._dataDisposable = this.term.onData((data) => {
+            this.#dataDisposable = this._term.onData((data) => {
                 if (this.raw) {
-                    this._writer.write(encoder.encode(data));
+                    this.#writer.write(encoder.encode(data));
                     return;
                 }
                 // may add line discipline as mode to terminals but for now we
                 // do as plan 9 and handle it here in "userspace"
                 if (data === '\r') {
-                    this.term.write('\r\n');           // echo newline
-                    if (this._writer) {
-                        this._writer.write(encoder.encode(buffer+"\n"));
+                    this._term.write('\r\n');           // echo newline
+                    if (this.#writer) {
+                        this.#writer.write(encoder.encode(buffer+"\n"));
                     }
                     buffer = '';
                 } else if (data === '\x7f') {   // backspace
                     if (buffer.length > 0) {
                       buffer = buffer.slice(0, -1);
-                      this.term.write('\b \b');
+                      this._term.write('\b \b');
                     }
                 } else {
                     buffer += data;
-                    this.term.write(data);             // echo
+                    this._term.write(data);             // echo
                 }
             });
         } catch (err) {
-            console.error("wanix-terminal: failed to connect to terminal:", err);
+            console.error("wanix-term: failed to connect terminal:", err);
         }
     }
 
     async _readLoop() {
-        if (!this._reader || !this.term) return;
+        if (!this.#reader || !this._term) return;
 
         try {
             while (true) {
-                const { done, value } = await this._reader.read();
+                const { done, value } = await this.#reader.read();
                 if (done) break;
-                if (value && this.term) {
-                    this.term.write(value);
+                if (value && this._term) {
+                    this._term.write(value);
                 }
             }
         } catch (err) {
-            if (this._connected) {
-                console.error("wanix-terminal: read error:", err);
-            }
+            console.error("wanix-terminal: read error:", err);
         }
     }
 
-    _disconnectFromSource() {
-        if (this._dataDisposable) {
-            this._dataDisposable.dispose();
-            this._dataDisposable = null;
+    disconnect() {
+        if (this.#dataDisposable) {
+            this.#dataDisposable.dispose();
+            this.#dataDisposable = null;
         }
-        if (this._reader) {
-            this._reader.cancel().catch(() => {});
-            this._reader = null;
+        if (this.#reader) {
+            this.#reader.cancel().catch(() => {});
+            this.#reader = null;
         }
-        if (this._writer) {
-            this._writer.close().catch(() => {});
-            this._writer = null;
+        if (this.#writer) {
+            this.#writer.close().catch(() => {});
+            this.#writer = null;
         }
     }
 
@@ -202,39 +181,32 @@ export class TerminalElement extends HTMLElement {
     }
 
     fit() {
-        if (this.fitAddon) {
-            this.fitAddon.fit();
+        if (this._fitAddon) {
+            this._fitAddon.fit();
         }
     }
 
     write(data) {
-        if (this.term) {
-            this.term.write(data);
+        if (this._term) {
+            this._term.write(data);
         }
-    }
-
-    onData(callback) {
-        if (this.term) {
-            return this.term.onData(callback);
-        }
-        return null;
     }
 
     reset() {
-        if (this.term) {
-            this.term.reset();
+        if (this._term) {
+            this._term.reset();
         }
     }
 
     focus() {
-        if (this.term) {
-            this.term.focus();
+        if (this._term) {
+            this._term.focus();
         }
     }
 
     clear() {
-        if (this.term) {
-            this.term.clear();
+        if (this._term) {
+            this._term.clear();
         }
     }
 }
