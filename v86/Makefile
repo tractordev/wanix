@@ -3,11 +3,14 @@ export DOCKER_CMD 	?= $(shell command -v docker)
 build: v86.tgz
 .PHONY: build
 
+wasm: bundle/v86-vm.wasm
+	GOWORK=off GOOS=js GOARCH=wasm go build -o ./bundle/v86-vm.wasm .
+.PHONY: wasm
+
 v86.tgz: bundle/v86-vm.wasm bundle/v86.wasm
 	tar -C bundle -czf v86.tgz .
 
 bundle/v86-vm.wasm: lib.js
-	GOWORK=off GOOS=js GOARCH=wasm go build -o ./bundle/v86-vm.wasm .
 
 bundle/v86.wasm:
 	mkdir -p ./bundle
