@@ -1097,7 +1097,7 @@ var safeEnd;
 var bundledStrings2 = null;
 var MAX_BUNDLE_SIZE = 61440;
 var hasNonLatin = /[\u0080-\uFFFF]/;
-var RECORD_SYMBOL = Symbol("record-id");
+var RECORD_SYMBOL = /* @__PURE__ */ Symbol("record-id");
 var Encoder = class extends Decoder {
   constructor(options) {
     super(options);

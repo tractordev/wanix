@@ -284,7 +284,6 @@ function read() {
         }
         token = dataView.getUint32(position);
         position += 4;
-        if (majorType === 1) return -1 - token;
         break;
       case 27:
         if (majorType == 7) {
@@ -299,7 +298,8 @@ function read() {
         } else if (currentDecoder.int64AsNumber) {
           token = dataView.getUint32(position) * 4294967296;
           token += dataView.getUint32(position + 4);
-        } else token = dataView.getBigUint64(position);
+        } else
+          token = dataView.getBigUint64(position);
         position += 8;
         break;
       case 31:
@@ -564,38 +564,24 @@ function readStringJS(length) {
       units.push(byte1);
     } else if ((byte1 & 224) === 192) {
       const byte2 = src[position++] & 63;
-      const codePoint = (byte1 & 31) << 6 | byte2;
-      if (codePoint < 128) {
-        units.push(65533);
-      } else {
-        units.push(codePoint);
-      }
+      units.push((byte1 & 31) << 6 | byte2);
     } else if ((byte1 & 240) === 224) {
       const byte2 = src[position++] & 63;
       const byte3 = src[position++] & 63;
-      const codePoint = (byte1 & 31) << 12 | byte2 << 6 | byte3;
-      if (codePoint < 2048 || codePoint >= 55296 && codePoint <= 57343) {
-        units.push(65533);
-      } else {
-        units.push(codePoint);
-      }
+      units.push((byte1 & 31) << 12 | byte2 << 6 | byte3);
     } else if ((byte1 & 248) === 240) {
       const byte2 = src[position++] & 63;
       const byte3 = src[position++] & 63;
       const byte4 = src[position++] & 63;
       let unit = (byte1 & 7) << 18 | byte2 << 12 | byte3 << 6 | byte4;
-      if (unit < 65536 || unit > 1114111) {
-        units.push(65533);
-      } else if (unit > 65535) {
+      if (unit > 65535) {
         unit -= 65536;
         units.push(unit >>> 10 & 1023 | 55296);
         unit = 56320 | unit & 1023;
-        units.push(unit);
-      } else {
-        units.push(unit);
       }
+      units.push(unit);
     } else {
-      units.push(65533);
+      units.push(byte1);
     }
     if (units.length >= 4096) {
       result += fromCharCode.apply(String, units);
@@ -1141,7 +1127,7 @@ var safeEnd;
 var bundledStrings2 = null;
 var MAX_BUNDLE_SIZE = 61440;
 var hasNonLatin = /[\u0080-\uFFFF]/;
-var RECORD_SYMBOL = Symbol("record-id");
+var RECORD_SYMBOL = /* @__PURE__ */ Symbol("record-id");
 var Encoder = class extends Decoder {
   constructor(options) {
     super(options);
@@ -1153,8 +1139,8 @@ var Encoder = class extends Decoder {
     let structures;
     let referenceMap3;
     options = options || {};
-    let encodeUtf8 = ByteArray.prototype.utf8Write ? function(string, position5) {
-      return target.utf8Write(string, position5, target.byteLength - position5);
+    let encodeUtf8 = ByteArray.prototype.utf8Write ? function(string, position5, maxBytes) {
+      return target.utf8Write(string, position5, maxBytes);
     } : textEncoder && textEncoder.encodeInto ? function(string, position5) {
       return textEncoder.encodeInto(string, target.subarray(position5)).written;
     } : false;
@@ -1511,10 +1497,6 @@ var Encoder = class extends Decoder {
             targetView.setUint32(position2, ~value);
             position2 += 4;
           }
-        } else if (!this.alwaysUseFloat && value < 0 && value >= -4294967296 && Math.floor(value) === value) {
-          target[position2++] = 58;
-          targetView.setUint32(position2, -1 - value);
-          position2 += 4;
         } else {
           let useFloat32;
           if ((useFloat32 = this.useFloat32) > 0 && value < 4294967296 && value >= -2147483648) {
@@ -1555,9 +1537,6 @@ var Encoder = class extends Decoder {
           }
           let constructor = value.constructor;
           if (constructor === Object) {
-            if (this.skipFunction === true) {
-              value = Object.fromEntries([...Object.keys(value).filter((x) => typeof value[x] !== "function").map((x) => [x, value[x]])]);
-            }
             writeObject(value);
           } else if (constructor === Array) {
             length = value.length;
@@ -4386,7 +4365,7 @@ var OpenEmptyFile = class extends OpenFile {
 
 // wasi/poll-oneoff.ts
 function applyPatchPollOneoff(self) {
-  self.wasiImport.poll_oneoff = (inPtr, outPtr, nsubscriptions, sizeOutPtr) => {
+  self.wasiImport.poll_oneoff = ((inPtr, outPtr, nsubscriptions, sizeOutPtr) => {
     if (nsubscriptions < 0) {
       return wasi_defs_exports.ERRNO_INVAL;
     }
@@ -4482,7 +4461,7 @@ function applyPatchPollOneoff(self) {
     );
     outNSize.setUint32(0, nsubscriptions, true);
     return wasi_defs_exports.ERRNO_SUCCESS;
-  };
+  });
 }
 
 // node_modules/@progrium/duplex/esm/codec/json.js
@@ -5540,7 +5519,7 @@ var safeEnd2;
 var bundledStrings4 = null;
 var MAX_BUNDLE_SIZE2 = 61440;
 var hasNonLatin2 = /[\u0080-\uFFFF]/;
-var RECORD_SYMBOL2 = Symbol("record-id");
+var RECORD_SYMBOL2 = /* @__PURE__ */ Symbol("record-id");
 var Encoder2 = class extends Decoder2 {
   constructor(options) {
     super(options);

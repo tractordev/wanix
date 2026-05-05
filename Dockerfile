@@ -11,37 +11,7 @@ WORKDIR /build
 COPY ./package.json .
 RUN npm install
 COPY . .
-RUN esbuild ./api/handle.js \
-    --outfile=dist/wanix.handle.js \
-    --bundle \
-    --external:util \
-    --format=esm \
-    --minify
-RUN esbuild index.ts \
-    --outfile=dist/wanix.min.js \
-    --bundle \
-    --external:util \
-    --loader:.go.js=text \
-    --loader:.tinygo.js=text \
-    --format=esm \
-    --minify
-RUN esbuild index.ts \
-    --outfile=dist/wanix.js \
-    --bundle \
-    --external:util \
-    --loader:.go.js=text \
-    --loader:.tinygo.js=text \
-    --format=esm
-RUN esbuild wasi/mod.ts \
-    --outfile=wasi/worker/lib.js \
-    --bundle \
-    --external:util \
-    --format=esm
-RUN esbuild gojs/mod.ts \
-    --outfile=gojs/worker/lib.js \
-    --bundle \
-    --external:util \
-    --format=esm
+RUN go run buildjs.go
 
 FROM tinygo/tinygo:0.39.0 AS wasm-tinygo
 WORKDIR /build

@@ -81,17 +81,10 @@ wasm-go: wasi/worker/lib.js
 	ls -lah $(DIST_DIR)/wanix.debug.wasm
 .PHONY: wasm-go
 
-## Build JavaScript modules (in Docker)
-js:
+## Build JavaScript modules
+js: node_modules
 	mkdir -p $(DIST_DIR)
-	$(DOCKER_CMD) build --load -t wanix-build-js --target js $(if $(wildcard $(DIST_DIR)/wanix.min.js),,--no-cache) -f Dockerfile .
-	$(DOCKER_CMD) rm -f wanix-build-js
-	$(DOCKER_CMD) create --name wanix-build-js wanix-build-js
-	$(DOCKER_CMD) cp wanix-build-js:/build/wasi/worker/lib.js wasi/worker/lib.js
-	$(DOCKER_CMD) cp wanix-build-js:/build/gojs/worker/lib.js gojs/worker/lib.js
-	$(DOCKER_CMD) cp wanix-build-js:/build/dist/wanix.min.js $(DIST_DIR)/wanix.min.js
-	$(DOCKER_CMD) cp wanix-build-js:/build/dist/wanix.js $(DIST_DIR)/wanix.js
-	$(DOCKER_CMD) cp wanix-build-js:/build/dist/wanix.handle.js $(DIST_DIR)/wanix.handle.js
+	go run buildjs.go
 .PHONY: js
 
 
@@ -105,6 +98,7 @@ clean:
 	make -C workbench clean
 	make -C extras clean
 	make -C rc clean
+	make -C v86 clean
 .PHONY: clean
 
 go.work: toolkit-go
@@ -112,6 +106,9 @@ go.work: toolkit-go
 
 toolkit-go:
 	git clone https://github.com/tractordev/toolkit-go
+
+node_modules:
+	npm install
 
 wasi/worker/lib.js:
 	make js
