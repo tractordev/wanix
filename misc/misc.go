@@ -6,10 +6,76 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"errors"
+	"io"
+	"net"
+	"time"
+
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/misc/shlex"
 )
+
+// FakeConn adapts an io.ReadWriteCloser to a net.Conn (minimal implementation).
+type FakeConn struct {
+	rwc    io.ReadWriteCloser
+	closed chan struct{}
+}
+
+// NewFakeConn wraps an io.ReadWriteCloser as a net.Conn.
+func NewFakeConn(rwc io.ReadWriteCloser) net.Conn {
+	return &FakeConn{
+		rwc:    rwc,
+		closed: make(chan struct{}),
+	}
+}
+
+func (c *FakeConn) Read(b []byte) (int, error) {
+	return c.rwc.Read(b)
+}
+
+func (c *FakeConn) Write(b []byte) (int, error) {
+	return c.rwc.Write(b)
+}
+
+func (c *FakeConn) Close() error {
+	select {
+	case <-c.closed:
+		return nil
+	default:
+		close(c.closed)
+		return c.rwc.Close()
+	}
+}
+
+func (c *FakeConn) LocalAddr() net.Addr {
+	return dummyAddr("rwc-local")
+}
+
+func (c *FakeConn) RemoteAddr() net.Addr {
+	return dummyAddr("rwc-remote")
+}
+
+func (c *FakeConn) SetDeadline(t time.Time) error {
+	// Not supported
+	return errors.New("SetDeadline not supported")
+}
+
+func (c *FakeConn) SetReadDeadline(t time.Time) error {
+	// Not supported
+	return errors.New("SetReadDeadline not supported")
+}
+
+func (c *FakeConn) SetWriteDeadline(t time.Time) error {
+	// Not supported
+	return errors.New("SetWriteDeadline not supported")
+}
+
+// dummyAddr implements net.Addr for placeholder addresses.
+type dummyAddr string
+
+func (a dummyAddr) Network() string { return "rwc" }
+func (a dummyAddr) String() string  { return string(a) }
 
 func FieldFile(args ...any) fs.FS {
 	var (
