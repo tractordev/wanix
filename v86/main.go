@@ -72,6 +72,9 @@ func main() {
 		}
 	}
 
+	// 9P handler for the v86 emulator.
+	// this approach works because in this situation we're single-threaded
+	// and 9P requests are serialized.
 	var p9SendCallback js.Value = js.Undefined()
 	js.Global().Get("worker").Get("p9").Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
 		if !p9SendCallback.IsUndefined() {

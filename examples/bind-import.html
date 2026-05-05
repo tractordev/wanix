@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <script type="module" src="../dist/wanix.min.js"></script>
+</head>
+<body style="height: 100vh; margin: 0;">
+    
+    <!-- a wanix system is an empty root task/namespace -->
+    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
+        <wanix-bind type="import" dst="remote" src="http://localhost:7070/examples/example-export.html#main"></wanix-bind>
+
+        <wanix-bind type="file" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
+        <wanix-task id="repl" cmd="rc.wasm" type="gojs" term start></wanix-task>
+        <wanix-term path="#task/repl/term"></wanix-term>
+        
+        <!-- <wanix-bind dst="#vm/v86" src="../v86/v86.tgz" type="archive"></wanix-bind>
+        <wanix-bind dst="." src="../extras/dist/alpine-linux.tgz" type="archive"></wanix-bind>
+        <wanix-vm term start></wanix-vm>
+        <wanix-term path="#vm/1/term" raw></wanix-term> -->
+
+        
+    </wanix-system>
+
+</body>
+</html>

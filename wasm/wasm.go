@@ -10,6 +10,7 @@ import (
 	"path"
 	"strconv"
 	"syscall/js"
+	"time"
 
 	"github.com/hugelgupf/p9/p9"
 	"tractor.dev/toolkit-go/duplex/mux"
@@ -21,6 +22,7 @@ import (
 	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/fs/signal"
 	"tractor.dev/wanix/fs/tarfs"
+	"tractor.dev/wanix/misc"
 	"tractor.dev/wanix/misc/jsutil"
 	"tractor.dev/wanix/term"
 	"tractor.dev/wanix/vm"
@@ -152,8 +154,11 @@ func main() {
 			}
 			for _, binding := range bindings {
 				dst := binding.Get("dst").String()
-				src := binding.Get("src").String()
 				typ := binding.Get("type").String()
+				var src string
+				if !binding.Get("src").IsNull() {
+					src = binding.Get("src").String()
+				}
 				// union := binding.Get("union").String()
 
 				var mode fs.FileMode
@@ -167,8 +172,8 @@ func main() {
 					mode = fs.FileMode(m)
 				}
 
-				switch typ {
-				case "archive":
+				switch {
+				case typ == "archive":
 					v, err := jsutil.AwaitErr(binding.Get("data"))
 					if err != nil {
 						log.Println("error fetching archive", err)
@@ -190,7 +195,7 @@ func main() {
 						log.Println("error binding archive", err)
 						return
 					}
-				case "fetch":
+				case typ == "fetch" || (typ == "file" && src != ""):
 					v, err := jsutil.AwaitErr(binding.Get("data"))
 					if err != nil {
 						log.Println("error fetching", err)
@@ -210,7 +215,7 @@ func main() {
 						log.Println("error binding fetch", err)
 						return
 					}
-				case "file":
+				case typ == "file" && src == "":
 					v, err := jsutil.AwaitErr(binding.Get("data"))
 					if err != nil {
 						log.Println("error fetching", err)
@@ -224,11 +229,29 @@ func main() {
 					if err := fs.WriteFile(task.NS(), dst, buf, mode); err != nil {
 						log.Fatalf("error writing file %s: %v", dst, err)
 					}
-				case "ns":
+				case typ == "ns":
 					// jsutil.Log("binding ns", src, dst, task.ID())
 					if err := task.Bind(src, dst); err != nil {
 						log.Fatal(err)
 					}
+				case typ == "import":
+					t := time.Now()
+					v, err := jsutil.AwaitErr(binding.Get("import"))
+					if err != nil {
+						log.Println("error importing", err)
+						return
+					}
+					conn := misc.NewFakeConn(NewP9PortReadWriter(v))
+					fsys, err := p9kit.ClientFS(conn, "")
+					if err != nil {
+						log.Println("error creating client for import", err)
+						return
+					}
+					if err := task.NS().Bind(fsys, ".", dst); err != nil {
+						log.Println("error binding import", err)
+						return
+					}
+					log.Println("imported in", time.Since(t))
 				default:
 					reject.Invoke(fmt.Errorf("unknown binding type %q", typ))
 				}

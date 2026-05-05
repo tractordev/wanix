@@ -16,6 +16,7 @@ export class TaskElement extends WanixElement {
     connectedCallback() {
         super.connectedCallback();
 
+        this.alias = this.getAttribute('alias') || this.getAttribute('id') || null;
         this.type = this.getAttribute('type') || "auto";
         this.role = this.getAttribute('role');
         this.cmd = this.getAttribute('cmd');
@@ -53,8 +54,8 @@ export class TaskElement extends WanixElement {
         if (this.wd) {
             await this._system.root.writeFile([this.path, "dir"].join("/"), this.wd);
         }
-        if (this.id) {
-            await this._system.root.writeFile([this.path, "alias"].join("/"), this.id);
+        if (this.alias) {
+            await this._system.root.writeFile([this.path, "alias"].join("/"), this.alias);
         }
 
         // otherwise it'll point to task 1 being cloned from root
@@ -87,7 +88,7 @@ export class TaskElement extends WanixElement {
         if (!bindElements) {
             bindElements = this.querySelectorAll(':scope > wanix-bind');
         }
-        this._system._setupNamespace(this.rid, this.fsys, bindElements);
+        await this._system._setupNamespace(this.rid, this.fsys, bindElements);
     }
 
     async start() {

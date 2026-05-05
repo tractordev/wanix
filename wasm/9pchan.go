@@ -9,6 +9,8 @@ import (
 	"log"
 	"sync"
 	"syscall/js"
+
+	"tractor.dev/wanix/fs/pipe"
 )
 
 // P9Channel bridges a message-oriented RPC API to the stream-oriented
@@ -125,3 +127,76 @@ func (w *respWriter) Write(p []byte) (int, error) {
 }
 
 func (w *respWriter) Close() error { return nil }
+
+// P9PortReadWriter wraps a JavaScript MessagePort as an io.ReadWriteCloser for
+// 9P-over-postMessage framing: each outgoing postMessage is one complete 9P
+// packet (matching P9Channel on the WASM side). Stream-oriented Writes are
+// buffered until the size header indicates a full message. Incoming messages
+// are concatenated into a byte stream for Read (one postMessage per peer frame).
+type P9PortReadWriter struct {
+	port   js.Value
+	rbuf   *pipe.Buffer
+	onRecv js.Func
+	mu     sync.Mutex
+	wbuf   []byte
+}
+
+func NewP9PortReadWriter(port js.Value) *P9PortReadWriter {
+	rbuf := pipe.NewBuffer(true)
+	onRecv := js.FuncOf(func(this js.Value, args []js.Value) any {
+		data := js.Global().Get("Uint8Array").New(args[0].Get("data"))
+		buf := make([]byte, data.Length())
+		js.CopyBytesToGo(buf, data)
+		_, err := rbuf.Write(buf)
+		if err != nil {
+			log.Println("p9 port readwriter: rbuf.Write:", err)
+		}
+		return nil
+	})
+	port.Set("onmessage", onRecv)
+	return &P9PortReadWriter{
+		port:   port,
+		rbuf:   rbuf,
+		onRecv: onRecv,
+	}
+}
+
+func (p *P9PortReadWriter) Write(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.wbuf = append(p.wbuf, b...)
+
+	nOut := len(b)
+	for {
+		if len(p.wbuf) < 7 {
+			break
+		}
+		size := int(binary.LittleEndian.Uint32(p.wbuf[:4]))
+		if size < 7 {
+			return nOut, fmt.Errorf("invalid 9P message size: %d", size)
+		}
+		if len(p.wbuf) < size {
+			break
+		}
+		jsBuf := js.Global().Get("Uint8Array").New(size)
+		js.CopyBytesToJS(jsBuf, p.wbuf[:size])
+		p.port.Call("postMessage", jsBuf)
+		p.wbuf = append(p.wbuf[:0], p.wbuf[size:]...)
+	}
+	return nOut, nil
+}
+
+func (p *P9PortReadWriter) Read(pb []byte) (int, error) {
+	return p.rbuf.Read(pb)
+}
+
+func (p *P9PortReadWriter) Close() error {
+	_ = p.rbuf.Close()
+	p.onRecv.Release()
+	p.port.Set("onmessage", js.Undefined())
+	return nil
+}

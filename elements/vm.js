@@ -17,7 +17,8 @@ export class VMElement extends WanixElement {
 
     connectedCallback() {
         super.connectedCallback();
-        
+
+        this.alias = this.getAttribute('alias') || this.getAttribute('id') || null;
         this.type = this.getAttribute('type') || "v86";
         this.fsys = this.getAttribute('fsys');
         this._term = this.hasAttribute('term');
@@ -74,8 +75,8 @@ export class VMElement extends WanixElement {
             await this._system.root.bind(this.term, [this.path, "term"].join("/"));
             // this is def a hack, but it works for now.
             // this is in addition to the above since aliased path needs its own binding.
-            if (this.id) {
-                await this._system.root.bind(this.term, [this._vmpath, this.id, "term"].join("/"));
+            if (this.alias) {
+                await this._system.root.bind(this.term, [this._vmpath, this.alias, "term"].join("/"));
             }
 
             // otherwise it'll point to task 1 being cloned from root

@@ -20,8 +20,8 @@ export class SystemElement extends WanixElement {
         this.debug = false;
         
         this._ready = new Promise(resolve => this._wasmReady = resolve);
-        this._ready.then(() => {
-            this._setupNamespace("1", "", this.querySelectorAll(':scope > wanix-bind'));
+        this._ready.then(async () => {
+            await this._setupNamespace("1", "", this.querySelectorAll(':scope > wanix-bind'));
             this.isReady = true;
             if (this.debug) {
                 setupDevtools(this);
@@ -112,6 +112,25 @@ export class SystemElement extends WanixElement {
         window.__wanix[this.instanceID] = this;
 
         this.debug = this.hasAttribute('debug');
+
+        this.allowOrigins = (this.getAttribute('allow-origins') || "").split(" ");
+        if (this.allowOrigins.length > 0 && this.id) {
+            if (this.debug) {
+                console.debug("exporting", this.id, "for", this.allowOrigins);
+            }
+            window.addEventListener("message", async (event) => {
+                if (event.data.request != "wanix-import") return;
+                if (location.hash.slice(1) != this.id) return;
+                if (!this.allowOrigins.includes(event.origin) && !this.allowOrigins.includes("*")) return;
+                if (this.debug) {
+                    console.debug("import requested for", this.id, "from", event.origin);
+                }
+                await this._ready;
+           
+                const p9port = await this._open9P("1");
+                event.data.responder.postMessage(p9port, [p9port]);
+            });
+        }
 
         fetch(this.wasm)
             .then(r => r.arrayBuffer())

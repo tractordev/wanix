@@ -8,10 +8,11 @@ export class BindElement extends HTMLElement {
         this.style.display = "none";
 
         this.dst = this.getAttribute('dst');
-        this.src = this.getAttribute('src');
+        this.src = this.getAttribute('src') || null;
         this.mode = this.getAttribute('mode') || "0644";
         this.union = this.getAttribute('union') || "after";
         this.type = this.getAttribute('type') || "ns";
+        // this.trim = this.hasAttribute('trim');
 
         switch (this.type) {
         case "archive":
@@ -24,23 +25,53 @@ export class BindElement extends HTMLElement {
                 });
             });
             break;
-        case "fetch":
-            this.data = new Promise((resolve, reject) => {
-                fetch(this.src).then(resp => {
-                    if (!resp.ok) {
-                        reject(new Error(`HTTP ${resp.status}: ${resp.statusText}`));
-                    }
-                    resolve(resp.body);
-                }).catch(err => {
-                    console.error("Failed to fetch", this.src, err);
-                    reject(err);
-                });
-            });
-            break;
+        case "fetch": // deprecated, use "file" instead
         case "file":
-            this.data = new Promise((resolve, reject) => {
-                resolve(new Response(this.textContent).body);
+            if (this.src) {
+                this.data = new Promise((resolve, reject) => {
+                    fetch(this.src).then(resp => {
+                        if (!resp.ok) {
+                            reject(new Error(`HTTP ${resp.status}: ${resp.statusText}`));
+                        }
+                        resolve(resp.body);
+                    }).catch(err => {
+                        console.error("Failed to fetch", this.src, err);
+                        reject(err);
+                    });
+                });
+            } else {
+                // no src, use the text content as the data
+                this.data = new Promise((resolve, reject) => {
+                    // todo: proper trim handling? dedenting? tricky issue..
+                    resolve(new Response(this.innerText.trim()+"\n").body);
+                });
+            }
+            break;
+        case "import":
+            this.import = new Promise((resolve, reject) => {
+                const iframe = document.createElement('iframe');
+                iframe.style.display = "none";
+                iframe.src = this.src;
+                iframe.onload = () => {
+                    try {
+                        const ch = new MessageChannel();
+                        iframe.contentWindow.postMessage({
+                            request: "wanix-import",
+                            responder: ch.port2,
+                        }, "*", [ch.port2]);
+                        ch.port1.onmessage = (event) => {
+                            resolve(event.data);
+                        };
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+                iframe.onerror = (err) => {
+                    reject(err);
+                };
+                document.body.appendChild(iframe);
             });
+    
             break;
         }
     }
