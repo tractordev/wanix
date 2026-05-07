@@ -122,6 +122,17 @@ func (r *Task) NS() *vfs.NS {
 	return r.ns
 }
 
+func (r *Task) Parent() *Task {
+	return r.parent
+}
+
+func (r *Task) Root() *Task {
+	if r.parent == nil {
+		return r
+	}
+	return r.parent.Root()
+}
+
 func (r *Task) Cmd() string {
 	return r.cmd
 }
