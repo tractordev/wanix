@@ -1,21 +1,32 @@
-//go:build !wasm
+//go:build !wasm && !tinygo
 
 package localfs
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"time"
 
 	"tractor.dev/wanix/fs"
 )
 
+// NewWithVirtualUidGid creates a new localfs that virtualizes all uid/gid to 0:0
+// and stores chown operations in memory instead of applying them to the filesystem
+func NewWithVirtualUidGid(dir string) (*FS, error) {
+	return newRoot(dir, &FS{
+		virtualizeUidGid: true,
+		chownData:        make(map[string][2]int),
+		log:              slog.Default(), // for now
+	})
+}
+
 func newRoot(dir string, fsys *FS) (*FS, error) {
 	r, err := os.OpenRoot(dir)
 	if err != nil {
 		return nil, err
 	}
-	fsys.root = r
+	fsys.baseDir = r.Name()
 	fsys.create = func(name string) (fs.File, error) {
 		return r.Create(name)
 	}

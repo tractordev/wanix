@@ -3,7 +3,6 @@ package localfs
 import (
 	"context"
 	"log/slog"
-	"os"
 	"sync"
 	"time"
 
@@ -12,7 +11,7 @@ import (
 )
 
 type FS struct {
-	root             *os.Root
+	baseDir          string
 	virtualizeUidGid bool
 	chownData        map[string][2]int // path -> [uid, gid]
 	chownMutex       sync.RWMutex
@@ -46,21 +45,6 @@ func New(dir string) (*FS, error) {
 // SetLogger sets the logger for the filesystem
 func (fsys *FS) SetLogger(logger *slog.Logger) {
 	fsys.log = logger
-}
-
-// NewWithVirtualUidGid creates a new localfs that virtualizes all uid/gid to 0:0
-// and stores chown operations in memory instead of applying them to the filesystem
-func NewWithVirtualUidGid(dir string) (*FS, error) {
-	r, err := os.OpenRoot(dir)
-	if err != nil {
-		return nil, err
-	}
-	return &FS{
-		root:             r,
-		virtualizeUidGid: true,
-		chownData:        make(map[string][2]int),
-		log:              slog.Default(), // for now
-	}, nil
 }
 
 // virtualFileInfo wraps a FileInfo to virtualize uid/gid values

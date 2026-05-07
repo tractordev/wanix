@@ -1,4 +1,4 @@
-//go:build wasm
+//go:build wasm || tinygo
 
 package localfs
 
@@ -11,7 +11,7 @@ import (
 
 func newRoot(dir string, fsys *FS) (*FS, error) {
 	if dir != "/" {
-		panic("wasm localfs only supports root directory")
+		panic("platform only supports root directory")
 	}
 	fsys.create = func(name string) (fs.File, error) {
 		return os.Create(name)

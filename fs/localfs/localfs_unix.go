@@ -20,7 +20,7 @@ func (fsys *FS) SetXattr(ctx context.Context, name string, attr string, data []b
 		op = unix.Lsetxattr
 	}
 
-	p := path.Join(fsys.root.Name(), name)
+	p := path.Join(fsys.baseDir, name)
 	return op(p, attr, data, flags)
 }
 
@@ -33,7 +33,7 @@ func (fsys *FS) GetXattr(ctx context.Context, name string, attr string) ([]byte,
 		op = unix.Lgetxattr
 	}
 
-	p := path.Join(fsys.root.Name(), name)
+	p := path.Join(fsys.baseDir, name)
 	sz, err := op(p, attr, nil)
 	if err != nil {
 		return nil, &fs.PathError{Op: "getxattr-get-size", Path: p, Err: err}
@@ -57,7 +57,7 @@ func (fsys *FS) ListXattrs(ctx context.Context, name string) ([]string, error) {
 		op = unix.Llistxattr
 	}
 
-	p := path.Join(fsys.root.Name(), name)
+	p := path.Join(fsys.baseDir, name)
 	sz, err := op(p, nil)
 	if err != nil {
 		return nil, &fs.PathError{Op: "listxattr-get-size", Path: p, Err: err}
@@ -81,6 +81,6 @@ func (fsys *FS) RemoveXattr(ctx context.Context, name string, attr string) error
 		op = unix.Lremovexattr
 	}
 
-	p := path.Join(fsys.root.Name(), name)
+	p := path.Join(fsys.baseDir, name)
 	return op(p, attr)
 }
