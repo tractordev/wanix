@@ -1,19 +1,15 @@
-FROM golang:1.25.0-alpine3.22 AS base
-RUN apk add --no-cache \
-    nodejs \
-    npm \
-    git \
-    esbuild \
-    make
+ARG GO_VERSION=1.25.0
+ARG TINYGO_VERSION=0.40.1
+ARG ALPINE_VERSION=3.22
 
-FROM base AS js
-WORKDIR /build
-COPY ./package.json .
-RUN npm install
-COPY . .
-RUN go run buildjs.go
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+ARG LINUX_386=linux/386
+ARG LINUX_AMD64=linux/amd64
+ARG GOOS
+ARG GOARCH
 
-FROM tinygo/tinygo:0.39.0 AS wasm-tinygo
+FROM --platform=$BUILDPLATFORM tinygo/tinygo:${TINYGO_VERSION} AS tinygo-buildbase
 WORKDIR /build
 USER root
 ENV GOFLAGS="-buildvcs=false"
@@ -22,43 +18,64 @@ COPY ./misc/cbor ./misc/cbor
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-COPY --from=js /build/wasi/worker/lib.js /build/wasi/worker/lib.js
+
+## WANIX CORE
+
+FROM tinygo-buildbase AS wasm-tinygo
 RUN make wasm-tinygo
 
-FROM base AS go-base
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS build
+RUN apk add --no-cache \
+    nodejs \
+    npm \
+    git \
+    esbuild \
+    make
 WORKDIR /build
+COPY ./package.json .
+RUN npm install
 COPY ./misc/cbor ./misc/cbor
 COPY go.mod go.sum ./
 RUN go mod download
-
-FROM go-base AS wasm-go
 COPY . .
-COPY --from=js /build/wasi/worker/lib.js /build/wasi/worker/lib.js
-RUN make wasm-go
-
-
-FROM go-base AS cmd
-COPY . .
-ARG GOOS=linux
-ARG GOARCH=amd64
-COPY --from=js /build/wasi/worker/lib.js /build/wasi/worker/lib.js
-COPY --from=js /build/dist/wanix.min.js /build/dist/wanix.min.js
-COPY --from=js /build/dist/wanix.handle.js /build/dist/wanix.handle.js
-COPY --from=wasm-go /build/dist/wanix.debug.wasm /build/dist/wanix.debug.wasm
-COPY --from=wasm-tinygo /build/dist/wanix.wasm /build/dist/wanix.wasm
+RUN make js wasm
+ARG GOOS
+ARG GOARCH
 RUN make cmd
 
-FROM scratch AS runtime-dist
-WORKDIR /
-COPY --from=js /build/dist/wanix.min.js /wanix.min.js
-COPY --from=js /build/dist/wanix.js /wanix.js
-COPY --from=js /build/dist/wanix.handle.js /wanix.handle.js
-COPY --from=wasm-go /build/dist/wanix.debug.wasm /wanix.debug.wasm
-COPY --from=wasm-tinygo /build/dist/wanix.wasm /wanix.wasm
-CMD ["true"]
+## WANIX EXTRAS
+
+##
+# Pull kernel and alpine images
+FROM --platform=$LINUX_AMD64 ghcr.io/tractordev/apptron:kernel AS kernel
+# FROM --platform=$BUILDPLATFORM ghcr.io/progrium/linux-build:latest AS kernel
+# COPY alpine-linux/boot/kernel.config .config
+# RUN make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- oldconfig < /dev/null && \
+#     make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- bzImage -j$(nproc)
+FROM --platform=$LINUX_386 docker.io/i386/alpine:$ALPINE_VERSION AS alpine-root
+
+FROM tinygo-buildbase AS wexec
+RUN GOOS=linux GOARCH=386 tinygo build -o wexec ./extras/wexec/main.go
+
+FROM tinygo-buildbase AS hostexport
+RUN GOOS=linux GOARCH=386 tinygo build -o hostexport ./extras/hostexport/main.go
+
+FROM alpine:latest AS extras-alpine
+COPY --from=alpine-root / /root/
+COPY --from=kernel /bzImage /root/boot/bzImage
+COPY --from=wexec /build/wexec /root/bin/
+COPY --from=hostexport /build/hostexport /root/bin/
+COPY ./extras/alpine-linux/bin/* /root/bin/
+COPY ./extras/alpine-linux/etc/* /root/etc/
+COPY ./extras/alpine-linux/boot/* /root/boot/
+RUN tar -C /root -czf /alpine-linux.tgz .
+
+
+## FINAL IMAGE
 
 FROM scratch AS dist
-WORKDIR /
-COPY --from=runtime-dist /* .
-COPY --from=cmd /build/.local/bin/wanix /wanix
+WORKDIR /dist
+COPY --from=build /build/dist/* .
+COPY --from=build /build/.local/bin/wanix ./wanix
+COPY --from=wasm-tinygo /build/dist/wanix.wasm ./wanix.wasm
 CMD ["true"]
