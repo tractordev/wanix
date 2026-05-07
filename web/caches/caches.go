@@ -22,20 +22,20 @@ import (
 	"tractor.dev/wanix/misc/jsutil"
 )
 
-// FS exposes the browser's Cache API as a filesystem.
+// Device exposes the browser's Cache API as a filesystem.
 // The root directory contains cache names as subdirectories.
 // Each cache contains URLs as nested directories: host/path/to/file
-type FS struct{}
+type Device struct{}
 
 // New creates a new caches filesystem.
-func New() *FS {
-	return &FS{}
+func New() *Device {
+	return &Device{}
 }
 
-var _ fs.FS = (*FS)(nil)
-var _ fs.ReadDirFS = (*FS)(nil)
-var _ fs.RemoveFS = (*FS)(nil)
-var _ fs.OpenFileFS = (*FS)(nil)
+var _ fs.FS = (*Device)(nil)
+var _ fs.ReadDirFS = (*Device)(nil)
+var _ fs.RemoveFS = (*Device)(nil)
+var _ fs.OpenFileFS = (*Device)(nil)
 
 // caches returns the global caches object
 func caches() js.Value {
@@ -43,12 +43,12 @@ func caches() js.Value {
 }
 
 // Open opens the named file.
-func (fsys *FS) Open(name string) (fs.File, error) {
+func (fsys *Device) Open(name string) (fs.File, error) {
 	return fsys.OpenContext(context.Background(), name)
 }
 
 // OpenContext opens the named file with context.
-func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (fsys *Device) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
@@ -90,7 +90,7 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 }
 
 // OpenFile opens a file with the specified flags.
-func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) {
+func (fsys *Device) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "openfile", Path: name, Err: fs.ErrNotExist}
 	}
@@ -185,7 +185,7 @@ func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, erro
 }
 
 // ReadDir reads the named directory.
-func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
+func (fsys *Device) ReadDir(name string) ([]fs.DirEntry, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrNotExist}
 	}
@@ -223,7 +223,7 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 }
 
 // Remove removes a cached file or an entire cache.
-func (fsys *FS) Remove(name string) error {
+func (fsys *Device) Remove(name string) error {
 	if !fs.ValidPath(name) {
 		return &fs.PathError{Op: "remove", Path: name, Err: fs.ErrNotExist}
 	}
@@ -275,12 +275,12 @@ func (fsys *FS) Remove(name string) error {
 }
 
 // Stat returns file info for the named file.
-func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
+func (fsys *Device) Stat(name string) (fs.FileInfo, error) {
 	return fsys.StatContext(context.Background(), name)
 }
 
 // StatContext returns file info for the named file with context.
-func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
+func (fsys *Device) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 	}
@@ -312,7 +312,7 @@ func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, erro
 }
 
 // listCaches returns all cache names as directory entries.
-func (fsys *FS) listCaches() ([]fs.DirEntry, error) {
+func (fsys *Device) listCaches() ([]fs.DirEntry, error) {
 	keys, err := jsutil.AwaitErr(caches().Call("keys"))
 	if err != nil {
 		return nil, err
@@ -328,7 +328,7 @@ func (fsys *FS) listCaches() ([]fs.DirEntry, error) {
 }
 
 // cacheExists checks if a cache with the given name exists.
-func (fsys *FS) cacheExists(name string) (bool, error) {
+func (fsys *Device) cacheExists(name string) (bool, error) {
 	has, err := jsutil.AwaitErr(caches().Call("has", name))
 	if err != nil {
 		return false, err
@@ -337,7 +337,7 @@ func (fsys *FS) cacheExists(name string) (bool, error) {
 }
 
 // getAllCacheURLs returns all URLs in a cache.
-func (fsys *FS) getAllCacheURLs(cacheName string) ([]string, error) {
+func (fsys *Device) getAllCacheURLs(cacheName string) ([]string, error) {
 	cache, err := jsutil.AwaitErr(caches().Call("open", cacheName))
 	if err != nil {
 		return nil, err
@@ -360,7 +360,7 @@ func (fsys *FS) getAllCacheURLs(cacheName string) ([]string, error) {
 
 // urlToPath converts a URL to a filesystem path (without scheme).
 // Example: "http://localhost:8788/bundles/file.tar" -> "localhost:8788/bundles/file.tar"
-func (fsys *FS) urlToPath(rawURL string) string {
+func (fsys *Device) urlToPath(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return ""
@@ -378,7 +378,7 @@ func (fsys *FS) urlToPath(rawURL string) string {
 // pathToURL converts a filesystem path to a URL.
 // It infers the scheme: http for localhost/127.0.0.1, https otherwise.
 // Example: "localhost:8788/bundles/file.tar" -> "http://localhost:8788/bundles/file.tar"
-func (fsys *FS) pathToURL(filePath string) string {
+func (fsys *Device) pathToURL(filePath string) string {
 	// Extract host from path
 	parts := strings.SplitN(filePath, "/", 2)
 	host := parts[0]
@@ -395,7 +395,7 @@ func (fsys *FS) pathToURL(filePath string) string {
 
 // findURLForPath finds the full URL that matches the given path (without scheme).
 // It searches through all cache entries to find a match.
-func (fsys *FS) findURLForPath(cacheName, filePath string) (string, error) {
+func (fsys *Device) findURLForPath(cacheName, filePath string) (string, error) {
 	urls, err := fsys.getAllCacheURLs(cacheName)
 	if err != nil {
 		return "", err
@@ -411,7 +411,7 @@ func (fsys *FS) findURLForPath(cacheName, filePath string) (string, error) {
 
 // listEntriesAt lists directory entries at a given path within a cache.
 // Returns nil if the path doesn't exist as a directory.
-func (fsys *FS) listEntriesAt(cacheName, dirPath string) ([]fs.DirEntry, error) {
+func (fsys *Device) listEntriesAt(cacheName, dirPath string) ([]fs.DirEntry, error) {
 	urls, err := fsys.getAllCacheURLs(cacheName)
 	if err != nil {
 		return nil, err
@@ -481,7 +481,7 @@ func (fsys *FS) listEntriesAt(cacheName, dirPath string) ([]fs.DirEntry, error) 
 }
 
 // openPath opens a file or directory at the given path within a cache.
-func (fsys *FS) openPath(cacheName, subPath string) (fs.File, error) {
+func (fsys *Device) openPath(cacheName, subPath string) (fs.File, error) {
 	// First check if this is an exact file match
 	matchedURL, err := fsys.findURLForPath(cacheName, subPath)
 	if err != nil {
@@ -525,7 +525,7 @@ func (fsys *FS) openPath(cacheName, subPath string) (fs.File, error) {
 }
 
 // statPath returns file info for a path within a cache.
-func (fsys *FS) statPath(cacheName, subPath string) (fs.FileInfo, error) {
+func (fsys *Device) statPath(cacheName, subPath string) (fs.FileInfo, error) {
 	// First check if this is an exact file match
 	matchedURL, err := fsys.findURLForPath(cacheName, subPath)
 	if err != nil {
@@ -586,7 +586,7 @@ func (fsys *FS) statPath(cacheName, subPath string) (fs.FileInfo, error) {
 }
 
 // responseToFile converts a cache Response to a file.
-func (fsys *FS) responseToFile(response js.Value, name string) (fs.File, error) {
+func (fsys *Device) responseToFile(response js.Value, name string) (fs.File, error) {
 	// Get the response body as ArrayBuffer
 	arrayBuffer, err := jsutil.AwaitErr(response.Call("arrayBuffer"))
 	if err != nil {
@@ -637,7 +637,7 @@ func (f *cachedFile) Seek(offset int64, whence int) (int64, error) {
 
 // writableFile implements fs.File for writing to the cache.
 type writableFile struct {
-	fsys       *FS
+	fsys       *Device
 	cacheName  string
 	subPath    string
 	name       string

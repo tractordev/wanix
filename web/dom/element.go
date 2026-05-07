@@ -25,7 +25,7 @@ type Element struct {
 	id      int
 	typ     string
 	value   js.Value
-	dom     *Service
+	dom     *Device
 
 	termData *terminalReadWriter
 }

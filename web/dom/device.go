@@ -12,15 +12,15 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 )
 
-type Service struct {
+type Device struct {
 	types     map[string]func([]string) (fs.FS, error)
 	resources map[string]fs.FS
 	nextID    int
 	// k         *wanix.K
 }
 
-func New() *Service {
-	d := &Service{
+func New() *Device {
+	d := &Device{
 		types:     make(map[string]func([]string) (fs.FS, error)),
 		resources: make(map[string]fs.FS),
 		nextID:    0,
@@ -34,15 +34,15 @@ func New() *Service {
 	return d
 }
 
-func (d *Service) Register(kind string, factory func([]string) (fs.FS, error)) {
+func (d *Device) Register(kind string, factory func([]string) (fs.FS, error)) {
 	d.types[kind] = factory
 }
 
-func (d *Service) Open(name string) (fs.File, error) {
+func (d *Device) Open(name string) (fs.File, error) {
 	return d.OpenContext(context.Background(), name)
 }
 
-func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	fsys, rname, err := d.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error)
 	return fs.OpenContext(ctx, fsys, rname)
 }
 
-func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (d *Device) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	fsys := fskit.MapFS{
 		"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			if name == "." {
