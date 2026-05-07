@@ -7,6 +7,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
@@ -30,10 +32,16 @@ type BindAllocator interface {
 }
 
 // NS represents a namespace with Plan9-style file and directory bindings.
-// Todo: figure out how to make this thread safe. Tricky because ResolveFS
-// can call back into the namespace.
+//
+// Concurrency model: copy-on-write. The bindings map lives behind an
+// atomic.Pointer; reads grab a snapshot lock-free and may freely call out
+// to other filesystems (including ones that recurse back into this NS via
+// ResolveFS) without risking deadlock or writer starvation. Writers
+// (Bind/Unbind/UnbindAll) serialize via writeMu, copy the current map,
+// mutate the copy, and atomically swap it in.
 type NS struct {
-	bindings map[string][]bindTarget
+	bindings atomic.Pointer[map[string][]bindTarget]
+	writeMu  sync.Mutex
 	ctx      context.Context
 }
 
@@ -47,30 +55,52 @@ type bindTarget struct {
 
 // fileInfo returns the latest file info for the binding with the given name
 func (ref *bindTarget) fileInfo(ctx context.Context, fname string) (*fskit.Node, error) {
-	fi, err := fs.StatContext(ctx, ref.fs, ref.path)
-	if err != nil {
-		return nil, err
-	}
-	return fskit.RawNode(fi, fname), nil
+	// Use the file info captured at bind time. Re-statting every bind target
+	// during namespace directory synthesis can create recursive/stat storms
+	// against remote filesystems (notably p9 guest mounts), which can starve
+	// in-flight directory reads.
+	return fskit.RawNode(ref.fi, fname), nil
 }
 
 func New(ctx context.Context) *NS {
-	fsys := &NS{
-		bindings: make(map[string][]bindTarget),
-	}
-	fsys.ctx = ctx //fs.WithOrigin(ctx, fsys, "", "new")
+	fsys := &NS{ctx: ctx}
+	m := make(map[string][]bindTarget)
+	fsys.bindings.Store(&m)
 	return fsys
 }
 
+// snapshot returns the current bindings map. Callers MUST treat it as
+// read-only -- the returned map and its slices may be shared with other
+// readers and with prior snapshots.
+func (ns *NS) snapshot() map[string][]bindTarget {
+	return *ns.bindings.Load()
+}
+
+// mutate runs fn against a private copy of the bindings map, then atomically
+// publishes that copy. Writers serialize on writeMu; readers continue to see
+// the previous snapshot while fn is running.
+func (ns *NS) mutate(fn func(m map[string][]bindTarget)) {
+	ns.writeMu.Lock()
+	defer ns.writeMu.Unlock()
+
+	cur := *ns.bindings.Load()
+	cp := make(map[string][]bindTarget, len(cur))
+	for k, v := range cur {
+		cp[k] = slices.Clone(v)
+	}
+	fn(cp)
+	ns.bindings.Store(&cp)
+}
+
 func (ns *NS) Clone(ctx context.Context) *NS {
-	b := make(map[string][]bindTarget)
-	for k, v := range ns.bindings {
+	cur := ns.snapshot()
+	b := make(map[string][]bindTarget, len(cur))
+	for k, v := range cur {
 		b[k] = slices.Clone(v)
 	}
-	return &NS{
-		bindings: b,
-		ctx:      ctx,
-	}
+	out := &NS{ctx: ctx}
+	out.bindings.Store(&b)
+	return out
 }
 
 func (ns *NS) Context() context.Context {
@@ -78,9 +108,11 @@ func (ns *NS) Context() context.Context {
 }
 
 func (ns *NS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+	b := ns.snapshot()
+
 	// todo: if there is a direct binding by this name, it might also
 	// exist as a subpath of another binding. so this is not correct.
-	if refs, ok := ns.bindings[name]; ok {
+	if refs, ok := b[name]; ok {
 		if len(refs) == 1 {
 			// if there is a single binding, return it
 			return refs[0].fs, refs[0].path, nil
@@ -100,11 +132,11 @@ func (ns *NS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error)
 
 	// now check subpaths of bindings
 	var bindPaths []string
-	for p := range ns.bindings {
+	for p := range b {
 		bindPaths = append(bindPaths, p)
 	}
 	for _, bindPath := range fskit.MatchPaths(bindPaths, name) {
-		refs := ns.bindings[bindPath]
+		refs := b[bindPath]
 		relativeName := strings.Trim(strings.TrimPrefix(name, bindPath), "/")
 		var toStat []bindTarget
 
@@ -161,12 +193,14 @@ func (ns *NS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error)
 }
 
 func (ns *NS) UnbindAll() error {
-	// all but special bindings for now
-	for k := range ns.bindings {
-		if len(k) == 0 || k[0] != '#' {
-			delete(ns.bindings, k)
+	ns.mutate(func(m map[string][]bindTarget) {
+		// all but special bindings for now
+		for k := range m {
+			if len(k) == 0 || k[0] != '#' {
+				delete(m, k)
+			}
 		}
-	}
+	})
 	return nil
 }
 
@@ -178,18 +212,21 @@ func (ns *NS) Unbind(src fs.FS, srcPath, dstPath string) error {
 		return &fs.PathError{Op: "unbind", Path: dstPath, Err: fs.ErrNotExist}
 	}
 
-	// Resolve the source path first, just like in Bind
+	// Resolve the source path first, just like in Bind. This may call back
+	// into the namespace, so it must run outside the write lock.
 	rfsys, rname, err := fs.Resolve(src, fs.ContextFor(ns), srcPath)
 	if err != nil {
 		return err
 	}
 
-	ns.bindings[dstPath] = slices.DeleteFunc(ns.bindings[dstPath], func(ref bindTarget) bool {
-		return fs.Equal(ref.fs, rfsys) && ref.path == rname
+	ns.mutate(func(m map[string][]bindTarget) {
+		m[dstPath] = slices.DeleteFunc(m[dstPath], func(ref bindTarget) bool {
+			return fs.Equal(ref.fs, rfsys) && ref.path == rname
+		})
+		if len(m[dstPath]) == 0 {
+			delete(m, dstPath)
+		}
 	})
-	if len(ns.bindings[dstPath]) == 0 {
-		delete(ns.bindings, dstPath)
-	}
 
 	return nil
 }
@@ -205,7 +242,9 @@ func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, mode ...BindMode) error {
 		return &fs.PathError{Op: "bind", Path: dstPath, Err: fs.ErrNotExist}
 	}
 
-	// Check srcPath, cache the file info
+	// Resolve, allocate, open, and stat the source outside any lock --
+	// these can call into other filesystems (and recurse back through this
+	// NS). Only the final mutation of the bindings map is serialized.
 	rfsys, rname, err := fs.Resolve(src, fs.ContextFor(ns), srcPath)
 	if err != nil {
 		return err
@@ -238,16 +277,20 @@ func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, mode ...BindMode) error {
 	} else {
 		m = mode[0]
 	}
-	switch m {
-	case ModeAfter:
-		ns.bindings[dstPath] = append([]bindTarget{ref}, ns.bindings[dstPath]...)
-	case ModeBefore:
-		ns.bindings[dstPath] = append(ns.bindings[dstPath], ref)
-	case ModeReplace:
-		ns.bindings[dstPath] = []bindTarget{ref}
-	default:
+	if m != ModeAfter && m != ModeBefore && m != ModeReplace {
 		return &fs.PathError{Op: "bind", Path: dstPath, Err: fs.ErrInvalid}
 	}
+
+	ns.mutate(func(b map[string][]bindTarget) {
+		switch m {
+		case ModeAfter:
+			b[dstPath] = append([]bindTarget{ref}, b[dstPath]...)
+		case ModeBefore:
+			b[dstPath] = append(b[dstPath], ref)
+		case ModeReplace:
+			b[dstPath] = []bindTarget{ref}
+		}
+	})
 	return nil
 }
 
@@ -257,7 +300,7 @@ func (ns *NS) Bindings(name string) ([]fs.FileInfo, error) {
 		return nil, &fs.PathError{Op: "bindings", Path: name, Err: fs.ErrNotExist}
 	}
 	var result []fs.FileInfo
-	for path, refs := range ns.bindings {
+	for path, refs := range ns.snapshot() {
 		if strings.HasPrefix(path, name+"/") {
 			fname := strings.Split(strings.TrimPrefix(path, name+"/"), "/")[0]
 			for _, ref := range refs {
@@ -295,7 +338,7 @@ func (ns *NS) StatContext(ctx context.Context, name string) (fs.FileInfo, error)
 	// Check direct bindings since they don't get resolved by the resolver.
 	// todo: again, if there is a direct binding by this name, it might also
 	// exist as a subpath of another binding. so this is not correct.
-	if refs, exists := ns.bindings[name]; exists {
+	if refs, exists := ns.snapshot()[name]; exists {
 		for _, ref := range refs {
 			fi, err := ref.fileInfo(ctx, path.Base(name))
 			if err != nil {
@@ -340,12 +383,14 @@ func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 	ctx = fs.WithOrigin(ctx, ns, name, "open")
 
+	b := ns.snapshot()
+
 	var dir *fskit.Node
 	var dirEntries []fs.DirEntry
 	var foundDir bool
 
 	// Check direct bindings
-	if refs, exists := ns.bindings[name]; exists {
+	if refs, exists := b[name]; exists {
 		for _, ref := range refs {
 			if ref.fi.IsDir() {
 				// directory binding, add entries
@@ -378,11 +423,11 @@ func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 	// Check subpaths of bindings
 	var bindPaths []string
-	for p := range ns.bindings {
+	for p := range b {
 		bindPaths = append(bindPaths, p)
 	}
 	for _, bindPath := range fskit.MatchPaths(bindPaths, name) {
-		for _, ref := range ns.bindings[bindPath] {
+		for _, ref := range b[bindPath] {
 			relativePath := path.Join(ref.path, strings.Trim(strings.TrimPrefix(name, bindPath), "/"))
 			fi, err := fs.StatContext(ctx, ref.fs, relativePath)
 			if err != nil {
@@ -418,7 +463,7 @@ func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	// Synthesized parent directories
 	var need = make(map[string]bool)
 	if name == "." {
-		for fname, refs := range ns.bindings {
+		for fname, refs := range b {
 			i := strings.Index(fname, "/")
 			if i < 0 {
 				if fname != "." {
@@ -434,7 +479,7 @@ func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 		}
 	} else {
 		prefix := name + "/"
-		for fname, refs := range ns.bindings {
+		for fname, refs := range b {
 			if strings.HasPrefix(fname, prefix) {
 				felem := fname[len(prefix):]
 				i := strings.Index(felem, "/")
