@@ -2,9 +2,16 @@
 /bin/busybox --install -s /bin
 
 mount -t proc none /proc
+mount -t sysfs none /sys
+
 
 if [ -z "$SHELL" ]; then
     export SHELL=/bin/sh
+fi
+
+if [ -n "$export" ]; then
+    EXPORTDEV=/dev/$export hostexport &
+    unset export
 fi
 
 exec setsid -c $SHELL -i <>/dev/hvc0 >&0 2>&1

@@ -1,11 +1,7 @@
 DOCKER_CMD 	?= $(shell command -v docker)
 
-dist: dist/rc.wasm dist/workbench dist/v86.tgz
-	$(DOCKER_CMD) build -t wanix-extras-build -f Dockerfile .
-	$(DOCKER_CMD) rm -f wanix-extras > /dev/null 2>&1 || true && mkdir -p dist
-	$(DOCKER_CMD) create --name wanix-extras wanix-extras-build
-	$(DOCKER_CMD) cp wanix-extras:/dist/alpine-linux.tgz ./dist/alpine-linux.tgz
-	$(DOCKER_CMD) rm -f wanix-extras
+dist: clean dist/rc.wasm dist/workbench dist/v86.tgz dist/alpine-linux.tgz
+	ls -lah dist
 .PHONY: dist
 
 publish: dist
@@ -28,6 +24,13 @@ dist/workbench:
 	cp -r ../workbench dist/workbench
 	rm -rf dist/workbench/node_modules
 	rm dist/workbench/.gitignore
+
+dist/alpine-linux.tgz:
+	$(DOCKER_CMD) build -t wanix-extras-build -f ../Dockerfile --target extras-alpine ..
+	$(DOCKER_CMD) rm -f wanix-extras > /dev/null 2>&1 || true && mkdir -p dist
+	$(DOCKER_CMD) create --name wanix-extras wanix-extras-build
+	$(DOCKER_CMD) cp wanix-extras:/alpine-linux.tgz ./dist/alpine-linux.tgz
+	$(DOCKER_CMD) rm -f wanix-extras
 
 clean:
 	rm -rf dist
