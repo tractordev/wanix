@@ -2,11 +2,14 @@ package vm
 
 import (
 	"context"
+	"log"
 	"strings"
+	"sync"
 
 	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/vfs"
 	"tractor.dev/wanix/misc"
 )
 
@@ -14,7 +17,10 @@ type VM struct {
 	id     string
 	alias  string
 	kind   string
+	guest  fs.FS
 	device *Device
+	mu     sync.Mutex
+	vfs    *vfs.NS
 }
 
 func (r *VM) ID() string {
@@ -29,12 +35,33 @@ func (r *VM) Kind() string {
 	return r.kind
 }
 
+func (r *VM) Guest() fs.FS {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.guest
+}
+
+func (r *VM) SetGuest(exported fs.FS) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.vfs == nil {
+		panic("vfs not initialized before setting guest")
+	}
+	r.guest = exported
+	go func() {
+		if err := r.vfs.Bind(r.guest, ".", "guest"); err != nil {
+			log.Println("error binding guest", err)
+		}
+	}()
+	return nil
+}
+
 func (r *VM) Open(name string) (fs.File, error) {
 	return r.OpenContext(context.Background(), name)
 }
 
 func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys := fskit.MapFS{
+	base := fskit.MapFS{
 		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the resource",
@@ -80,11 +107,21 @@ func (r *VM) OpenContext(ctx context.Context, name string) (fs.File, error) {
 			return nil
 		}),
 	}
+
+	r.mu.Lock()
+	if r.vfs == nil {
+		r.vfs = vfs.New(context.Background())
+		if err := r.vfs.Bind(base, ".", "."); err != nil {
+			return nil, err
+		}
+	}
+	r.mu.Unlock()
+
 	// if r.serial != nil {
 	// 	fsys["ttyS0"] = fskit.FileFS(serialFile, "ttyS0")
 	// }
 	// if r.shmpipe != nil {
 	// 	fsys["shmpipe0"] = fskit.FileFS(shmpipeFile, "shmpipe0")
 	// }
-	return fs.OpenContext(ctx, fsys, name)
+	return fs.OpenContext(ctx, r.vfs, name)
 }

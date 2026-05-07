@@ -61,6 +61,18 @@ func (d *Device) Alloc(kind string) (wanix.Resource, error) {
 	return r, nil
 }
 
+// i really wish we could just get back a type from path via resolve
+// but for now we have to look it up manually
+func (d *Device) Lookup(rid string) (*VM, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	tt, ok := d.resources[rid]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	return tt.(*VM), nil
+}
+
 func (d *Device) Open(name string) (fs.File, error) {
 	return d.OpenContext(context.Background(), name)
 }
