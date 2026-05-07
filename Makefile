@@ -27,13 +27,9 @@ link:
 	ln -fs "$(shell pwd)/.local/bin/$(NAME)" "$(LINK_BIN)/$(NAME)"
 .PHONY: link
 
-## Build Wanix and ...
-all: build
+## Build Wanix runtime and command
+all: js wasm cmd
 .PHONY: all
-
-## Build Wanix (command and runtime)
-build: runtime cmd
-.PHONY: build
 
 ## Build and run examples
 examples: dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist
@@ -46,24 +42,24 @@ examples: dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist
 ## Build Wanix (command and runtime) using Docker
 build-docker:
 	mkdir -p $(DIST_DIR)
-	$(DOCKER_CMD) build --target dist -t wanix-build -f Dockerfile .
-	$(DOCKER_CMD) rm -f wanix-build
+	$(DOCKER_CMD) build \
+		--build-arg GOOS=$(GOOS) \
+		--build-arg GOARCH=$(GOARCH) \
+		--target dist -t wanix-build -f Dockerfile .
+	$(DOCKER_CMD) rm -f wanix-build > /dev/null 2>&1 || true 
 	$(DOCKER_CMD) create --name wanix-build wanix-build
-	$(DOCKER_CMD) cp wanix-build:/ $(DIST_DIR)/
+	$(DOCKER_CMD) cp wanix-build:/dist/. $(DIST_DIR)
+	$(DOCKER_CMD) rm -f wanix-build
 	mv $(DIST_DIR)/wanix .local/bin/
 	ls -lah $(DIST_DIR)
 	ls -lah .local/bin/wanix
 .PHONY: build-docker
 
 ## Build Wanix command
-cmd: $(DIST_DIR)/wanix$(if $(WASM_DEBUG),.debug,).wasm $(DIST_DIR)/wanix.min.js
+cmd:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o .local/bin/wanix $(GOARGS) ./cmd/wanix
 	ls -lah .local/bin/wanix
 .PHONY: cmd
-
-## Build WASM and JS modules
-runtime: js wasm
-.PHONY: runtime
 
 ## Build WASM modules
 wasm: $(if $(WASM_DEBUG),wasm-go,) wasm-tinygo
@@ -71,7 +67,11 @@ wasm: $(if $(WASM_DEBUG),wasm-go,) wasm-tinygo
 
 ## Build WASM module using TinyGo
 wasm-tinygo: wasi/worker/lib.js
-	tinygo build -ldflags="-X tractor.dev/wanix.Version=$(VERSION)" --no-debug -target wasm -o $(DIST_DIR)/wanix.wasm ./wasm
+	@if ! command -v tinygo >/dev/null 2>&1; then \
+		echo "skipping wasm-tinygo build: tinygo not installed"; \
+		exit 0; \
+	fi; \
+	tinygo build -ldflags="-X tractor.dev/wanix.Version=$(VERSION)" --no-debug -target wasm -o $(DIST_DIR)/wanix.wasm ./wasm && \
 	ls -lah $(DIST_DIR)/wanix.wasm
 .PHONY: wasm-tinygo
 
