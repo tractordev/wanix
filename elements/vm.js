@@ -21,6 +21,7 @@ export class VMElement extends WanixElement {
         this.alias = this.getAttribute('alias') || this.getAttribute('id') || null;
         this.type = this.getAttribute('type') || "v86";
         this.fsys = this.getAttribute('fsys');
+        this.export = this.getAttribute('export') || "";
         this._term = this.hasAttribute('term');
         this._autostart = this.hasAttribute('start');
 
@@ -47,7 +48,8 @@ export class VMElement extends WanixElement {
 
         this.task._system = this._system;
         this.task.type = "gojs";
-        this.task.cmd = `#vm/${this.type}/${this.type}-vm.wasm`;
+        this.task.env = "";
+        this.task.cmd = `#vm/${this.type}/${this.type}-vm.wasm ${this.export}`;
     }
 
     async _awake() {
@@ -66,6 +68,7 @@ export class VMElement extends WanixElement {
             await this._system.root.writeFile([this.path, "alias"].join("/"), this.id);
         }
 
+        this.task.env = `vm=${this.rid}`;
         await this.task.allocate(this.querySelectorAll(':scope > wanix-bind'));
 
         if (this._term) {
