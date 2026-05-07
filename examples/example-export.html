@@ -8,7 +8,6 @@
     <wanix-system id="main" wasm="../dist/wanix.debug.wasm" allow-origins="*" debug>
 
         <!-- bind a ramfs to the root of the namespace -->
-        <!-- importantly, paths dont start with / and . is special for root -->
         <wanix-bind dst="." src="#ramfs"></wanix-bind>
         
         <!-- now we can write files -->
@@ -18,10 +17,8 @@
         </wanix-bind>
 
         <!-- we can make hidden system names visible in the namespace -->
-        <wanix-bind dst="task" src="#task"></wanix-bind>
-        <wanix-bind dst="term" src="#term"></wanix-bind>
         <wanix-bind dst="web" src="#web"></wanix-bind>
-        <wanix-bind dst="wanix" src="#wanix"></wanix-bind>
+        
 
     </wanix-system>
 
