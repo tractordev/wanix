@@ -3,6 +3,10 @@ VSCODE_DOWNLOAD	?= https://github.com/progrium/vscode-web/releases/download/v1/v
 build: dist code
 .PHONY: build 
 
+dist: node_modules
+	go run ./build.go
+.PHONY: dist
+
 clean:
 	rm -rf code
 	rm -rf dist
@@ -15,9 +19,6 @@ code:
 	mv dist/vscode code
 	rm dist/index.html
 	rm code.zip
-
-dist: node_modules
-	go run ./build.go
 
 node_modules: package.json
 	npm install

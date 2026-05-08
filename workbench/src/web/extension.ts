@@ -2,12 +2,13 @@
 import * as vscode from 'vscode';
 import { WanixBridge } from './bridge.js';
 //@ts-ignore
-import { WanixFS } from "../wanix/fs.js";
+import { WanixHandle } from "../wanix/fs.js";
 
 declare const navigator: unknown;
 
 type Config = {
 	term?: boolean;
+	raw?: boolean;
 	ns?: {
 		task: string;
 		term: string;
@@ -31,7 +32,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		channel.port2.onmessage = async (event) => {
 			if (event.data.wanix) {
 				config = event.data.config;
-				resolve(new WanixFS(event.data.wanix));
+				resolve(new WanixHandle(event.data.wanix));
 			}
 		}
 	});
@@ -42,6 +43,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	port.postMessage({type: "_port", port: channel.port1}, [channel.port1]);
 
 	bridge.ready.then((fsys) => {
+		fsys.logger = (...args: any[]) => {
+			// console.log(...args);
+		};
 		if (config.shell) {
 			context.subscriptions.push(vscode.commands.registerCommand('workbench.createTerminal', async () => {
 				const term = vscode.window.createTerminal({ 
@@ -62,15 +66,34 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 async function createTerminal(fsys: any, config: Config) {
+	await fsys.waitFor(config.ns?.task, 30000);
 	const termID = (await fsys.readText(`${config.ns?.term}/new`)).trim();
     const termPath = [config.ns?.term, termID].join("/");
-	const taskID = (await fsys.readText(`${config.ns?.task}/new/${config.shell?.type}`)).trim();
+	const taskID = (await fsys.readText(`${config.ns?.task}/new/${config.shell?.type || 'auto'}`)).trim();
 	const taskPath = [config.ns?.task, taskID].join("/");
 	await fsys.writeFile(`${taskPath}/cmd`, config.shell?.cmd);
 	await fsys.writeFile(`${taskPath}/dir`, config.shell?.wd);
-	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPath}/program ${taskPath}/fd/0`);
-	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPath}/program ${taskPath}/fd/1`);
-	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPath}/program ${taskPath}/fd/2`);
+	// not sure the best way to do this but the bind paths need to be 
+	// relative to the root of that system. works fine until you change 
+	// namespaces to a mount of another system, because the bind paths need
+	// to be relative to the root of the new system. this is a hack for now:
+	const commonPath = (a: string, b: string, sep = '/') => {
+		const as = a.split(sep);
+		const bs = b.split(sep);
+		const out = [];
+		for (let i = 0; i < Math.min(as.length, bs.length); i++) {
+		  if (as[i] !== bs[i]) break;
+		  out.push(as[i]);
+		}
+		return out.join(sep);
+	}
+	const common = commonPath(termPath, taskPath);
+	const termPathInner = termPath.slice(common.length+1);
+	const taskPathInner = taskPath.slice(common.length+1);
+	// console.log(`bind ${termPathInner}/program ${taskPathInner}/fd/0`);
+	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPathInner}/program ${taskPathInner}/fd/0`);
+	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPathInner}/program ${taskPathInner}/fd/1`);
+	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPathInner}/program ${taskPathInner}/fd/2`);
 	await fsys.writeFile(`${taskPath}/ctl`, "start");
 
 	const writeEmitter = new vscode.EventEmitter<string>();
@@ -92,6 +115,10 @@ async function createTerminal(fsys: any, config: Config) {
 			writable.close();
 		},
 		handleInput: async (data: string) => {
+			if (config.raw) {
+				writable.write(enc.encode(data));
+				return;
+			}
 			// may add line discipline as mode to terminals but for now we
 			// do as plan 9 and handle it here in "userspace"
 			if (data === '\r') {
