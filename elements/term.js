@@ -84,7 +84,7 @@ export class TerminalElement extends WanixElement {
         this.disconnect();
 
         try {
-            await this._system.root.waitFor(dataPath);
+            await this._system.root.waitFor(dataPath, 30000);
             
             // todo: use this for kvm updates
             this._system._updateTerminals(this);
