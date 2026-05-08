@@ -3,8 +3,10 @@ package vfs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"path"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -235,6 +237,9 @@ func (ns *NS) Unbind(src fs.FS, srcPath, dstPath string) error {
 // If specified, mode controls the order of the bindings.
 // Only the first mode is used. If not specified, ModeAfter is used.
 func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, mode ...BindMode) error {
+	if src == nil {
+		return &fs.PathError{Op: "bind", Path: srcPath, Err: fs.ErrInvalid}
+	}
 	if !fs.ValidPath(srcPath) {
 		return &fs.PathError{Op: "bind", Path: srcPath, Err: fs.ErrNotExist}
 	}
@@ -294,10 +299,10 @@ func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, mode ...BindMode) error {
 	return nil
 }
 
-// Bindings returns all fileinfo for bindings in a directory
-func (ns *NS) Bindings(name string) ([]fs.FileInfo, error) {
+// Binds returns all fileinfo for bindings in a directory
+func (ns *NS) Binds(name string) ([]fs.FileInfo, error) {
 	if !fs.ValidPath(name) {
-		return nil, &fs.PathError{Op: "bindings", Path: name, Err: fs.ErrNotExist}
+		return nil, &fs.PathError{Op: "binds", Path: name, Err: fs.ErrNotExist}
 	}
 	var result []fs.FileInfo
 	for path, refs := range ns.snapshot() {
@@ -313,6 +318,16 @@ func (ns *NS) Bindings(name string) ([]fs.FileInfo, error) {
 		}
 	}
 	return result, nil
+}
+
+func (ns *NS) String() string {
+	var lines []string
+	for dst, b := range ns.snapshot() {
+		for _, ref := range b {
+			lines = append(lines, fmt.Sprintf("%s -> %s:%s", dst, reflect.TypeOf(ref.fs), ref.path))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (ns *NS) Stat(name string) (fs.FileInfo, error) {
