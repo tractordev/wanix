@@ -3,11 +3,12 @@ package native
 import (
 	"errors"
 	"fmt"
-	"os"
+	"io"
 	"os/exec"
 	"strconv"
 	"strings"
 
+	"github.com/creack/pty"
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 )
@@ -36,27 +37,28 @@ func (d *ExecDriver) Start(t *wanix.Task) error {
 		return fmt.Errorf("task cmd is empty")
 	}
 
-	// stdinFile, _, err := t.FD(0)
-	// if err != nil {
-	// 	return fmt.Errorf("open task fd 0: %w", err)
-	// }
-	// stdoutFile, _, err := t.FD(1)
-	// if err != nil {
-	// 	return fmt.Errorf("open task fd 1: %w", err)
-	// }
+	stdinFile, _, err := t.FD(0)
+	if err != nil {
+		return fmt.Errorf("open task fd 0: %w", err)
+	}
+	stdoutFile, _, err := t.FD(1)
+	if err != nil {
+		return fmt.Errorf("open task fd 1: %w", err)
+	}
 	// stderrFile, _, err := t.FD(2)
 	// if err != nil {
 	// 	return fmt.Errorf("open task fd 2: %w", err)
 	// }
 
-	// stdoutW, ok := stdoutFile.(io.Writer)
-	// if !ok {
-	// 	return fmt.Errorf("task fd 1 is not writable")
-	// }
+	stdoutW, ok := stdoutFile.(io.Writer)
+	if !ok {
+		return fmt.Errorf("task fd 1 is not writable")
+	}
 	// stderrW, ok := stderrFile.(io.Writer)
 	// if !ok {
 	// 	return fmt.Errorf("task fd 2 is not writable")
 	// }
+	// _ = stderrW
 
 	cmd := exec.CommandContext(t.Context(), args[0], args[1:]...)
 	if dir := strings.TrimSpace(t.Dir()); dir != "" {
@@ -66,13 +68,26 @@ func (d *ExecDriver) Start(t *wanix.Task) error {
 		cmd.Env = env
 	}
 	// cmd.Stdin = stdinFile
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// cmd.Stdout = stdoutW
+	// cmd.Stderr = os.Stderr
 
-	if err := cmd.Start(); err != nil {
+	pty, err := pty.Start(cmd)
+	if err != nil {
 		return err
 	}
 	wanix.SetWorker(t, cmd.Process)
+
+	go func() {
+		if _, err := io.Copy(stdoutW, pty); err != nil {
+			fmt.Println("error copying stdout:", err)
+		}
+	}()
+
+	go func() {
+		if _, err := io.Copy(pty, stdinFile); err != nil {
+			fmt.Println("error copying stdin:", err)
+		}
+	}()
 
 	go d.waitAndRecordExit(t, cmd)
 	return nil
