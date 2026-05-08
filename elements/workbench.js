@@ -31,6 +31,7 @@ export class WorkbenchElement extends WanixElement {
 
       this.debug = this.hasAttribute('debug');
       this._term = this.hasAttribute('term');
+      this.raw = this.hasAttribute('raw');
 
       this.wd = this.getAttribute("wd");
       if (this.wd === "." || this.wd === "/" || !this.wd) {
@@ -98,6 +99,7 @@ export class WorkbenchElement extends WanixElement {
         const transfer = [...Object.values(obj)];
         obj["config"] = {
           term: this._term,
+          raw: this.raw,
           ns: {
             task: this._taskpath,
             term: this._termpath,
