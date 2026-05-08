@@ -78,7 +78,7 @@ export class SystemElement extends WanixElement {
         const wasmString = new TextDecoder('utf-8', { ignoreBOM: true, fatal: false }).decode(wasmBytes);
 
         const execScript = document.createElement('script');
-        if (wasmString.includes("tinygo_launch")) {
+        if (wasmString.includes("asyncify_start_unwind")) {
             if (this.debug) console.log("TinyGo WASM detected");
             execScript.textContent = wasmExecTinygo;
         } else {

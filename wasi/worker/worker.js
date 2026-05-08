@@ -174,7 +174,7 @@ async function runWasi(e) {
     let code = 0;
 	let start = performance.now();
 	// split so we don't trigger the tinygo check itself by being in the embedded source
-	if (wasmString.includes(["t","i","n","y","g","o","_","l","a","u","n","c","h"].join(""))) {
+	if (wasmString.includes(["a","s","y","n","c","i","f","y","_","s","t","a","r","t","_","u","n","w","i","n","d"].join(""))) {
         wasi.initialize(inst);
         code = await go.run(inst);
     } else {
