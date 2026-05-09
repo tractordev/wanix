@@ -16,6 +16,9 @@
             This is line two.
         </wanix-bind>
 
+        <!-- export a whole linux filesystem -->
+        <wanix-bind type="archive" dst="alpine" src="../extras/dist/alpine-linux.tgz"></wanix-bind>
+
         <!-- we can make hidden system names visible in the namespace -->
         <wanix-bind dst="web" src="#web"></wanix-bind>
         

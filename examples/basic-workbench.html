@@ -1,9 +1,6 @@
-<!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8"/>
     <script src="../dist/wanix.min.js" type="module"></script>
-    <!-- <script src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-alpha/dist/wanix.min.js" type="module"></script> -->
 </head>
 <body style="height: 100vh;">
 
@@ -18,8 +15,12 @@
 
         <!-- set up workbench with terminal starting in the root directory with rc.wasm as the shell -->
         <wanix-workbench wd="root" assets="/workbench" term>
+            
+            <!-- this becomes a "template" for starting a shell task in workbench -->
             <wanix-task role="shell" type="gojs" cmd="rc.wasm"></wanix-task>
+
         </wanix-workbench>
+
     </wanix-system>
 
 </body>

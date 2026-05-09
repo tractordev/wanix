@@ -1,0 +1,31 @@
+<html>
+<head>
+    <script src="../dist/wanix.min.js" type="module"></script>
+</head>
+<body style="height: 100vh;">
+
+    <!-- a wanix system is an empty root task/namespace -->
+    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
+
+        <!-- bind a (slightly custom) alpine linux root to our root -->
+        <wanix-bind dst="." src="../extras/dist/alpine-linux.tgz" type="archive"></wanix-bind>
+    
+
+        <!-- add the v86 vm driver to the namespace -->
+        <wanix-bind dst="#vm/v86" src="../v86/v86.tgz" type="archive"></wanix-bind>
+        <!-- declare and start a vm with this namespace as root and use ttyS0 for hostexport -->
+        <!-- wip: many vm attributes are hardcoded in dev atm -->
+        <wanix-vm export="ttyS0" start></wanix-vm>
+
+        <!-- set up workbench with terminal that launches shells in the vm -->
+        <wanix-workbench assets="/workbench" task-ns="#vm/1/guest/#task" term-ns="#vm/1/guest/#term" raw term>
+                
+            <!-- the "template" for starting a shell task in the vm -->
+            <wanix-task role="shell" cmd="bin/sh"></wanix-task>
+
+        </wanix-workbench>        
+
+    </wanix-system>
+
+</body>
+</html>

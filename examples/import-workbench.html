@@ -1,0 +1,30 @@
+<html>
+<head>
+    <script src="../dist/wanix.min.js" type="module"></script>
+</head>
+<body style="height: 100vh;">
+
+    <!-- a wanix system is an empty root task/namespace -->
+    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
+
+        <!-- import a remote linux system into our namespace -->
+        <wanix-bind type="import" dst="remote" 
+            src="http://localhost:7070/examples/basic-vm.html#linux"></wanix-bind>
+
+            <!-- <wanix-bind type="file" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
+            <wanix-task id="repl" cmd="rc.wasm" type="gojs" term start></wanix-task>
+            <wanix-term path="#task/repl/term"></wanix-term> -->
+
+        <!-- set up workbench with terminal that launches shells in remote guest system -->
+        <wanix-workbench assets="/workbench" task-ns="remote/vm/1/guest/task" term>
+            
+            <!-- the "template" for starting a shell task in the remote vm -->
+            <!-- wip: not quite working yet -->
+            <wanix-task role="shell" cmd="bin/sh" raw></wanix-task>
+
+        </wanix-workbench>
+
+    </wanix-system>
+
+</body>
+</html>
