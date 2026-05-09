@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 
@@ -10,25 +9,37 @@ import (
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs/localfs"
 	"tractor.dev/wanix/fs/p9kit"
-	"tractor.dev/wanix/fs/vfs"
 	"tractor.dev/wanix/native"
+	"tractor.dev/wanix/term"
 )
 
 func main() {
 	log.SetFlags(log.Lshortfile)
-	fsys := vfs.New(context.Background())
+
+	taskfs := wanix.NewTaskFS()
+	taskfs.Register("native", &native.ExecDriver{})
+	root, err := wanix.NewRootWithTasks(taskfs)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	lfsys, err := localfs.New("/")
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := fsys.Bind(lfsys, ".", "."); err != nil {
+	if err := root.NS().Bind(lfsys, ".", "."); err != nil {
 		log.Fatal(err)
 	}
 
-	tfsys := wanix.NewTaskFS()
-	tfsys.Register("native", &native.ExecDriver{})
-	if err := fsys.Bind(tfsys, ".", "task"); err != nil {
+	termfs := term.New(nil)
+	if err := root.NS().Bind(termfs, ".", "#term"); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := root.Bind("#task", "task"); err != nil {
+		log.Fatal(err)
+	}
+	if err := root.Bind("#term", "term"); err != nil {
 		log.Fatal(err)
 	}
 
@@ -36,7 +47,7 @@ func main() {
 	// if os.Getenv("DEBUG") != "" {
 	// opts = append(opts, p9.WithServerLogger(log.New(os.Stderr, "", log.LstdFlags)))
 	// }
-	s := p9.NewServer(p9kit.Attacher(fsys), opts...)
+	s := p9.NewServer(p9kit.Attacher(root.NS()), opts...)
 
 	exportdev := os.Getenv("EXPORTDEV")
 	if exportdev == "" {
@@ -54,6 +65,11 @@ func main() {
 		log.Fatal(err)
 	}
 	defer dev.Close()
+
+	// first packet signals to start client export
+	if _, err := dev.Write([]byte("!")); err != nil {
+		log.Fatal(err)
+	}
 
 	if err := s.Handle(dev, dev); err != nil {
 		log.Fatal(err)
