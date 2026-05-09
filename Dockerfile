@@ -1,5 +1,5 @@
 ARG GO_VERSION=1.25.0
-ARG TINYGO_VERSION=0.40.1
+ARG TINYGO_VERSION=0.41.1
 ARG ALPINE_VERSION=3.22
 
 ARG BUILDPLATFORM
@@ -8,6 +8,7 @@ ARG LINUX_386=linux/386
 ARG LINUX_AMD64=linux/amd64
 ARG GOOS
 ARG GOARCH
+ARG HOSTEXPORT=hostexport-go
 
 FROM --platform=$BUILDPLATFORM tinygo/tinygo:${TINYGO_VERSION} AS tinygo-buildbase
 WORKDIR /build
@@ -19,19 +20,21 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS go-buildbase
+WORKDIR /build
+
 ## WANIX CORE
 
 FROM tinygo-buildbase AS wasm-tinygo
 RUN make wasm-tinygo
 
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS build
+FROM go-buildbase AS build
 RUN apk add --no-cache \
     nodejs \
     npm \
     git \
     esbuild \
     make
-WORKDIR /build
 COPY ./package.json .
 RUN npm install
 COPY ./misc/cbor ./misc/cbor
@@ -57,8 +60,17 @@ FROM --platform=$LINUX_386 docker.io/i386/alpine:$ALPINE_VERSION AS alpine-root
 FROM tinygo-buildbase AS wexec
 RUN GOOS=linux GOARCH=386 tinygo build -o wexec ./extras/wexec/main.go
 
-FROM tinygo-buildbase AS hostexport
+FROM tinygo-buildbase AS hostexport-tinygo
 RUN GOOS=linux GOARCH=386 tinygo build -o hostexport ./extras/hostexport/main.go
+
+FROM go-buildbase AS hostexport-go
+COPY ./misc/cbor ./misc/cbor
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN GOOS=linux GOARCH=386 go build -o hostexport ./extras/hostexport/main.go
+
+FROM ${HOSTEXPORT} AS hostexport
 
 FROM alpine:latest AS extras-alpine
 COPY --from=alpine-root / /root/
