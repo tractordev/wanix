@@ -18,7 +18,10 @@
         <wanix-vm export="ttyS0" start></wanix-vm>
 
         <!-- set up workbench with terminal that launches shells in the vm -->
-        <wanix-workbench assets="/workbench" task-ns="#vm/1/guest/#task" term-ns="#vm/1/guest/#term" raw term>
+        <wanix-workbench assets="/workbench" 
+            task-ns="#vm/1/guest/#task" 
+            term-ns="#vm/1/guest/#term" 
+            raw term>
                 
             <!-- the "template" for starting a shell task in the vm -->
             <wanix-task role="shell" cmd="bin/sh"></wanix-task>
