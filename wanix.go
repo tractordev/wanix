@@ -17,7 +17,10 @@ type Resource interface {
 type Factory func(id, kind string) Resource
 
 func NewRoot() (*Task, error) {
-	t := NewTaskFS()
+	return NewRootWithTasks(NewTaskFS())
+}
+
+func NewRootWithTasks(t *TaskFS) (*Task, error) {
 	root, err := t.Alloc("auto", nil)
 	if err != nil {
 		return nil, err
