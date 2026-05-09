@@ -79,9 +79,13 @@ type openFile struct {
 // make more sense on TaskFS, but are on Task.
 
 func (t *Task) Lookup(rid string) (*Task, error) {
-	t.fsys.mu.Lock()
-	defer t.fsys.mu.Unlock()
-	tt, ok := t.fsys.resources[rid]
+	return t.fsys.Lookup(rid)
+}
+
+func (t *TaskFS) Lookup(rid string) (*Task, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	tt, ok := t.resources[rid]
 	if !ok {
 		return nil, fs.ErrNotExist
 	}
@@ -194,11 +198,14 @@ func (r *Task) FD(fd int) (fs.File, string, error) {
 		return nil, "", fs.ErrInvalid
 	}
 	if fd < 3 {
-		stdfile, err := r.NS().Open(fmt.Sprintf("#task/%s/fd/%d", r.ID(), fd))
+		name := fmt.Sprintf("#task/%s/fd/%d", r.ID(), fd)
+		// this should probably use #task/self but i think there are some
+		// issues to work out for that to work correctly here.
+		stdfile, err := r.NS().Open(name)
 		if err != nil {
 			return nil, "", err
 		}
-		r.fds[fd] = &openFile{file: stdfile, path: fmt.Sprintf("#task/%s/fd/%d", r.ID(), fd)}
+		r.fds[fd] = &openFile{file: stdfile, path: name}
 	}
 	f, ok := r.fds[fd]
 	if !ok {
@@ -278,6 +285,9 @@ func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error
 				}
 			}
 			return nil
+		}),
+		"binds": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
+			return fskit.Entry("binds", 0555, []byte(r.NS().String()+"\n")).Open(name)
 		}),
 		"ns": r.ns,
 	}, ctx, name)
@@ -378,8 +388,14 @@ func (d *TaskFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, err
 			}
 			return &fskit.FuncFile{
 				Node: fskit.Entry(name, 0555),
-				ReadFunc: func(n *fskit.Node) error {
-					t, _ := FromContext(ctx)
+				ReadFunc: func(n *fskit.Node) (err error) {
+					t, found := FromContext(ctx)
+					if !found {
+						t, err = d.Lookup("1")
+						if err != nil {
+							return err
+						}
+					}
 					p, err := d.Alloc(name, t)
 					if err != nil {
 						return err
@@ -402,8 +418,10 @@ func (d *TaskFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, err
 	}
 	t, ok := FromContext(ctx)
 	if ok {
-		if err := fsys.Bind(d.resources[t.ID()], ".", "self"); err != nil {
-			return nil, "", err
+		if _, exists := d.resources[t.ID()]; exists {
+			if err := fsys.Bind(d.resources[t.ID()], ".", "self"); err != nil {
+				return nil, "", err
+			}
 		}
 	}
 	return fs.Resolve(fsys, ctx, name)
