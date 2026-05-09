@@ -4,6 +4,7 @@
 package fsa
 
 import (
+	"errors"
 	"path"
 	"sync"
 	"syscall/js"
@@ -34,6 +35,9 @@ func OPFS(pathParts ...string) (fs.FS, error) {
 	opfsMu.Unlock()
 
 	if singleton == nil {
+		if js.Global().Get("navigator").Get("storage").IsUndefined() {
+			return nil, errors.New("navigator.storage is undefined")
+		}
 		rootDir, err := jsutil.AwaitErr(js.Global().Get("navigator").Get("storage").Call("getDirectory"))
 		if err != nil {
 			return nil, err
