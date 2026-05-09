@@ -23,7 +23,7 @@ type Device struct {
 }
 
 func Drivers(t *wanix.Task) []string {
-	b, err := t.NS().Bindings("#vm")
+	b, err := t.NS().Binds("#vm")
 	if err != nil {
 		log.Println("vm drivers:", err)
 		return nil
