@@ -27,7 +27,7 @@ func main() {
 
 	js.Global().Get("self").Call("addEventListener", "message", js.FuncOf(func(this js.Value, args []js.Value) any {
 		// todo: handle screen/input/term changes
-		jsutil.Log("worker message:", args[0])
+		// jsutil.Log("worker message:", args[0])
 		return nil
 	}))
 
@@ -159,6 +159,7 @@ func main() {
 		p9Buf     []byte
 		p9MsgLen  int
 		p9NeedLen = 4 // First 4 bytes of message is size (LE uint32)
+		signaled  bool
 	)
 	// Run synchronously on the JS callback frame: there are no blocking
 	// operations in the body, and spawning a goroutine per byte introduces
@@ -166,6 +167,11 @@ func main() {
 	// goroutines at any syscall/js call, and v86 fires this listener once
 	// per byte during a burst, so concurrent appends/resets corrupt frames).
 	vm.Call("add_listener", "serial0-output-byte", js.FuncOf(func(this js.Value, args []js.Value) any {
+		if !signaled {
+			signaled = true
+			exportch.Get("port1").Call("postMessage", args[0])
+			return nil
+		}
 		b := args[0].Int()
 		p9Buf = append(p9Buf, byte(b))
 
