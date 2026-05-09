@@ -4,6 +4,8 @@ package worker
 
 import (
 	"context"
+	"log"
+	"path"
 	"strconv"
 	"strings"
 	"syscall/js"
@@ -12,27 +14,13 @@ import (
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
+	"tractor.dev/wanix/fs/metacache"
+	"tractor.dev/wanix/fs/p9kit"
 	"tractor.dev/wanix/misc"
 	"tractor.dev/wanix/misc/jsutil"
+	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web/sys"
 )
-
-func FromTask(t *wanix.Task) js.Value {
-	w := wanix.GetWorker(t)
-	if w == nil {
-		return js.Undefined()
-	}
-	return w.(js.Value)
-}
-
-func StartTaskWorker(svc *Service, t *wanix.Task, blobURL string) error {
-	w, err := svc.Alloc(t)
-	if err != nil {
-		return err
-	}
-	args := append([]string{blobURL}, strings.Split(t.Cmd(), " ")...)
-	return w.Start(args...)
-}
 
 type Resource struct {
 	id     int
@@ -40,6 +28,11 @@ type Resource struct {
 	src    string
 	worker js.Value
 	task   *wanix.Task
+}
+
+type guestSetter interface {
+	fs.FS
+	SetGuest(fs.FS)
 }
 
 func (r *Resource) ID() string {
@@ -89,6 +82,52 @@ func (r *Resource) Start(args ...string) error {
 
 	port := sys.Element().Call("_openPort", r.task.ID())
 	p9 := sys.Element().Call("_open9P", r.task.ID())
+
+	r.worker.Call("addEventListener", "message", js.FuncOf(func(this js.Value, args []js.Value) any {
+		go func() {
+			// so far this is just used for vm to export a guest fs
+			// but might eventually be used for general worker<->task/wanix communication
+			if args[0].Get("data").Get("vm").IsUndefined() {
+				return
+			}
+			vmID := args[0].Get("data").Get("vm").String()
+			guestDev := args[0].Get("data").Get("guest")
+
+			rfsys, _, err := fs.Resolve(r.task.Root().NS(), context.Background(), path.Join("#vm", vmID))
+			if err != nil {
+				log.Println("error resolving vm", vmID, err)
+				return
+			}
+			vms := rfsys.(*vm.Device)
+			vm, err := vms.Lookup(vmID)
+			if err != nil {
+				log.Println("error looking up vm", vmID, err)
+				return
+			}
+
+			// js.Global().Get("console").Call("log", args[0].Get("data"))
+
+			guestDev.Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
+				go func() {
+					// use initial signal message to mount guest
+					conn := misc.NewFakeConn(jsutil.NewPortReadWriter(guestDev))
+					guestFS, err := p9kit.ClientFS(conn, "")
+					if err != nil {
+						log.Println("error creating client for import", err)
+						return
+					}
+					log.Println("mounting guest...")
+					// if err := vm.SetGuest(guestFS); err != nil {
+					if err := vm.SetGuest(metacache.New(guestFS)); err != nil {
+						log.Println("error setting guest", err)
+					}
+				}()
+				return nil
+			}))
+		}()
+
+		return nil
+	}))
 
 	r.worker.Call("postMessage", map[string]any{"worker": map[string]any{
 		"id":   r.id,

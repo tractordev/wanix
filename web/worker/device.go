@@ -11,25 +11,25 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 )
 
-type Service struct {
+type Device struct {
 	resources map[string]fs.FS
 	nextID    int
 	task      *wanix.Task
 }
 
-func New(task *wanix.Task) *Service {
-	return &Service{
+func New(task *wanix.Task) *Device {
+	return &Device{
 		resources: make(map[string]fs.FS),
 		nextID:    0,
 		task:      task,
 	}
 }
 
-func (d *Service) Open(name string) (fs.File, error) {
+func (d *Device) Open(name string) (fs.File, error) {
 	return d.OpenContext(context.Background(), name)
 }
 
-func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
+func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	fsys, rname, err := d.ResolveFS(ctx, name)
 	if err != nil {
 		return nil, err
@@ -37,7 +37,7 @@ func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error)
 	return fs.OpenContext(ctx, fsys, rname)
 }
 
-func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (d *Device) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
 	return fs.Resolve(fskit.UnionFS{
 		fskit.MapFS{
 			"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
@@ -61,7 +61,7 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 	}, ctx, name)
 }
 
-func (d *Service) Alloc(t *wanix.Task) (*Resource, error) {
+func (d *Device) Alloc(t *wanix.Task) (*Resource, error) {
 	if t == nil {
 		t = d.task
 	}
