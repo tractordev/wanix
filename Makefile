@@ -71,13 +71,21 @@ wasm-tinygo: wasi/worker/lib.js
 		echo "skipping wasm-tinygo build: tinygo not installed"; \
 		exit 0; \
 	fi; \
-	tinygo build -ldflags="-X tractor.dev/wanix.Version=$(VERSION)" --no-debug -target wasm -o $(DIST_DIR)/wanix.wasm ./wasm && \
+	tinygo build \
+		-ldflags="-X tractor.dev/wanix.Version=$(VERSION)" \
+		--no-debug \
+		-target wasm \
+		-o $(DIST_DIR)/wanix.wasm \
+		./wasm && \
 	ls -lah $(DIST_DIR)/wanix.wasm
 .PHONY: wasm-tinygo
 
 ## Build WASM module using Go
 wasm-go: wasi/worker/lib.js
-	GOOS=js GOARCH=wasm go build -ldflags="-X tractor.dev/wanix.Version=$(VERSION)" -o $(DIST_DIR)/wanix.debug.wasm ./wasm
+	GOOS=js GOARCH=wasm go build \
+		-ldflags="-X tractor.dev/wanix.Version=$(VERSION)" \
+		-o $(DIST_DIR)/wanix.debug.wasm \
+		./wasm
 	ls -lah $(DIST_DIR)/wanix.debug.wasm
 .PHONY: wasm-go
 
