@@ -4,6 +4,9 @@
 mount -t proc none /proc
 mount -t sysfs none /sys
 
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
+
 
 if [ -z "$SHELL" ]; then
     export SHELL=/bin/sh
