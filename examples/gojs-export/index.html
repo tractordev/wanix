@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <script type="module" src="../../dist/wanix.min.js"></script>
+</head>
+<body style="height: 100vh; margin: 0;">
+    <p>
+        See exported files from <code>export.wasm</code>:<br />
+        <code>cd task/2/export && ls -l</code>
+    </p>
+    <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
+        <wanix-bind dst="task" src="#task"></wanix-bind>
+
+        <!-- fetch the export.wasm binary and run it as a gojs task -->
+        <wanix-bind type="file" dst="export.wasm" src="./export.wasm"></wanix-bind>
+        <wanix-task cmd="export.wasm" type="gojs" start></wanix-task>
+
+        <!-- fetch the rc.wasm shell and run it as a gojs task -->
+        <wanix-bind type="file" dst="rc.wasm" src="../repl-rc/rc.wasm"></wanix-bind>
+        <wanix-task id="rc" cmd="rc.wasm" type="gojs" term start></wanix-task>
+        
+        <!-- render the terminal for the shell -->
+        <wanix-term path="#task/rc/term"></wanix-term>
+    </wanix-system>
+
+</body>
+</html>
