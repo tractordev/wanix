@@ -10,7 +10,6 @@ import (
 	"tractor.dev/wanix/web/worker"
 )
 
-// todo: move to gojs dir?
 type Driver struct {
 	Workers *worker.Device
 }

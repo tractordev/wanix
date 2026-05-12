@@ -85,45 +85,46 @@ func (r *Resource) Start(args ...string) error {
 
 	r.worker.Call("addEventListener", "message", js.FuncOf(func(this js.Value, args []js.Value) any {
 		go func() {
-			// so far this is just used for vm to export a guest fs
-			// but might eventually be used for general worker<->task/wanix communication
-			if args[0].Get("data").Get("vm").IsUndefined() {
+			// all we handle are ns exports for now
+			exportPort := args[0].Get("data").Get("export")
+			if exportPort.IsUndefined() {
 				return
 			}
-			vmID := args[0].Get("data").Get("vm").String()
-			guestDev := args[0].Get("data").Get("guest")
-
-			rfsys, _, err := fs.Resolve(r.task.Root().NS(), context.Background(), path.Join("#vm", vmID))
-			if err != nil {
-				log.Println("error resolving vm", vmID, err)
-				return
-			}
-			vms := rfsys.(*vm.Device)
-			vm, err := vms.Lookup(vmID)
-			if err != nil {
-				log.Println("error looking up vm", vmID, err)
-				return
-			}
-
-			// js.Global().Get("console").Call("log", args[0].Get("data"))
-
-			guestDev.Set("onmessage", js.FuncOf(func(this js.Value, args []js.Value) any {
+			exportPort.Set("onmessage", js.FuncOf(func(this js.Value, _ []js.Value) any {
 				go func() {
-					// use initial signal message to mount guest
-					conn := misc.NewFakeConn(jsutil.NewPortReadWriter(guestDev))
-					guestFS, err := p9kit.ClientFS(conn, "")
+					// use initial signal message to mount export
+					conn := misc.NewFakeConn(jsutil.NewPortReadWriter(exportPort))
+					exportFS, err := p9kit.ClientFS(conn, "")
 					if err != nil {
-						log.Println("error creating client for import", err)
+						log.Println("error creating client for export", err)
+						return
+					}
+					wanix.Export(r.task, exportFS)
+
+					// vm guest is still special cased for now
+					if args[0].Get("data").Get("vm").IsUndefined() {
+						return
+					}
+					vmID := args[0].Get("data").Get("vm").String()
+					rfsys, _, err := fs.Resolve(r.task.Root().NS(), context.Background(), path.Join("#vm", vmID))
+					if err != nil {
+						log.Println("error resolving vm", vmID, err)
+						return
+					}
+					vms := rfsys.(*vm.Device)
+					vm, err := vms.Lookup(vmID)
+					if err != nil {
+						log.Println("error looking up vm", vmID, err)
 						return
 					}
 					log.Println("mounting guest...")
-					// if err := vm.SetGuest(guestFS); err != nil {
-					if err := vm.SetGuest(metacache.New(guestFS)); err != nil {
+					if err := vm.SetGuest(metacache.New(exportFS)); err != nil {
 						log.Println("error setting guest", err)
 					}
 				}()
 				return nil
 			}))
+
 		}()
 
 		return nil

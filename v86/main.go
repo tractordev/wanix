@@ -250,8 +250,8 @@ func main() {
 		go sendStdin()
 
 		js.Global().Get("self").Call("postMessage", map[string]any{
-			"vm":    os.Getenv("vm"),
-			"guest": exportch.Get("port2"),
+			"vm":     os.Getenv("vm"),
+			"export": exportch.Get("port2"),
 		}, []any{exportch.Get("port2")})
 
 		return nil

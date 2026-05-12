@@ -53,7 +53,14 @@ type Task struct {
 	closer func()
 	fsys   *TaskFS
 	worker any
+	export fs.FS
 	mu     sync.Mutex
+}
+
+func Export(t *Task, export fs.FS) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.export = export
 }
 
 func SetWorker(t *Task, worker any) {
@@ -120,6 +127,15 @@ func (r *Task) ID() string {
 
 func (r *Task) Context() context.Context {
 	return r.NS().Context()
+}
+
+func (r *Task) Export() (fs.FS, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.export == nil {
+		return nil, fs.ErrNotExist
+	}
+	return r.export, nil
 }
 
 func (r *Task) NS() *vfs.NS {
@@ -219,7 +235,7 @@ func (r *Task) Open(name string) (fs.File, error) {
 }
 
 func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
-	return fs.Resolve(fskit.MapFS{
+	m := fskit.MapFS{
 		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the Task",
@@ -290,7 +306,11 @@ func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error
 			return fskit.Entry("binds", 0555, []byte(r.NS().String()+"\n")).Open(name)
 		}),
 		"ns": r.ns,
-	}, ctx, name)
+	}
+	if r.export != nil {
+		m["export"] = r.export
+	}
+	return fs.Resolve(m, ctx, name)
 }
 
 func (r *Task) OpenContext(ctx context.Context, name string) (fs.File, error) {
