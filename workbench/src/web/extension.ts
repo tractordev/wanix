@@ -88,8 +88,8 @@ async function createTerminal(fsys: any, config: Config) {
 		return out.join(sep);
 	}
 	const common = commonPath(termPath, taskPath);
-	const termPathInner = termPath.slice(common.length+1);
-	const taskPathInner = taskPath.slice(common.length+1);
+	const termPathInner = (common.length > 0 ? termPath.slice(common.length+1) : termPath);
+	const taskPathInner = (common.length > 0 ? taskPath.slice(common.length+1) : taskPath);
 	// console.log(`bind ${termPathInner}/program ${taskPathInner}/fd/0`);
 	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPathInner}/program ${taskPathInner}/fd/0`);
 	await fsys.writeFile(`${taskPath}/ctl`, `bind ${termPathInner}/program ${taskPathInner}/fd/1`);
