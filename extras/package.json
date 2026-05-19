@@ -1,6 +1,6 @@
 {
     "name": "wanix-extras",
-    "version": "0.4.0-alpha7",
+    "version": "0.4.0-alpha8",
     "files": [
         "dist/**/*.wasm",
         "dist/**/*.tgz",
