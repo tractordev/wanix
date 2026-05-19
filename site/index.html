@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>wanix.site</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 2rem 1rem 5rem;
+      font: 16px/1.6 system-ui, sans-serif;
+      color: #1a1a1a;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    main {
+      width: 100%;
+      max-width: 36rem;
+      color: #444;
+    }
+
+    main h1 {
+      margin: 0 0 1rem;
+      font-size: 1.25rem;
+    }
+
+    main p {
+      margin: 0 0 1rem;
+    }
+
+  </style>
+  <script src="./wanix-site.js" type="module"></script>
+</head>
+<body>
+  <main>
+    <h1>Hello world!</h1>
+    <p>This page is self-editable. Just click "Edit" to start.</p>
+    <p>Changes are local-only at this time.</p>
+  </main>
+
+  <wanix-site></wanix-site>
+
+  <template data-path="/_editor.html" data-type="text/html">
+    <html>
+      <body>
+        <script src="/_site/wanix.min.js" type="module"></script>
+        <wanix-system id="editor" wasm="/_site/wanix.debug.wasm">
+          <wanix-bind dst="." src="#web/caches/wanix-v1"></wanix-bind>
+          <wanix-workbench open="index.html" sidebar="never" assets="/_site/workbench"></wanix-workbench>
+          <script type="module">
+            // Concatenate the host and the current path (excluding 
+            // the last segment) to form a directory-like URL path
+            const bench = document.querySelector("wanix-workbench");
+            bench.wd = location.host + location.pathname.replace(/\/[^\/]*$/, "");
+          </script>
+        </wanix-system>
+      </body>
+    </html>
+  </template>
+
+</body>
+</html>
