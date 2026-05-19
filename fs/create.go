@@ -1,5 +1,7 @@
 package fs
 
+import "os"
+
 type CreateFS interface {
 	FS
 	Create(name string) (File, error)
@@ -17,8 +19,9 @@ func Create(fsys FS, name string) (File, error) {
 		return rfsys.Create(rname) //path.Join(rdir, path.Base(name)))
 	}
 
-	// TODO: implement derived Create using OpenFile?
-	//u.OpenFile(name, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0o666)
+	if rfsys, rname, err := ResolveTo[OpenFileFS](fsys, ctx, name); err == nil {
+		return rfsys.OpenFile(rname, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0o666)
+	}
 
 	return nil, opErr(fsys, name, "create", err)
 }
