@@ -60,6 +60,7 @@
 
 	if (!globalThis.process) {
 		globalThis.process = {
+			env: {}, // added for vscode compat
 			getuid() { return -1; },
 			getgid() { return -1; },
 			geteuid() { return -1; },
