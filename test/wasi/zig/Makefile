@@ -1,7 +1,11 @@
 .PHONY: build clobber
 
 build:
-	zig build-exe main.zig -target wasm32-wasi -lc -O ReleaseSmall -femit-bin=zigcheck.wasm 
+	zig build-exe main.zig \
+		-femit-bin=zigcheck.wasm \
+		-target wasm32-wasi \
+		-O ReleaseSmall \
+		--stack 65536 \
 
 clobber:
 	rm -f zigcheck.wasm
