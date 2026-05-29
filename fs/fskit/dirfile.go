@@ -40,6 +40,25 @@ func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
 
 func (d *dirFile) Stat() (fs.FileInfo, error) { return d, nil }
 func (d *dirFile) Close() error               { return nil }
+
+// GetUID and GetGID delegate to the embedded FileInfo if it exposes ownership.
+func (d *dirFile) GetUID() int {
+	type uidProvider interface{ GetUID() int }
+	if p, ok := d.FileInfo.(uidProvider); ok {
+		return p.GetUID()
+	}
+	return 0
+}
+
+func (d *dirFile) GetGID() int {
+	type gidProvider interface{ GetGID() int }
+	if p, ok := d.FileInfo.(gidProvider); ok {
+		return p.GetGID()
+	}
+	return 0
+}
+
+
 func (d *dirFile) Read(b []byte) (int, error) {
 	return 0, &fs.PathError{Op: "read", Path: d.path, Err: fs.ErrInvalid}
 }

@@ -247,6 +247,19 @@ func SetGid(n *Node, gid int) {
 	n.gid = gid
 }
 
+func (n *Node) GetUID() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.uid
+}
+
+func (n *Node) GetGID() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.gid
+}
+
+
 // fs.OpenContextFS
 var _ = (fs.OpenContextFS)((*Node)(nil))
 
