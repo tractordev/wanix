@@ -122,7 +122,7 @@ func (l *p9file) Walk(names []string) ([]p9.QID, p9.File, error) {
 	}
 
 	for _, name := range names {
-		c := &p9file{path: path.Join(last.path, name), fsys: l.fsys, vattrs: l.vattrs}
+		c := &p9file{path: path.Clean(path.Join(last.path, name)), fsys: l.fsys, vattrs: l.vattrs}
 		qid, _, err := c.info()
 		if err != nil {
 			return nil, nil, err
@@ -211,11 +211,23 @@ func (l *p9file) WriteAt(p []byte, offset int64) (int, error) {
 }
 
 // Create implements p9.File.Create.
-func (l *p9file) Create(name string, mode p9.OpenFlags, permissions p9.FileMode, _ p9.UID, _ p9.GID) (p9.File, p9.QID, uint32, error) {
+func (l *p9file) Create(name string, mode p9.OpenFlags, permissions p9.FileMode, uid p9.UID, gid p9.GID) (p9.File, p9.QID, uint32, error) {
 	newName := path.Join(l.path, name)
 	f, err := fs.OpenFile(l.fsys, newName, mode.OSFlags()|os.O_CREATE, permissions.OSMode())
 	if err != nil {
 		return nil, p9.QID{}, 0, err
+	}
+
+	if uid.Ok() || gid != p9.NoGID {
+		u := -1
+		g := -1
+		if uid.Ok() {
+			u = int(uid)
+		}
+		if gid != p9.NoGID {
+			g = int(gid)
+		}
+		fs.Chown(l.fsys, newName, u, g) // best-effort
 	}
 
 	l2 := &p9file{path: newName, file: f, fsys: l.fsys, vattrs: l.vattrs, openFlags: mode}
@@ -228,13 +240,27 @@ func (l *p9file) Create(name string, mode p9.OpenFlags, permissions p9.FileMode,
 }
 
 // Mkdir implements p9.File.Mkdir.
-func (l *p9file) Mkdir(name string, permissions p9.FileMode, _ p9.UID, _ p9.GID) (p9.QID, error) {
-	if err := fs.Mkdir(l.fsys, path.Join(l.path, name), permissions.OSMode()); err != nil {
+func (l *p9file) Mkdir(name string, permissions p9.FileMode, uid p9.UID, gid p9.GID) (p9.QID, error) {
+	newPath := path.Join(l.path, name)
+	if err := fs.Mkdir(l.fsys, newPath, permissions.OSMode()); err != nil {
 		return p9.QID{}, err
 	}
 
-	// Blank QID.
-	return p9.QID{}, nil
+	if uid.Ok() || gid != p9.NoGID {
+		u := -1
+		g := -1
+		if uid.Ok() {
+			u = int(uid)
+		}
+		if gid != p9.NoGID {
+			g = int(gid)
+		}
+		fs.Chown(l.fsys, newPath, u, g) // best-effort
+	}
+
+	child := &p9file{path: newPath, fsys: l.fsys, vattrs: l.vattrs}
+	qid, _, err := child.info()
+	return qid, err
 }
 
 // Symlink implements p9.File.Symlink.

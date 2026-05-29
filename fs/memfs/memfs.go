@@ -25,8 +25,9 @@ type FS struct {
 func New() *FS {
 	fsys := &FS{nodes: make(map[string]*fskit.Node), log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	// Always ensure "." exists as the root directory
-	fsys.nodes["."] = fskit.RawNode(".", fs.ModeDir|0755)
-	fskit.SetSize(fsys.nodes["."], 2) // "." and ".."
+	root := fskit.RawNode(".", fs.ModeDir|0755, time.Now())
+	fskit.SetSize(root, 2) // "." and ".."
+	fsys.nodes["."] = root
 	return fsys
 }
 
@@ -139,9 +140,10 @@ func (fsys *FS) updateDirSize(dir string) {
 		}
 	}
 
-	// Release lock before calling SetSize to avoid deadlock
+	// Release lock before calling node setters to avoid deadlock
 	fsys.mu.Unlock()
 	fskit.SetSize(node, int64(2+count))
+	fskit.SetModTime(node, time.Now())
 	fsys.mu.Lock()
 }
 
@@ -385,7 +387,7 @@ func (fsys *FS) Mkdir(name string, perm fs.FileMode) (err error) {
 	fskit.SetSize(node, 2) // Set initial size to 2 for "." and ".." entries
 	fskit.SetLogger(node, fsys.log)
 	fsys.nodes[name] = node
-	// Update parent directory size
+	// Update parent directory size, mtime, and nlink
 	fsys.updateDirSize(dir)
 	return nil
 }
