@@ -109,7 +109,7 @@ func p9Handler(srv *p9.Server, w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	log.Println("p9 session started")
+	log.Println("9p session started")
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 

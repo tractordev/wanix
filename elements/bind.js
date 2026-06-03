@@ -48,6 +48,15 @@ export class BindElement extends HTMLElement {
             }
             break;
         case "import":
+            if (this.src.startsWith("ws://") || this.src.startsWith("wss://")) {
+                this.import = new Promise((resolve, reject) => {
+                    const ws = new WebSocket(this.src);
+                    ws.onopen = () => {
+                        resolve(websocketToMessagePort(ws));
+                    };
+                });
+                break;
+            }
             this.import = new Promise((resolve, reject) => {
                 const iframe = document.createElement('iframe');
                 iframe.style.display = "none";
@@ -134,4 +143,36 @@ async function fetchArchive(url) {
         }
         return baseBody.pipeThrough(new DecompressionStream("gzip"));
     }
+}
+
+function websocketToMessagePort(ws) {
+    // Create a MessageChannel and grab one port to return
+    const { port1, port2 } = new MessageChannel();
+
+    // Forward messages from WebSocket to port1
+    ws.onmessage = (event) => {
+        if (event.data instanceof Blob) {
+            event.data.arrayBuffer().then(arr => {
+                const buf = new Uint8Array(arr);
+                // Only ArrayBuffer is transferable, not TypedArray views like Uint8Array
+                port1.postMessage(buf, [buf.buffer]);
+            });
+            return;
+        } else {
+            console.warn("Unsupported data type", event.data);
+        }
+    };
+    ws.onclose = () => port1.close();
+
+    // Forward postMessage on port1 to WebSocket send
+    port1.onmessage = (event) => {
+        // Binary or string: just forward
+        ws.send(event.data);
+    };
+
+    port1.onclose = () => {
+        try { ws.close(); } catch(e) {}
+    };
+
+    return port2;
 }
