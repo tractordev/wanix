@@ -126,6 +126,7 @@ func wanixExecMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHandlerF
 
 			code, err := runExternalCommand(ctx, hc, path, args[1:])
 			if err != nil {
+				fmt.Fprintf(hc.Stderr, "rc: %s: %v\n", path, err)
 				return err
 			}
 			if code == 0 {

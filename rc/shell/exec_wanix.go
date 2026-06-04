@@ -4,81 +4,92 @@ package shell
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"mvdan.cc/sh/v3/interp"
 )
 
+func readString(path string) (string, error) {
+	out, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func runExternalCommand(ctx context.Context, hc interp.HandlerContext, path string, args []string) (int, error) {
 	argv := append([]string{path}, args...)
-	ridRaw, err := os.ReadFile("#task/new/auto")
+	termID, err := readString("#term/new")
 	if err != nil {
 		return 1, err
 	}
-	rid := strings.TrimSpace(string(ridRaw))
-	base := filepath.Join("#task", rid)
+	termPath := filepath.Join("#term", termID)
 
-	if err := os.WriteFile(filepath.Join(base, "cmd"), []byte(joinTaskArgs(argv)), 0o644); err != nil {
-		return 1, err
-	}
-	if err := os.WriteFile(filepath.Join(base, "env"), []byte(joinTaskEnv(hc)), 0o644); err != nil {
-		return 1, err
-	}
-	if err := os.WriteFile(filepath.Join(base, "dir"), []byte(hc.Dir), 0o644); err != nil {
-		return 1, err
-	}
-
-	stdoutFile, err := os.Open(filepath.Join(base, "fd/1"))
+	// todo: need better auto so we dont have to use gojs here
+	taskID, err := readString("#task/new/gojs")
 	if err != nil {
 		return 1, err
 	}
-	defer stdoutFile.Close()
-	stderrFile, err := os.Open(filepath.Join(base, "fd/2"))
-	if err != nil {
+	taskPath := filepath.Join("#task", taskID)
+
+	// todo: these should be os.WriteFile but truncating synthetic files isnt allowed yet
+	if err := AppendFile(filepath.Join(taskPath, "cmd"), []byte(joinTaskArgs(argv))); err != nil {
 		return 1, err
 	}
-	defer stderrFile.Close()
+	if err := AppendFile(filepath.Join(taskPath, "env"), []byte(joinTaskEnv(hc))); err != nil {
+		return 1, err
+	}
+	if err := AppendFile(filepath.Join(taskPath, "dir"), []byte(hc.Dir)); err != nil {
+		return 1, err
+	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		_, _ = io.Copy(hc.Stdout, stdoutFile)
-	}()
-	go func() {
-		defer wg.Done()
-		_, _ = io.Copy(hc.Stderr, stderrFile)
-	}()
-
-	if shouldForwardStdin(hc.Stdin) {
-		stdinFile, err := os.OpenFile(filepath.Join(base, "fd/0"), os.O_WRONLY, 0)
-		if err != nil {
+	ctlmsg := []string{
+		fmt.Sprintf("bind %s/program %s/fd/0", termPath, taskPath),
+		fmt.Sprintf("bind %s/program %s/fd/1", termPath, taskPath),
+		fmt.Sprintf("bind %s/program %s/fd/2", termPath, taskPath),
+	}
+	for _, msg := range ctlmsg {
+		if err := AppendFile(filepath.Join(taskPath, "ctl"), []byte(msg)); err != nil {
 			return 1, err
 		}
+	}
+
+	termData, err := os.Open(filepath.Join(termPath, "data"))
+	if err != nil {
+		return 1, err
+	}
+	defer termData.Close()
+
+	if shouldForwardStdin(hc.Stdin) {
+		// todo: do we need to do line discpline?
 		go func() {
-			_, _ = io.Copy(stdinFile, hc.Stdin)
-			_ = stdinFile.Close()
+			println("copying stdin")
+			_, _ = io.Copy(termData, hc.Stdin)
+			println("stdin done")
 		}()
 	}
 
-	if err := os.WriteFile(filepath.Join(base, "ctl"), []byte("start"), 0o644); err != nil {
+	go func() {
+		println("copying stdout")
+		_, _ = io.Copy(hc.Stdout, termData)
+		println("stdout done")
+	}()
+
+	if err := AppendFile(filepath.Join(taskPath, "ctl"), []byte("start")); err != nil {
 		return 1, err
 	}
 
-	code, err := waitExitCode(ctx, filepath.Join(base, "exit"))
+	code, err := waitExitCode(ctx, filepath.Join(taskPath, "exit"))
 	if err != nil {
 		return 1, err
 	}
 
-	_ = stdoutFile.Close()
-	_ = stderrFile.Close()
-	wg.Wait()
 	return code, nil
 }
 
@@ -135,4 +146,14 @@ func quoteArg(in string) string {
 		return in
 	}
 	return "'" + strings.ReplaceAll(in, "'", `'"'"'`) + "'"
+}
+
+func AppendFile(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(data)
+	return err
 }
