@@ -556,3 +556,32 @@ func TestWritableRootOverRootBind(t *testing.T) {
 		t.Fatalf("unexpected data: %s", string(n.Data()))
 	}
 }
+
+func TestRecursiveUnion(t *testing.T) {
+	ns := New(context.Background())
+
+	afs := fskit.MapFS{
+		"a": fskit.MapFS{
+			"bin": fskit.MapFS{
+				"a": fskit.RawNode([]byte("content1")),
+			},
+		},
+	}
+
+	bfs := fskit.MapFS{
+		"b": fskit.MapFS{
+			"bin": fskit.MapFS{
+				"b": fskit.RawNode([]byte("content2")),
+			},
+		},
+	}
+
+	ns.Bind(afs, "a", ".", ModeAfter)
+	ns.Bind(bfs, "b", ".", ModeAfter)
+
+	e, _ := fs.ReadDir(ns, "bin")
+	if len(e) != 2 {
+		t.Fatal("expected 2 files in bin dir listing")
+	}
+
+}
