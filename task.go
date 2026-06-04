@@ -240,6 +240,7 @@ func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error
 			Usage: "ctl",
 			Short: "control the Task",
 			Run: func(ctx *cli.Context, args []string) {
+				// todo: cause fs error on error!
 				if len(args) == 3 && args[0] == "bind" {
 					if err := r.Bind(args[1], args[2]); err != nil {
 						log.Println(err)
