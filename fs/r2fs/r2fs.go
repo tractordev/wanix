@@ -3,6 +3,7 @@ package r2fs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -878,6 +879,26 @@ func (fsys *FS) Mkdir(name string, perm fs.FileMode) error {
 
 // mkdir creates a directory with context
 func (fsys *FS) mkdir(ctx context.Context, name string, perm fs.FileMode) error {
+	if _, err := fsys.headRequest(ctx, name); err == nil {
+		return fs.ErrExist
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
+	parentDir := dirpath(name)
+	if parentDir != "." {
+		parentInfo, err := fsys.headRequest(ctx, parentDir)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return fs.ErrNotExist
+			}
+			return err
+		}
+		if !parentInfo.isDir {
+			return fs.ErrNotExist
+		}
+	}
+
 	objectKey := fsys.normalizeR2Path(name)
 
 	// Prepare metadata for directory
