@@ -31,7 +31,8 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@progrium/duplex": "^0.2.2"
+    "@progrium/duplex": "^0.2.2",
+    "ws": "^8.21.0"
   },
   "contributes": {
     "commands": [
