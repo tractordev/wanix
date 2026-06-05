@@ -8,7 +8,7 @@
     <wanix-system wasm="../dist/wanix.debug.wasm" debug>
 
         <!-- bind an archive to the name root in the namespace -->
-        <wanix-bind type="archive" dst="root" src="../extras/dist/alpine-linux.tgz"></wanix-bind>
+        <wanix-bind type="archive" dst="root" src="../extras/dist/wanix-linux.tgz"></wanix-bind>
 
         <!-- fetch the rc.wasm file -->
         <wanix-bind type="fetch" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>

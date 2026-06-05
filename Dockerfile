@@ -52,7 +52,7 @@ RUN make cmd
 # Pull kernel and alpine images
 FROM --platform=$LINUX_AMD64 ghcr.io/tractordev/apptron:kernel AS kernel
 # FROM --platform=$BUILDPLATFORM ghcr.io/progrium/linux-build:latest AS kernel
-# COPY alpine-linux/boot/kernel.config .config
+# COPY extras/linux/boot/kernel.config .config
 # RUN make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- oldconfig < /dev/null && \
 #     make ARCH=i386 CROSS_COMPILE=i686-linux-gnu- bzImage -j$(nproc)
 FROM --platform=$LINUX_386 docker.io/i386/alpine:$ALPINE_VERSION AS alpine-root
@@ -77,10 +77,10 @@ COPY --from=alpine-root / /root/
 COPY --from=kernel /bzImage /root/boot/bzImage
 COPY --from=wexec /build/wexec /root/bin/
 COPY --from=hostexport /build/hostexport /root/bin/
-COPY ./extras/alpine-linux/bin/* /root/bin/
-COPY ./extras/alpine-linux/etc/* /root/etc/
-COPY ./extras/alpine-linux/boot/* /root/boot/
-RUN tar -C /root -czf /alpine-linux.tgz .
+COPY ./extras/linux/bin/* /root/bin/
+COPY ./extras/linux/etc/* /root/etc/
+COPY ./extras/linux/boot/* /root/boot/
+RUN tar -C /root -czf /wanix-linux.tgz .
 
 
 ## FINAL IMAGE

@@ -8,7 +8,7 @@
     <wanix-system id="linux" wasm="../dist/wanix.debug.wasm" allow-origins="*" debug>
 
         <!-- bind a (slightly custom) alpine linux root to our root -->
-        <wanix-bind dst="." src="../extras/dist/alpine-linux.tgz" type="archive"></wanix-bind>
+        <wanix-bind dst="." src="../extras/dist/wanix-linux.tgz" type="archive"></wanix-bind>
         
         <!-- this exports the vm system namespace -->
         <wanix-bind dst="vm" src="#vm"></wanix-bind>
