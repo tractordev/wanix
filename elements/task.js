@@ -20,7 +20,7 @@ export class TaskElement extends WanixElement {
         this.type = this.getAttribute('type') || "auto";
         this.role = this.getAttribute('role');
         this.cmd = this.getAttribute('cmd');
-        this.env = this.getAttribute('env');
+        this.env = spaceToNewline(this.getAttribute('env'));
         this.stdout = this.getAttribute('stdout');
         this.stderr = this.getAttribute('stderr');
         this.stdin = this.getAttribute('stdin');
@@ -49,7 +49,7 @@ export class TaskElement extends WanixElement {
 
         await this._system.root.writeFile([this.path, "cmd"].join("/"), this.cmd);
         if (this.env) {
-            await this._system.root.writeFile([this.path, "env"].join("/"), spaceToNewline(this.env));
+            await this._system.root.writeFile([this.path, "env"].join("/"), this.env);
         }
         if (this.wd) {
             await this._system.root.writeFile([this.path, "dir"].join("/"), this.wd);
