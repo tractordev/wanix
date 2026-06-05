@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -38,8 +39,12 @@ func parseFlags(args []string) (map[string]any, error) {
 
 		// VirtFS options
 		virtfs string
+
+		// Export device
+		export string
 	)
 	f := flag.NewFlagSet("v86", flag.ContinueOnError)
+	f.StringVar(&export, "export", "", "Set device to exporthost over")
 	f.StringVar(&mem, "m", "512M", "Set memory size")
 	f.StringVar(&mem, "mem", "512M", "Set memory size")
 	f.StringVar(&hda, "hda", "", "Primary hard disk image")
@@ -59,21 +64,43 @@ func parseFlags(args []string) (map[string]any, error) {
 	if err := f.Parse(args); err != nil {
 		return nil, err
 	}
+	if os.Getenv("VM_APPEND") != "" {
+		append = os.Getenv("VM_APPEND")
+	}
 	memorySize, err := parseMemorySize(mem)
 	if err != nil {
 		return nil, err
 	}
-	cmdline := "console=hvc0"
+	cmdline := "console=hvc0 loglevel=3 init=/bin/init"
 	if append != "" {
 		cmdline += " " + append
 	}
-	return map[string]any{
+	if export != "" {
+		cmdline += " export=" + export
+	}
+	// mem=1008M memmap=16M$1008M
+	cfg := map[string]any{
 		"memory_size":     memorySize,
 		"vga_memory_size": 8 * 1024 * 1024, // 8MB
-		"net_device":      parseNetdev(netdev),
-		"cmdline":         cmdline,
-		"autostart":       true,
-	}, nil
+	}
+	if netdev != "" {
+		cfg["net_device"] = parseNetdev(netdev)
+	}
+	if virtfs != "" {
+		cfg["filesystem"] = parseVirtfs(virtfs)
+	} else {
+		// default to host9p
+		fsargs := []string{
+			"rw",
+			"root=host9p",
+			"rootfstype=9p",
+			"rootflags=trans=virtio,version=9p2000.L,aname=,cache=none,msize=131072",
+		}
+		cmdline += " " + strings.Join(fsargs, " ")
+		// up to caller to set up filesystem (handle9p)
+	}
+	cfg["cmdline"] = cmdline
+	return cfg, nil
 }
 
 // parseMemorySize parses memory size strings like "512M", "1G", etc.

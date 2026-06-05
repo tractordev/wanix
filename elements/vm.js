@@ -21,35 +21,26 @@ export class VMElement extends WanixElement {
         this.alias = this.getAttribute('alias') || this.getAttribute('id') || null;
         this.type = this.getAttribute('type') || "v86";
         this.fsys = this.getAttribute('fsys');
-        this.export = this.getAttribute('export') || "";
         this._term = this.hasAttribute('term');
         this._autostart = this.hasAttribute('start');
 
-        this.mem = this.getAttribute('mem') || "512M";
-        this.vgaMem = this.getAttribute('vga-mem') || "8M";
-
-        this.hda = this.getAttribute('hda');
-        this.hdb = this.getAttribute('hdb');
-        this.fda = this.getAttribute('fda');
-        this.fdb = this.getAttribute('fdb');
-        this.cdrom = this.getAttribute('cdrom');
-
-        this.boot = this.getAttribute('boot');
-        this.bios = this.getAttribute('bios');
-        this.acpi = this.hasAttribute('acpi');
-        this.fastboot = this.hasAttribute('fastboot');
-
-        this.kernel = this.getAttribute('kernel');
-        this.initrd = this.getAttribute('initrd');
-        this.append = this.getAttribute('append');
-
-        this.netdev = this.getAttribute('netdev');
-        this.virtfs = this.getAttribute('virtfs');
+        const args = [];
+        // other than export, these all map to qemu cli flags.
+        // append is put in env because of shell quoting limitations atm
+        ['export', 'mem', 'vga-mem', 'hda', 'hdb', 'fda', 'fdb', 'cdrom', 'boot', 'bios', 'acpi', 'fastboot', 'kernel', 'initrd', 'netdev', 'virtfs'].forEach(attr => {
+            if (this.hasAttribute(attr)) {
+                args.push(`-${attr} ${this.getAttribute(attr)}`);
+            }
+        });
 
         this.task._system = this._system;
         this.task.type = "gojs";
-        this.task.env = "";
-        this.task.cmd = `#vm/${this.type}/${this.type}-vm.wasm ${this.export}`;
+        if (this.hasAttribute('append')) {
+            this.task.env = `VM_APPEND=${this.getAttribute('append')}\n`;
+        } else {
+            this.task.env = "";
+        }
+        this.task.cmd = `#vm/${this.type}/${this.type}-vm.wasm ${args.join(" ")}`;
     }
 
     async _awake() {
@@ -68,7 +59,7 @@ export class VMElement extends WanixElement {
             await this._system.root.writeFile([this.path, "alias"].join("/"), this.id);
         }
 
-        this.task.env = `vm=${this.rid}`;
+        this.task.env += `vm=${this.rid}\n`;
         await this.task.allocate(this.querySelectorAll(':scope > wanix-bind'));
 
         if (this._term) {

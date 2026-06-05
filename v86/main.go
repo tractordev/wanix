@@ -5,12 +5,10 @@ package main
 import (
 	"embed"
 	"encoding/binary"
-	"flag"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"strings"
 	"sync"
 	"syscall/js"
 
@@ -23,7 +21,10 @@ import (
 var assets embed.FS
 
 func main() {
-	flag.Parse()
+	opts, err := parseFlags(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	js.Global().Get("self").Call("addEventListener", "message", js.FuncOf(func(this js.Value, args []js.Value) any {
 		// todo: handle screen/input/term changes
@@ -117,27 +118,20 @@ func main() {
 		return nil
 	})
 
-	cmdline := []string{
-		"console=hvc0",
-		"init=/bin/init",
-		"rw",
-		"root=host9p",
-		"rootfstype=9p",
-		"rootflags=trans=virtio,version=9p2000.L,aname=,cache=none,msize=131072",
-		"loglevel=3",
-	} // mem=1008M memmap=16M$1008M
-	if flag.Arg(0) != "" {
-		cmdline = append(cmdline, "export="+flag.Arg(0))
+	if _, ok := opts["net_device"]; !ok {
+		opts["net_device"] = map[string]any{
+			"type": "virtio",
+		}
 	}
-	opts := map[string]any{
-		"memory_size":     1024 * 1024 * 1024, // 1GB,
-		"vga_memory_size": 8 * 1024 * 1024,    // 8MB
-		"cmdline":         strings.Join(cmdline, " "),
-		"autostart":       true,
-		"wasm_path":       wasmURL,
-		"filesystem": map[string]any{
+	if _, ok := opts["filesystem"]; !ok {
+		opts["filesystem"] = map[string]any{
 			"handle9p": p9handler,
-		},
+		}
+	}
+
+	for k, v := range map[string]any{
+		"autostart":                      true,
+		"wasm_path":                      wasmURL,
 		"bios":                           bufObj(v86bios),
 		"vga_bios":                       bufObj(v86vgabios),
 		"bzimage":                        bufObj(bzImage),
@@ -146,9 +140,8 @@ func main() {
 		"disable_mouse":                  true,
 		"disable_keyboard":               false,
 		"virtio_console":                 true,
-		"net_device": map[string]any{
-			"type": "virtio",
-		},
+	} {
+		opts[k] = v
 	}
 
 	vm := jsmod.Get("V86").New(opts)
