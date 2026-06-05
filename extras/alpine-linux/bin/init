@@ -17,4 +17,8 @@ if [ -n "$export" ]; then
     unset export
 fi
 
+if [ -f /boot/rc ]; then
+    . /boot/rc
+fi
+
 exec setsid -c $SHELL -i <>/dev/hvc0 >&0 2>&1
