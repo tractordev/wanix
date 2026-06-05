@@ -229,6 +229,11 @@ func main() {
 					if err := fs.WriteFile(task.NS(), dst, buf, mode); err != nil {
 						log.Fatalf("error writing file %s: %v", dst, err)
 					}
+					// TODO: FIX this, why do we have to chmod here? we set mode in writefile!
+					if err := fs.Chmod(task.NS(), dst, mode); err != nil {
+						log.Println("error chmodding fetch", err)
+						return
+					}
 				case typ == "ns":
 					// jsutil.Log("binding ns", src, dst, task.ID())
 					if err := task.Bind(src, dst); err != nil {
