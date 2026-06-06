@@ -5,7 +5,7 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
 
 - **Everything is a file.** Processes, terminals, VMs, browser APIs, and storage are exposed through a unified namespace you compose with binds — the same Plan 9 idea, in the browser.
 - **Composable environments.** Layer tar archives, fetch remote files, write inline scripts, and union directories to build exactly the filesystem your app needs.
-- **Multiple runtimes, one model.** Run Go/TinyGo (`gojs`), WASI Wasm, JavaScript workers, and x86 Linux (via v86) as tasks in the same namespace.
+- **Pluggable compute.** Run Go/TinyGo (`gojs`), WASI Wasm, JavaScript workers, and x86 Linux (via v86) as tasks in the same namespace.
 - **Isolation by design.** Each task gets its own namespace. VMs get guest namespaces. Import remote systems over 9P without sharing your whole page.
 - **Browser-native integration.** OPFS persistence, DOM control, web workers, service workers, and fetch are first-class via the `#web` namespace.
 - **No backend required.** The runtime (`wanix.min.js` + `wanix.wasm`) runs entirely client-side. Host static assets on any CDN.
@@ -13,7 +13,7 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
 
 ## Use Cases
 
-- **In-browser dev environments**: mount a rootfs, open a workbench, and edit/run code without a remote container.
+- **In-browser dev environments**: edit/run code without a remote container.
 - **Interactive demos and tutorials**: embed reproducible sandboxes in docs, blog posts, and courseware.
 - **Local-first apps**: persist user data in OPFS, run logic in workers, and build your own platform.
 - **Agent sandboxes**: utilize browser sandboxing to isolate an agent environment you construct.
@@ -26,7 +26,7 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
 <html>
 <head>
   <script type="module"
-    src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-alpha/dist/wanix.min.js">
+    src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-rc1/dist/wanix.min.js">
   </script>
 </head>
 <body style="height: 100vh; margin: 0;">
@@ -39,8 +39,8 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
       echo "Hello from Wanix!"
     </wanix-bind>
     <!-- bind wasm executable from url -->
-    <wanix-bind type="fetch" dst="rc.wasm"
-      src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-alpha/dist/rc.wasm">
+    <wanix-bind type="file" dst="rc.wasm"
+      src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm">
     </wanix-bind>
     <!-- declare a task that will autostart -->
     <wanix-task id="shell" type="gojs" cmd="rc.wasm -c hello.sh" term start></wanix-task>
@@ -99,7 +99,7 @@ Mount a source into the namespace at `dst`.
 | `mode` | File mode for `file` binds. Default: `0644`. |
 | `union` | Union mode when binding to an existing directory. Default: `after`. |
 
-**Bind types**
+#### Bind types
 
 | Type | Behavior |
 |------|----------|
@@ -129,7 +129,7 @@ a task driver. Tasks run in their own namespace, by default inheriting the curre
 
 Terminal path after allocation: `#task/<id>/term` (or `#task/<rid>/term` without alias).
 
-**Task drivers**
+#### Task drivers
 
 | Type | Behavior |
 |------|----------|
@@ -403,6 +403,7 @@ Build from source and run the examples:
 ```sh
 make build          # build runtime + wanix CLI
 make examples       # serve examples at http://localhost:7070/examples
+make                # show all make tasks
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full build guide.
