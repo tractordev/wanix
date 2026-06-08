@@ -102,6 +102,7 @@ if (typeof window !== "undefined") {
 }
 
 function spaceToNewline(input) {
+    if (!input) return null;
     const tokens = [];
     let current = '';
     let inQuotes = false;
