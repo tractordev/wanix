@@ -15,7 +15,7 @@
                 globalThis.onmessage = (e) => {if (e.data.worker) r(e.data.worker)};
             });
             console.log("Task started:", worker);
-        </wanix-file>
+        </wanix-bind>
 
         <!-- run the script -->
         <wanix-task cmd="myscript.js" start></wanix-task>
