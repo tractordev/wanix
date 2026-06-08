@@ -414,6 +414,12 @@ We'd love your contributions! Take a look at our [issues](https://github.com/tra
 
 Be sure to read our [CONTRIBUTING.md](CONTRIBUTING.md) doc to get started.
 
+## AI Disclosure
+
+There are components of Wanix that have been written with AI assistance. 
+However, we will not accept "vibe coded" PRs, which is to say a human needs to 
+know how the PR works and be responsible for it.
+
 ## Older Demos
 
 * [📺 2025 Wanix 0.3 Preview Demo](https://www.youtube.com/watch?v=kGBeT8lwbo0)
