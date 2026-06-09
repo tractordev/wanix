@@ -9,7 +9,8 @@
     
     <!-- a wanix system is an empty root task/namespace -->
     <wanix-system wasm="../dist/wanix.wasm" debug>
-        
+        <wanix-bind dst="." src="#ramfs"></wanix-bind>
+
         <!-- the default bind type is "ns" if not specified -->
         <wanix-bind dst="task" src="#task"></wanix-bind>
 
@@ -22,7 +23,7 @@
         </wanix-bind>
 
         <!-- the "fetch" type fetches a URL and writes it to the destination -->
-        <wanix-bind type="fetch" dst="myfile.txt" src="https://example.com/myfile.txt"></wanix-bind>
+        <wanix-bind type="fetch" dst="myfile.txt" src="../extras/dist/rc.wasm"></wanix-bind>
 
         <!-- the "archive" type fetches an archive and mounts it as a directory -->
         <wanix-bind type="archive" dst="root" src="../extras/dist/wanix-linux.tgz"></wanix-bind>
