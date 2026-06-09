@@ -19,7 +19,7 @@ DIST_DIR		?= dist
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
 
-EXAMPLE_DEPS 	:= dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist test/gojs/gojscheck.wasm
+EXAMPLE_DEPS 	:= dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist/wanix-linux.tgz test/gojs/gojscheck.wasm
 
 export DOCKER_CMD 	?= $(shell command -v docker)
 
@@ -143,7 +143,7 @@ $(DIST_DIR)/wanix.wasm:
 workbench/code:
 	make -C workbench
 
-extras/dist:
+extras/dist/wanix-linux.tgz:
 	make -C extras
 
 
