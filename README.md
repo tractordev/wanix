@@ -398,13 +398,14 @@ See all [examples](examples).
 
 ## Local Development
 
-Build from source and run the examples:
-
 ```sh
 make build          # build runtime + wanix CLI
 make examples       # serve examples at http://localhost:7070/examples
 make                # show all make tasks
 ```
+
+Using `make examples` will build extras the first time, and will need
+Docker running to succeed.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full build guide.
 
