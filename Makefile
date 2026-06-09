@@ -19,6 +19,8 @@ DIST_DIR		?= dist
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
 
+EXAMPLE_DEPS 	:= dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist test/gojs/gojscheck.wasm
+
 export DOCKER_CMD 	?= $(shell command -v docker)
 
 ## Link/install the local Wanix command
@@ -32,7 +34,7 @@ all: js wasm cmd
 .PHONY: all
 
 ## Build and run examples
-examples: dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist
+examples: $(EXAMPLE_DEPS)
 	@for dir in $(shell find examples -type f -iname '[mM]akefile' -exec dirname {} \;); do \
 		$(MAKE) -C $$dir; \
 	done
@@ -40,7 +42,7 @@ examples: dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist
 .PHONY: examples
 
 ## Run tests against examples
-test: dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist
+test: $(EXAMPLE_DEPS)
 	go test -v ./test
 .PHONY: test
 
@@ -125,6 +127,9 @@ node_modules:
 
 wasi/worker/lib.js:
 	make js
+
+test/gojs/gojscheck.wasm:
+	make -C test/gojs
 
 $(DIST_DIR)/wanix.min.js:
 	make js
