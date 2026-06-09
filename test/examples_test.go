@@ -82,7 +82,7 @@ func TestExamplesHTML(t *testing.T) {
 			// t.Parallel()
 			url := fmt.Sprintf("%s/%s", baseURL, strings.ReplaceAll(filename, `\`, `/`))
 			fmt.Println(url)
-			cmd := exec.Command("go", "run", "main.go", url)
+			cmd := exec.Command("go", "run", ".", url)
 			cmd.Dir = "./test/wtest"
 			cmd.Env = append(os.Environ(), "GOWORK=off")
 			out, err := cmd.CombinedOutput()

@@ -3,12 +3,14 @@
 // Usage: wtest [flags] <url>
 //
 // Flags:
-//   -timeout   Set the max time to load the page (default 30s; accepts "15s", "1m", etc).
-//   -v         Print JavaScript exceptions and page errors to stderr (default false).
-//   -wait-load Wait for networkIdle event before exiting (default true).
+//   -timeout    Set the max time to load the page (default 30s; accepts "15s", "1m", etc).
+//   -v          Print JavaScript exceptions and page errors to stderr (default false).
+//   -wait-load  Wait for networkIdle event before exiting (default true).
+//   -debug-port Remote debugging port for Chrome reuse (default 9222).
 //
 // Pass the URL of the web page to test (e.g., some local development server or test server).
-// wtest launches headless Chrome, navigates to the page, and fails (exit code 1) if any JS exception is thrown.
+// wtest attaches to an existing Chrome with remote debugging enabled on -debug-port, or starts
+// a detached headless Chrome if none is running. The browser is left running for reuse.
 //
 // Intended to be run as part of automated Go tests, to validate example HTML apps.
 
@@ -32,6 +34,7 @@ func main() {
 	timeout := flag.Duration("timeout", 30*time.Second, "page load timeout (e.g. 15s, 1m)")
 	verbose := flag.Bool("v", false, "print exceptions and page errors to stderr")
 	waitLoad := flag.Bool("wait-load", true, "wait for the networkIdle event before exiting")
+	debugPort := flag.Int("debug-port", 9222, "remote debugging port for Chrome reuse")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: wtest [flags] <url>\n\nFlags:\n")
 		flag.PrintDefaults()
@@ -48,12 +51,23 @@ func main() {
 		url = "https://" + url
 	}
 
-	// ── launch headless Chrome ────────────────────────────────────────────────
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("no-sandbox", ""),
-		chromedp.Flag("disable-gpu", ""),
-	)
-	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	// ── attach to or start Chrome ─────────────────────────────────────────────
+	bootCtx, bootCancel := context.WithTimeout(context.Background(), chromeStartTimeout)
+	endpoint, started, err := ensureChrome(bootCtx, *debugPort)
+	bootCancel()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "chrome error: %v\n", err)
+		os.Exit(1)
+	}
+	if *verbose {
+		if started {
+			fmt.Fprintf(os.Stderr, "started chrome on %s\n", endpoint)
+		} else {
+			fmt.Fprintf(os.Stderr, "reusing chrome on %s\n", endpoint)
+		}
+	}
+
+	allocCtx, allocCancel := chromedp.NewRemoteAllocator(context.Background(), endpoint)
 	defer allocCancel()
 
 	ctx, cancel := chromedp.NewContext(allocCtx)
