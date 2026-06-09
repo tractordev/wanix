@@ -39,6 +39,11 @@ examples: dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist
 	go run ./examples/serve.go
 .PHONY: examples
 
+## Run tests against examples
+test: dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist
+	go test -v ./test
+.PHONY: test
+
 ## Build Wanix (command and runtime) using Docker
 build-docker:
 	mkdir -p $(DIST_DIR)
