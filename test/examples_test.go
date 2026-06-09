@@ -3,6 +3,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -37,7 +38,7 @@ func TestExamplesHTML(t *testing.T) {
 		close(ready)
 		fmt.Printf("Serving on %s\n", baseURL)
 		if err := srv.Serve(l); err != http.ErrServerClosed {
-			t.Fatalf("Failed to start server: %v", err)
+			log.Fatalf("Failed to start server: %v", err)
 		}
 		fmt.Println("Server stopped")
 	}()

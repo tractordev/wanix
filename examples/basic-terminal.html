@@ -5,7 +5,7 @@
 <body style="height: 100vh; margin: 0;">
 
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system wasm="../dist/wanix.wasm" debug>
+    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
 
         <!-- this test program outputs args, env, wd, and files at root -->
         <wanix-bind type="fetch" dst="gojs.wasm" src="../test/gojs/gojscheck.wasm"></wanix-bind>
