@@ -9,6 +9,8 @@
     
     <!-- a wanix system is an empty root task/namespace -->
     <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
+        <wanix-bind dst="." src="#ramfs"></wanix-bind>
+
         <!-- bind the task, term, and web namespaces to the system -->
         <wanix-bind dst="task" src="#task"></wanix-bind>
         <wanix-bind dst="term" src="#term"></wanix-bind>
