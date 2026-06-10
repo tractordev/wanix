@@ -405,7 +405,7 @@ make                # show all make tasks
 ```
 
 Using `make examples` will build extras the first time, and will need
-Docker running to succeed.
+Docker running to succeed. Podman users will need to set `DOCKER_CMD=podman`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full build guide.
 
