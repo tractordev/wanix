@@ -28,6 +28,7 @@ export class BindElement extends HTMLElement {
         case "fetch": // deprecated, use "file" instead
         case "file":
             if (this.src) {
+                console.log("data fetch", this.src, this.dst);
                 this.data = new Promise((resolve, reject) => {
                     fetch(this.src).then(resp => {
                         if (!resp.ok) {

@@ -196,6 +196,7 @@ func main() {
 						return
 					}
 				case typ == "fetch" || (typ == "file" && src != ""):
+					log.Println("data read", src, dst, binding.Get("data").IsUndefined())
 					v, err := jsutil.AwaitErr(binding.Get("data"))
 					if err != nil {
 						log.Println("error fetching", err)
