@@ -1,12 +1,20 @@
 # Wanix
 [![Discord](https://img.shields.io/discord/415940907729420288?label=Discord)](https://discord.gg/nQbgRjEBU4) ![GitHub Sponsors](https://img.shields.io/github/sponsors/progrium?label=Sponsors)
 
-Wanix is an embeddable runtime that brings a Unix-like environment to the browser. Declare a `<wanix-system>`, bind files and archives into a namespace, run Wasm and JavaScript tasks, boot Linux in an x86 emulator, and wire up terminals and a VS Code workbench — all from HTML.
+Wanix is an embeddable runtime that brings a Unix-like environment to the browser. Declare a `<wanix-system>`, bind files and archives into a namespace, run Wasm and JavaScript tasks, boot Linux in an x86 emulator, and wire up terminals and a VS Code workbench, all from HTML.
 
-- **Everything is a file.** Processes, terminals, VMs, browser APIs, and storage are exposed through a unified namespace you compose with binds — the same Plan 9 idea, in the browser.
+```html
+<wanix-system>
+  <wanix-bind type="file" dst="helloworld.wasm" src="./helloworld.wasm"></wanix-bind>
+  <wanix-task cmd="helloworld.wasm" term start></wanix-task>
+  <wanix-term path="#task/1/term"></wanix-term>
+</wanix-system>
+```
+
+- **Everything is a file.** Processes, terminals, VMs, browser APIs, and storage are exposed through a unified namespace you compose with binds. The same idea as Plan 9, with improvements, in the browser.
 - **Composable environments.** Layer tar archives, fetch remote files, write inline scripts, and union directories to build exactly the filesystem your app needs.
 - **Pluggable compute.** Run Go/TinyGo (`gojs`), WASI Wasm, JavaScript workers, and x86 Linux (via v86) as tasks in the same namespace.
-- **Isolation by design.** Each task gets its own namespace. VMs get guest namespaces. Import remote systems over 9P without sharing your whole page.
+- **Isolation by design.** Each task gets its own namespace. VMs export a guest namespace. Import remote namespaces over 9P.
 - **Browser-native integration.** OPFS persistence, DOM control, web workers, service workers, and fetch are first-class via the `#web` namespace.
 - **No backend required.** The runtime (`wanix.min.js` + `wanix.wasm`) runs entirely client-side. Host static assets on any CDN.
 - **Progressive complexity.** Start with a single Wasm binary and terminal. Add Linux VMs, a full IDE workbench, or cross-origin federation when you need them.
@@ -158,12 +166,12 @@ Allocate and run a virtual machine.
 Using `<wanix-vm>` requires a VM backend to be loaded using bind to `#vm/<type>`:
 
 ```html
-<wanix-bind dst="#vm/v86" type="archive" src="…/v86.tgz"></wanix-bind>
+<wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/v86.tgz"></wanix-bind>
 ```
 
 ### `<wanix-term>`
 
-Render an xterm.js terminal connected to a Wanix terminal device.
+Render an [xterm.js](https://xtermjs.org/) terminal connected to a Wanix terminal device.
 
 | Attribute | Description |
 |-----------|-------------|
