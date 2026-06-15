@@ -42,7 +42,7 @@ examples: $(EXAMPLE_DEPS)
 .PHONY: examples
 
 ## Run tests against examples
-test: $(EXAMPLE_DEPS)
+smoketest: $(EXAMPLE_DEPS)
 	go test -v -count=1 ./test
 .PHONY: test
 
