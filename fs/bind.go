@@ -1,18 +1,47 @@
 package fs
 
-// BindMode controls the order of bindings at a destination path.
-type BindMode int
+import "strings"
+
+// BindOption is a bind modifier. Tags without "=" are keys with an empty value;
+// "key=value" sets both key and value in the parsed options map.
+type BindOption string
 
 const (
-	ModeReplace BindMode = 0
-	ModeAfter   BindMode = 1
-	ModeBefore  BindMode = -1
+	BindReplace BindOption = "replace"
+	BindAfter   BindOption = "after"
+	BindBefore  BindOption = "before"
 )
+
+// ParseBindOptions parses bind options into a map. Options without "=" are
+// tags (key with empty value). Later options overwrite earlier keys.
+func ParseBindOptions(opts ...BindOption) map[string]string {
+	m := make(map[string]string, len(opts))
+	for _, o := range opts {
+		s := string(o)
+		if k, v, ok := strings.Cut(s, "="); ok {
+			m[k] = v
+		} else {
+			m[s] = ""
+		}
+	}
+	return m
+}
+
+// BindPlacement returns the first after/before/replace option in opts, or BindAfter.
+func BindPlacement(opts ...BindOption) BindOption {
+	for _, o := range opts {
+		switch o {
+		case BindAfter, BindBefore, BindReplace:
+			return o
+		}
+	}
+	return BindAfter
+}
 
 // BindFS is implemented by filesystems that support Plan9-style bind operations.
 type BindFS interface {
 	FS
-	Bind(src FS, srcPath, dstPath string, mode ...BindMode) error
+	Bind(src FS, srcPath, dstPath string, opts ...BindOption) error
 }
 
 // UnbindFS is implemented by filesystems that support removing bindings.
@@ -22,9 +51,9 @@ type UnbindFS interface {
 }
 
 // Bind adds a file or directory binding if supported.
-func Bind(fsys FS, src FS, srcPath, dstPath string, mode ...BindMode) error {
+func Bind(fsys FS, src FS, srcPath, dstPath string, opts ...BindOption) error {
 	if b, ok := fsys.(BindFS); ok {
-		return b.Bind(src, srcPath, dstPath, mode...)
+		return b.Bind(src, srcPath, dstPath, opts...)
 	}
 	return opErr(fsys, dstPath, "bind", ErrNotSupported)
 }

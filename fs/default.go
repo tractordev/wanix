@@ -144,8 +144,8 @@ func (f *DefaultFS) Watch(ctx context.Context, name string, exclude ...string) (
 	return Watch(f.FS, ctx, name, exclude...)
 }
 
-func (f *DefaultFS) Bind(src FS, srcPath, dstPath string, mode ...BindMode) error {
-	return Bind(f.FS, src, srcPath, dstPath, mode...)
+func (f *DefaultFS) Bind(src FS, srcPath, dstPath string, opts ...BindOption) error {
+	return Bind(f.FS, src, srcPath, dstPath, opts...)
 }
 
 func (f *DefaultFS) Unbind(src FS, srcPath, dstPath string) error {

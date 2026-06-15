@@ -13,13 +13,12 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 )
 
-// BindMode is an alias for fs.BindMode.
-type BindMode = fs.BindMode
+type BindOption = fs.BindOption
 
 const (
-	ModeAfter   = fs.ModeAfter
-	ModeReplace = fs.ModeReplace
-	ModeBefore  = fs.ModeBefore
+	BindAfter   = fs.BindAfter
+	BindReplace = fs.BindReplace
+	BindBefore  = fs.BindBefore
 )
 
 // BindAllocator is an interface that can be implemented by a filesystem
@@ -80,11 +79,10 @@ func (ns *NS) Unbind(src fs.FS, srcPath, dstPath string) error {
 }
 
 // Bind adds a file or directory to the namespace.
-// If specified, mode controls the order of the bindings.
-// Only the first mode is used. If not specified, ModeAfter is used.
-func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, mode ...BindMode) error {
+// Only the first placement option is used. Default is BindAfter.
+func (ns *NS) Bind(src fs.FS, srcPath, dstPath string, opts ...BindOption) error {
 	ctx := fs.WithOrigin(fs.ContextFor(ns), ns, dstPath, "bind")
-	return ns.table.Bind(ctx, src, srcPath, dstPath, mode...)
+	return ns.table.Bind(ctx, src, srcPath, dstPath, opts...)
 }
 
 // Binds returns all fileinfo for bindings in a directory

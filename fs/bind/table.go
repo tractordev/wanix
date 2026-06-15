@@ -18,9 +18,10 @@ import (
 
 // Entry represents a reference to a name in a specific filesystem.
 type Entry struct {
-	FS   fs.FS
-	Path string
-	Info fs.FileInfo
+	FS      fs.FS
+	Path    string
+	Info    fs.FileInfo
+	Options map[string]string
 }
 
 // FileInfo returns file info for the binding with the given display name.
@@ -198,8 +199,8 @@ func (t *Table) Unbind(ctx context.Context, src fs.FS, srcPath, dstPath string) 
 }
 
 // Bind adds a file or directory to the table.
-// Only the first mode is used. If not specified, fs.ModeAfter is used.
-func (t *Table) Bind(ctx context.Context, src fs.FS, srcPath, dstPath string, mode ...fs.BindMode) error {
+// Placement defaults to fs.BindAfter. Only the first placement option is used.
+func (t *Table) Bind(ctx context.Context, src fs.FS, srcPath, dstPath string, opts ...fs.BindOption) error {
 	if src == nil {
 		return &fs.PathError{Op: "bind", Path: srcPath, Err: fs.ErrInvalid}
 	}
@@ -235,25 +236,22 @@ func (t *Table) Bind(ctx context.Context, src fs.FS, srcPath, dstPath string, mo
 	}
 	file.Close()
 
-	ref := Entry{FS: rfsys, Path: rname, Info: fi}
+	ref := Entry{
+		FS:      rfsys,
+		Path:    rname,
+		Info:    fi,
+		Options: fs.ParseBindOptions(opts...),
+	}
 
-	var m fs.BindMode
-	if len(mode) == 0 {
-		m = fs.ModeAfter
-	} else {
-		m = mode[0]
-	}
-	if m != fs.ModeAfter && m != fs.ModeBefore && m != fs.ModeReplace {
-		return &fs.PathError{Op: "bind", Path: dstPath, Err: fs.ErrInvalid}
-	}
+	placement := fs.BindPlacement(opts...)
 
 	t.mutate(func(b map[string][]Entry) {
-		switch m {
-		case fs.ModeAfter:
+		switch placement {
+		case fs.BindAfter:
 			b[dstPath] = append([]Entry{ref}, b[dstPath]...)
-		case fs.ModeBefore:
+		case fs.BindBefore:
 			b[dstPath] = append(b[dstPath], ref)
-		case fs.ModeReplace:
+		case fs.BindReplace:
 			b[dstPath] = []Entry{ref}
 		}
 	})
