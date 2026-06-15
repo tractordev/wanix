@@ -44,8 +44,8 @@ func Activate(ch js.Value, root *wanix.Task) *Service {
 	return d
 }
 
-func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
-	fsys := fskit.MapFS{
+func (d *Service) rootFS() fskit.MapFS {
+	return fskit.MapFS{
 		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the active service worker",
@@ -66,7 +66,10 @@ func (d *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 		// "err": internal.FieldFile(r.state, nil),
 		// "fsys": internal.FieldFile(r.fs, nil),
 	}
-	return fs.Resolve(fsys, ctx, name)
+}
+
+func (d *Service) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	return d.rootFS().Route(ctx, name)
 }
 
 func (d *Service) Open(name string) (fs.File, error) {
@@ -74,11 +77,7 @@ func (d *Service) Open(name string) (fs.File, error) {
 }
 
 func (d *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := d.ResolveFS(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return fs.OpenContext(ctx, fsys, rname)
+	return fs.OpenContext(ctx, d.rootFS(), name)
 }
 
 func (d *Service) handleMessage(this js.Value, args []js.Value) interface{} {

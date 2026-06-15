@@ -76,14 +76,10 @@ func (c *Conn) Open(name string) (fs.File, error) {
 }
 
 func (c *Conn) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := c.ResolveFS(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return fs.OpenContext(ctx, fsys, rname)
+	return fs.OpenContext(ctx, c.rootFS(), name)
 }
 
-func (c *Conn) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (c *Conn) rootFS() fskit.MapFS {
 	fsys := fskit.MapFS{
 		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
@@ -154,7 +150,11 @@ func (c *Conn) ResolveFS(ctx context.Context, name string) (fs.FS, string, error
 		})
 	}
 
-	return fs.Resolve(fsys, ctx, name)
+	return fsys
+}
+
+func (c *Conn) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	return c.rootFS().Route(ctx, name)
 }
 
 func isUnixPathAddr(addr string) bool {

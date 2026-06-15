@@ -29,11 +29,7 @@ func (s *Service) Open(name string) (fs.File, error) {
 }
 
 func (s *Service) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := s.ResolveFS(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return fs.OpenContext(ctx, fsys, rname)
+	return fs.OpenContext(ctx, s.rootFS(), name)
 }
 
 func (s *Service) Stat(name string) (fs.FileInfo, error) {
@@ -41,14 +37,10 @@ func (s *Service) Stat(name string) (fs.FileInfo, error) {
 }
 
 func (s *Service) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
-	fsys, rname, err := s.ResolveFS(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return fs.StatContext(ctx, fsys, rname)
+	return fs.StatContext(ctx, s.rootFS(), name)
 }
 
-func (s *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (s *Service) rootFS() fskit.UnionFS {
 	root := fskit.MapFS{
 		"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			if name != "." {
@@ -72,7 +64,11 @@ func (s *Service) ResolveFS(ctx context.Context, name string) (fs.FS, string, er
 			}, nil
 		}),
 	}
-	return fs.Resolve(fskit.UnionFS{root, fskit.MapFS(s.resources)}, ctx, name)
+	return fskit.UnionFS{root, fskit.MapFS(s.resources)}
+}
+
+func (s *Service) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	return s.rootFS().Route(ctx, name)
 }
 
 func (s *Service) Get(rid string) (*Conn, error) {

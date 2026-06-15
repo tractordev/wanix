@@ -234,7 +234,7 @@ func (r *Task) Open(name string) (fs.File, error) {
 	return r.OpenContext(context.Background(), name)
 }
 
-func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (r *Task) taskMap() fskit.MapFS {
 	m := fskit.MapFS{
 		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
@@ -311,15 +311,15 @@ func (r *Task) ResolveFS(ctx context.Context, name string) (fs.FS, string, error
 	if r.export != nil {
 		m["export"] = r.export
 	}
-	return fs.Resolve(m, ctx, name)
+	return m
+}
+
+func (r *Task) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	return r.taskMap().Route(ctx, name)
 }
 
 func (r *Task) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := r.ResolveFS(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return fs.OpenContext(ctx, fsys, rname)
+	return fs.OpenContext(ctx, r.taskMap(), name)
 }
 
 type TaskFS struct {
@@ -397,7 +397,7 @@ func (d *TaskFS) Alloc(kind string, parent *Task) (*Task, error) {
 	return p, nil
 }
 
-func (d *TaskFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (d *TaskFS) vfsNS(ctx context.Context) (*vfs.NS, error) {
 	m := fskit.MapFS{
 		"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 			if name == "." {
@@ -429,23 +429,31 @@ func (d *TaskFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, err
 	}
 	fsys := vfs.New(ctx)
 	if err := fsys.Bind(fskit.MapFS(d.aliases), ".", "."); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if err := fsys.Bind(fskit.MapFS(d.resources), ".", "."); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if err := fsys.Bind(m, ".", "."); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	t, ok := FromContext(ctx)
 	if ok {
 		if _, exists := d.resources[t.ID()]; exists {
 			if err := fsys.Bind(d.resources[t.ID()], ".", "self"); err != nil {
-				return nil, "", err
+				return nil, err
 			}
 		}
 	}
-	return fs.Resolve(fsys, ctx, name)
+	return fsys, nil
+}
+
+func (d *TaskFS) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	ns, err := d.vfsNS(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return ns.Route(ctx, name)
 }
 
 func (d *TaskFS) Stat(name string) (fs.FileInfo, error) {
@@ -454,11 +462,11 @@ func (d *TaskFS) Stat(name string) (fs.FileInfo, error) {
 }
 
 func (d *TaskFS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
-	fsys, rname, err := d.ResolveFS(ctx, name)
+	ns, err := d.vfsNS(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return fs.StatContext(ctx, fsys, rname)
+	return fs.StatContext(ctx, ns, name)
 }
 
 func (d *TaskFS) Open(name string) (fs.File, error) {
@@ -467,9 +475,9 @@ func (d *TaskFS) Open(name string) (fs.File, error) {
 }
 
 func (d *TaskFS) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := d.ResolveFS(ctx, name)
+	ns, err := d.vfsNS(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return fs.OpenContext(ctx, fsys, rname)
+	return fs.OpenContext(ctx, ns, name)
 }

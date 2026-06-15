@@ -24,16 +24,16 @@ type consoleFS struct {
 }
 
 var (
-	_ fs.ResolveFS     = (*consoleFS)(nil)
+	_ fs.RouteFS     = (*consoleFS)(nil)
 	_ fs.OpenFileFS    = (*consoleFS)(nil)
 	_ fs.OpenContextFS = (*consoleFS)(nil)
 )
 
-func (c *consoleFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (c *consoleFS) Route(ctx context.Context, name string) (fs.FS, string, error) {
 	if name == "." {
 		return c, ".", nil
 	}
-	return nil, "", &fs.PathError{Op: "resolve", Path: name, Err: fs.ErrNotExist}
+	return nil, "", &fs.PathError{Op: "route", Path: name, Err: fs.ErrNotExist}
 }
 
 func (c *consoleFS) Open(name string) (iofs.File, error) {

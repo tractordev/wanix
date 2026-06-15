@@ -71,7 +71,7 @@ func TestMapFSFileInfoName(t *testing.T) {
 	}
 }
 
-func TestMapFSResolveFS(t *testing.T) {
+func TestMapFSRoute(t *testing.T) {
 	subdirFS := MapFS{
 		"hello": RawNode([]byte("hello, world\n")),
 	}
@@ -83,6 +83,32 @@ func TestMapFSResolveFS(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, subdirFS) {
-		t.Fatal("Sub(dir) is not subdirFS")
+		t.Fatal("Resolve(dir/hello) is not subdirFS")
+	}
+}
+
+type routeCounter struct {
+	MapFS
+	calls int
+}
+
+func (m *routeCounter) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	m.calls++
+	return m.MapFS.Route(ctx, name)
+}
+
+func TestMapFS_singleHop(t *testing.T) {
+	inner := &routeCounter{MapFS: MapFS{
+		"hello": RawNode([]byte("hello")),
+	}}
+	root := MapFS{"dir": inner}
+
+	inner.calls = 0
+	_, _, err := fs.Resolve(root, context.Background(), "dir/hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inner.calls != 1 {
+		t.Fatalf("MapFS recursed into child: %d Route calls, want 1", inner.calls)
 	}
 }

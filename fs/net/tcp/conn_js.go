@@ -23,7 +23,7 @@ func (c *Conn) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	return nil, fs.ErrNotSupported
 }
 
-func (c *Conn) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (c *Conn) Route(ctx context.Context, name string) (fs.FS, string, error) {
 	return nil, name, fs.ErrNotSupported
 }
 

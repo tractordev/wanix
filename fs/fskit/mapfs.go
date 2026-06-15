@@ -11,30 +11,40 @@ import (
 
 type MapFS map[string]fs.FS
 
-var _ fs.FS = MapFS(nil)
+var (
+	_ fs.FS      = MapFS(nil)
+	_ fs.RouteFS = MapFS(nil)
+)
 
-func (fsys MapFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
-	subfs, found := fsys[name]
-	if found {
-		if rfsys, ok := subfs.(fs.ResolveFS); ok {
-			return rfsys.ResolveFS(ctx, ".")
-		}
-		return fsys, name, nil
+func (fsys MapFS) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	if !fs.ValidPath(name) {
+		return nil, "", &fs.PathError{Op: "route", Path: name, Err: fs.ErrNotExist}
 	}
 
-	// check subpaths of map dirs
+	if sub, ok := fsys[name]; ok {
+		if _, isNode := sub.(*Node); isNode {
+			return fsys, name, nil
+		}
+		return sub, ".", nil
+	}
+
 	var keys []string
-	for p := range fsys {
-		keys = append(keys, p)
+	for k := range fsys {
+		if k != "." {
+			keys = append(keys, k)
+		}
 	}
 	for _, key := range MatchPaths(keys, name) {
-		relativePath := strings.Trim(strings.TrimPrefix(name, key), "/")
-		if rfsys, ok := fsys[key].(fs.ResolveFS); ok {
-			return rfsys.ResolveFS(ctx, relativePath)
-		} else {
-			// otherwise, we just resolve to first match
-			return fsys[key], relativePath, nil
+		rest := strings.TrimPrefix(name, key)
+		rest = strings.TrimPrefix(rest, "/")
+		return fsys[key], rest, nil
+	}
+
+	if sub, ok := fsys["."]; ok && name == "." {
+		if _, isNode := sub.(*Node); isNode {
+			return fsys, name, nil
 		}
+		return sub, ".", nil
 	}
 
 	return fsys, name, nil
@@ -89,6 +99,22 @@ func (fsys MapFS) OpenContext(ctx context.Context, name string) (fs.File, error)
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
 
+	loc, err := fs.Walk(ctx, fsys, name)
+	if err != nil {
+		return nil, err
+	}
+	if !fs.Equal(loc.FS, fsys) {
+		target := loc.FS
+		rel := loc.Rel
+		if rel == "." && name != "." {
+			target = NamedFS(loc.FS, path.Base(name))
+		}
+		return fs.OpenContext(ctx, target, rel)
+	}
+	return fsys.openSynthetic(ctx, loc.Rel)
+}
+
+func (fsys MapFS) openSynthetic(ctx context.Context, name string) (fs.File, error) {
 	subfs, found := fsys[name]
 	n, isNode := subfs.(*Node)
 	if found && !isNode {
@@ -102,15 +128,6 @@ func (fsys MapFS) OpenContext(ctx context.Context, name string) (fs.File, error)
 			return fs.OpenContext(ctx, subfs, ".")
 		}
 		// otherwise its a directory entry...
-	}
-
-	for p, subfs := range fsys {
-		if strings.HasPrefix(name, p+"/") {
-			subPath := strings.TrimPrefix(name, p+"/")
-			mountPath := strings.TrimSuffix(name, "/"+subPath)
-			namedFS := NamedFS(subfs, path.Base(mountPath))
-			return fs.OpenContext(ctx, namedFS, subPath)
-		}
 	}
 
 	// Directory, possibly synthesized.

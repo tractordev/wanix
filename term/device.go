@@ -32,11 +32,7 @@ func (d *Device) Open(name string) (fs.File, error) {
 }
 
 func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := d.ResolveFS(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return fs.OpenContext(ctx, fsys, rname)
+	return fs.OpenContext(ctx, d.rootFS(), name)
 }
 
 func (d *Device) Stat(name string) (fs.FileInfo, error) {
@@ -44,15 +40,11 @@ func (d *Device) Stat(name string) (fs.FileInfo, error) {
 }
 
 func (d *Device) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
-	fsys, rname, err := d.ResolveFS(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return fs.StatContext(ctx, fsys, rname)
+	return fs.StatContext(ctx, d.rootFS(), name)
 }
 
-func (d *Device) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
-	return fs.Resolve(fskit.UnionFS{
+func (d *Device) rootFS() fskit.UnionFS {
+	return fskit.UnionFS{
 		fskit.MapFS{
 			"new": fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 				if name == "." {
@@ -72,7 +64,11 @@ func (d *Device) ResolveFS(ctx context.Context, name string) (fs.FS, string, err
 			}),
 		},
 		fskit.MapFS(d.resources),
-	}, ctx, name)
+	}
+}
+
+func (d *Device) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	return d.rootFS().Route(ctx, name)
 }
 
 func (d *Device) Get(rid string) (*Resource, error) {

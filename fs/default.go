@@ -144,6 +144,14 @@ func (f *DefaultFS) Watch(ctx context.Context, name string, exclude ...string) (
 	return Watch(f.FS, ctx, name, exclude...)
 }
 
+func (f *DefaultFS) Bind(src FS, srcPath, dstPath string, mode ...BindMode) error {
+	return Bind(f.FS, src, srcPath, dstPath, mode...)
+}
+
+func (f *DefaultFS) Unbind(src FS, srcPath, dstPath string) error {
+	return Unbind(f.FS, src, srcPath, dstPath)
+}
+
 // DefaultFile wraps an fs.File and implements extended file interfaces
 // (io.Writer, io.ReaderAt, io.WriterAt, io.Seeker, SyncFile) by delegating
 // to the corresponding package-level functions.

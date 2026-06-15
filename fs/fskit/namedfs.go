@@ -15,6 +15,20 @@ func NamedFS(fsys fs.FS, name string) fs.FS {
 	return &namedFS{FS: fsys, name: name}
 }
 
+func (fsys *namedFS) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	if router, ok := fsys.FS.(fs.RouteFS); ok {
+		next, rest, err := router.Route(ctx, name)
+		if err != nil {
+			return nil, "", err
+		}
+		if fs.Equal(next, fsys.FS) {
+			return fsys, name, nil
+		}
+		return next, rest, nil
+	}
+	return fsys.FS, name, nil
+}
+
 func (fsys *namedFS) Open(name string) (fs.File, error) {
 	return fsys.OpenContext(context.Background(), name)
 }

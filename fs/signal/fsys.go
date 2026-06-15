@@ -21,7 +21,7 @@ type FS struct {
 
 var (
 	_ fs.FS            = (*FS)(nil)
-	_ fs.ResolveFS     = (*FS)(nil)
+	_ fs.RouteFS     = (*FS)(nil)
 	_ fs.OpenFileFS    = (*FS)(nil)
 	_ fs.OpenContextFS = (*FS)(nil)
 )
@@ -38,11 +38,11 @@ func New() (fs.FS, *Broadcaster) {
 	return NewFS(b), b
 }
 
-func (w *FS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (w *FS) Route(ctx context.Context, name string) (fs.FS, string, error) {
 	if name == "." {
 		return w, ".", nil
 	}
-	return nil, "", &fs.PathError{Op: "resolve", Path: name, Err: fs.ErrNotExist}
+	return nil, "", &fs.PathError{Op: "route", Path: name, Err: fs.ErrNotExist}
 }
 
 func (w *FS) Open(name string) (iofs.File, error) {

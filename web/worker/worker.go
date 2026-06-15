@@ -149,15 +149,11 @@ func (r *Resource) Open(name string) (fs.File, error) {
 }
 
 func (r *Resource) OpenContext(ctx context.Context, name string) (fs.File, error) {
-	fsys, rname, err := r.ResolveFS(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return fs.OpenContext(ctx, fsys, rname)
+	return fs.OpenContext(ctx, r.rootFS(), name)
 }
 
-func (r *Resource) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
-	fsys := fskit.MapFS{
+func (r *Resource) rootFS() fskit.MapFS {
+	return fskit.MapFS{
 		"ctl": misc.ControlFile(&cli.Command{
 			Usage: "ctl",
 			Short: "control the worker",
@@ -179,5 +175,8 @@ func (r *Resource) ResolveFS(ctx context.Context, name string) (fs.FS, string, e
 			return nil
 		}),
 	}
-	return fs.Resolve(fsys, ctx, name)
+}
+
+func (r *Resource) Route(ctx context.Context, name string) (fs.FS, string, error) {
+	return r.rootFS().Route(ctx, name)
 }

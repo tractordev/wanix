@@ -63,7 +63,7 @@ func TestNamespace(t *testing.T) {
 	}
 }
 
-func TestResolveFS(t *testing.T) {
+func TestRoute(t *testing.T) {
 	ns := New(context.Background())
 
 	subFS := fskit.MapFS{
@@ -84,38 +84,38 @@ func TestResolveFS(t *testing.T) {
 	ns.Bind(rootFS, ".", ".", ModeAfter)
 	ns.Bind(bindsubFS, ".", "bind", ModeAfter)
 
-	subfs, _, err := ns.ResolveFS(context.Background(), ".")
+	subfs, _, err := ns.Route(context.Background(), ".")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, rootFS) {
-		t.Fatal("ResolveFS(.) is not rootFS")
+		t.Fatal("Route(.) is not rootFS")
 	}
 
-	subfs, _, err = ns.ResolveFS(context.Background(), "bind")
+	subfs, _, err = ns.Route(context.Background(), "bind")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, bindsubFS) {
-		t.Fatal("ResolveFS(bind) is not bindsubFS")
+		t.Fatal("Route(bind) is not bindsubFS")
 	}
 
-	// requires fskit.MapFS to have proper ResolveFS() implementation
+	// requires fskit.MapFS to have proper Route() implementation
 	var rname string
-	subfs, rname, err = ns.ResolveFS(context.Background(), "bind/bindsub/subfile")
+	subfs, rname, err = fs.Resolve(ns, context.Background(), "bind/bindsub/subfile")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, subFS) {
-		t.Fatalf("ResolveFS(bind/bindsub/subfile) is not subFS: %T %s", subfs, rname)
+		t.Fatalf("Resolve(bind/bindsub/subfile) is not subFS: %T %s", subfs, rname)
 	}
 
-	subfs, rname, err = ns.ResolveFS(context.Background(), "rootsub/subdir")
+	subfs, rname, err = fs.Resolve(ns, context.Background(), "rootsub/subdir")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, subFS) {
-		t.Fatalf("ResolveFS(rootsub/subdir) is not subFS: %s %T", rname, subfs)
+		t.Fatalf("Resolve(rootsub/subdir) is not subFS: %s %T", rname, subfs)
 	}
 }
 
@@ -456,14 +456,14 @@ func TestMkdirOnLeaf(t *testing.T) {
 
 	ns.Bind(middlefs, ".", "sub", ModeAfter)
 
-	// first we'll use ResolveFS manually to get the memfs
+	// use Resolve to walk through the bind table to memfs
 
-	subfs, _, err := ns.ResolveFS(context.Background(), "sub/dir/file")
+	subfs, _, err := fs.Resolve(ns, context.Background(), "sub/dir/file")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(subfs, memfs) {
-		t.Fatalf("ResolveFS(sub/dir/file) is not memfs: %T", subfs)
+		t.Fatalf("Resolve(sub/dir/file) is not memfs: %T", subfs)
 	}
 
 	err = fs.Mkdir(subfs, "newdir1", 0755)
@@ -579,9 +579,29 @@ func TestRecursiveUnion(t *testing.T) {
 	ns.Bind(afs, "a", ".", ModeAfter)
 	ns.Bind(bfs, "b", ".", ModeAfter)
 
-	e, _ := fs.ReadDir(ns, "bin")
+	// Recursive union: bin was never bound directly, but both trees have bin/
+	// subdirs, so the listing merges entries from a/bin and b/bin.
+	e, err := fs.ReadDir(ns, "bin")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(e) != 2 {
-		t.Fatal("expected 2 files in bin dir listing")
+		t.Fatalf("expected 2 files in bin dir listing, got %d", len(e))
 	}
 
+	content, err := fs.ReadFile(ns, "bin/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "content1" {
+		t.Fatalf("bin/a: got %q", content)
+	}
+
+	content, err = fs.ReadFile(ns, "bin/b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "content2" {
+		t.Fatalf("bin/b: got %q", content)
+	}
 }

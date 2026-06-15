@@ -38,6 +38,19 @@ type SubdirFS struct {
 	Dir  string
 }
 
+var _ RouteFS = (*SubdirFS)(nil)
+
+func (f *SubdirFS) Route(_ context.Context, name string) (FS, string, error) {
+	if name == "." {
+		return f.Fsys, f.Dir, nil
+	}
+	rest, err := f.fullName("route", name)
+	if err != nil {
+		return nil, "", err
+	}
+	return f.Fsys, rest, nil
+}
+
 // fullName maps name to the fully-qualified name dir/name.
 func (f *SubdirFS) fullName(op string, name string) (string, error) {
 	if !ValidPath(name) {

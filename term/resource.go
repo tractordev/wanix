@@ -7,7 +7,7 @@ import (
 )
 
 // Resource is one terminal instance (paths data, program, winch).
-// MapFS is embedded so ResolveFS reaches the signal FS (for fs.OpenFile with O_WRONLY, etc.).
+// MapFS is embedded so Route reaches the signal FS (for fs.OpenFile with O_WRONLY, etc.).
 type Resource struct {
 	id string
 	fskit.MapFS

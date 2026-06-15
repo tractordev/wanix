@@ -11,6 +11,8 @@ import (
 // read-only union of filesystems
 type UnionFS []fs.FS
 
+var _ fs.RouteFS = UnionFS(nil)
+
 func (f UnionFS) Open(name string) (fs.File, error) {
 	ctx := fs.WithOrigin(context.Background(), f, name, "open")
 	return f.OpenContext(ctx, name)
@@ -21,12 +23,12 @@ func (f UnionFS) OpenContext(ctx context.Context, name string) (fs.File, error) 
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 
-	rfsys, rname, err := f.ResolveFS(ctx, name)
+	loc, err := fs.Walk(ctx, f, name)
 	if err != nil {
 		return nil, err
 	}
-	if rname != name || !fs.Equal(rfsys, f) {
-		return fs.OpenContext(ctx, rfsys, rname)
+	if !fs.Equal(loc.FS, f) {
+		return fs.OpenContext(ctx, loc.FS, loc.Rel)
 	}
 
 	if name != "." {
@@ -39,8 +41,6 @@ func (f UnionFS) OpenContext(ctx context.Context, name string) (fs.File, error) 
 			entries = append(entries, e...)
 		}
 		if len(entries) == 0 {
-			//log.Printf("non-root open: %s (=> %T %s)", name, rfsys, rname)
-			// if non-root open and not resolved, it does not exist
 			return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 		}
 		return DirFile(Entry(name, 0555), entries...), nil
@@ -59,9 +59,9 @@ func (f UnionFS) OpenContext(ctx context.Context, name string) (fs.File, error) 
 	return DirFile(Entry(name, 0555), entries...), nil
 }
 
-func (f UnionFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+func (f UnionFS) Route(ctx context.Context, name string) (fs.FS, string, error) {
 	if len(f) == 0 {
-		return nil, "", &fs.PathError{Op: "resolve", Path: name, Err: fs.ErrNotExist}
+		return nil, "", &fs.PathError{Op: "route", Path: name, Err: fs.ErrNotExist}
 	}
 	if len(f) == 1 {
 		return f[0], name, nil
@@ -72,23 +72,23 @@ func (f UnionFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, err
 
 	var toStat []fs.FS
 	for _, fsys := range f {
-		if resolver, ok := fsys.(fs.ResolveFS); ok {
-			rfsys, rname, err := resolver.ResolveFS(ctx, name)
+		if router, ok := fsys.(fs.RouteFS); ok {
+			next, rest, err := router.Route(ctx, name)
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
 					// certainly does not have name
 					continue
 				}
-				return rfsys, rname, err
+				return nil, "", err
 			}
 			if !fs.IsReadOnly(ctx) {
-				if _, ok := rfsys.(fs.CreateFS); ok {
-					return rfsys, rname, nil
+				if _, ok := next.(fs.CreateFS); ok {
+					return next, rest, nil
 				}
 			}
-			if rname != name || !fs.Equal(rfsys, fsys) {
+			if rest != name || !fs.Equal(next, fsys) {
 				// certainly does have name
-				return rfsys, rname, nil
+				return next, rest, nil
 			}
 		}
 		toStat = append(toStat, fsys)

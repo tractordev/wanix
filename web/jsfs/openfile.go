@@ -14,18 +14,18 @@ import (
 )
 
 var (
-	_ fs.ResolveFS  = (*FS)(nil)
+	_ fs.RouteFS  = (*FS)(nil)
 	_ fs.OpenFileFS = (*FS)(nil)
 	_ fs.CreateFS   = (*FS)(nil)
 )
 
-// ResolveFS maps any valid path onto this rooted FS (wasm NS create/open path).
-func (f *FS) ResolveFS(ctx context.Context, name string) (fs.FS, string, error) {
+// Route maps any valid path onto this rooted FS (wasm NS create/open path).
+func (f *FS) Route(ctx context.Context, name string) (fs.FS, string, error) {
 	if name == "." {
 		return f, ".", nil
 	}
 	if !fs.ValidPath(name) {
-		return nil, "", &fs.PathError{Op: "resolve", Path: name, Err: fs.ErrInvalid}
+		return nil, "", &fs.PathError{Op: "route", Path: name, Err: fs.ErrInvalid}
 	}
 	return f, name, nil
 }
