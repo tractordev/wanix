@@ -3,9 +3,9 @@ package main
 import (
 	"os"
 
-	"tractor.dev/wanix/rc/shell"
+	"tractor.dev/wanix/rc"
 )
 
 func main() {
-	os.Exit(shell.Main(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	os.Exit(rc.Main(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }

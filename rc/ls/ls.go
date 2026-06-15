@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package compatls implements the ls core utility.
-package compatls
+// Package ls implements the ls core utility.
+package ls
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 
 	"github.com/u-root/u-root/pkg/core"
 	"github.com/u-root/u-root/pkg/uroot/unixflag"
-	"tractor.dev/wanix/rc/shell/compatls/lsfmt"
+	"tractor.dev/wanix/rc/ls/lsfmt"
 )
 
 type command struct {

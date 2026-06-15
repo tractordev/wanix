@@ -1,5 +1,5 @@
-// Package compatstat implements a minimal stat(1) using os.Stat.
-package compatstat
+// Package stat implements a minimal stat(1) using os.Stat.
+package stat
 
 import (
 	"context"

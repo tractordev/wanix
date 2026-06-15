@@ -1,4 +1,4 @@
-package shell
+package rc
 
 import (
 	"context"
@@ -22,11 +22,12 @@ import (
 	"github.com/u-root/u-root/pkg/core/xargs"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
-	"tractor.dev/wanix/rc/shell/compatfind"
-	"tractor.dev/wanix/rc/shell/compatgzip"
-	"tractor.dev/wanix/rc/shell/compatls"
-	"tractor.dev/wanix/rc/shell/compatstat"
-	"tractor.dev/wanix/rc/shell/openfile"
+	"tractor.dev/wanix/rc/attach"
+	"tractor.dev/wanix/rc/find"
+	"tractor.dev/wanix/rc/gzip"
+	"tractor.dev/wanix/rc/invoke"
+	"tractor.dev/wanix/rc/ls"
+	"tractor.dev/wanix/rc/stat"
 )
 
 var coreutilsCommands = map[string]func() core.Command{
@@ -41,14 +42,15 @@ var coreutilsCommands = map[string]func() core.Command{
 	"cp":     func() core.Command { return cp.New() },
 	"mv":     func() core.Command { return mv.New() },
 	"rm":     func() core.Command { return rm.New() },
-	"ls":     func() core.Command { return compatls.New() },
-	"stat":   func() core.Command { return compatstat.New() },
-	"find":   func() core.Command { return compatfind.New() },
-	"gzip":   func() core.Command { return compatgzip.New("gzip") },
-	"gzcat":  func() core.Command { return compatgzip.New("gzcat") },
-	"gunzip": func() core.Command { return compatgzip.New("gunzip") },
+	"ls":     func() core.Command { return ls.New() },
+	"stat":   func() core.Command { return stat.New() },
+	"find":   func() core.Command { return find.New() },
+	"gzip":   func() core.Command { return gzip.New("gzip") },
+	"gzcat":  func() core.Command { return gzip.New("gzcat") },
+	"gunzip": func() core.Command { return gzip.New("gunzip") },
 
-	"openfile": func() core.Command { return openfile.New() },
+	"invoke": func() core.Command { return invoke.New() },
+	"attach": func() core.Command { return attach.New() },
 }
 
 func urootCoreutilsMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {

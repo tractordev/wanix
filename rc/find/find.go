@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package compatfind implements the find core utility, vendored from u-root
+// Package find implements the find core utility, vendored from u-root
 // pkg/core/find with github.com/u-root/u-root/pkg/ls replaced by lsfmt so it
 // builds on GOOS=js GOARCH=wasm (gojs).
-package compatfind
+package find
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/u-root/u-root/pkg/core"
-	"tractor.dev/wanix/rc/shell/compatls/lsfmt"
+	"tractor.dev/wanix/rc/ls/lsfmt"
 )
 
 // File is a found file.

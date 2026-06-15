@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package compatgzip implements gzip/gzcat/gunzip, vendored from u-root
+// Package gzip implements gzip/gzcat/gunzip, vendored from u-root
 // pkg/core/gzip with pkg/gzip inlined as pkggzip using compress/gzip (no pgzip)
 // for gojs/wasm compatibility.
-package compatgzip
+package gzip
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/u-root/u-root/pkg/core"
-	pkggzip "tractor.dev/wanix/rc/shell/compatgzip/pkggzip"
+	pkggzip "tractor.dev/wanix/rc/gzip/pkggzip"
 )
 
 // Gzip implements the gzip command.

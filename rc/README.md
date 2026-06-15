@@ -118,7 +118,7 @@ in rc similar to busybox.
 
 ## Notes on Compatibility
 
-- Several commands were vendored/adapted under `shell/compat*` to keep behavior
+- Several commands were vendored/adapted under `find`, `gzip`, `ls`, and `stat` to keep behavior
   close to u-root while compiling cleanly for `GOOS=js GOARCH=wasm`.
 - `env` is currently bundled and supports:
   - printing environment,

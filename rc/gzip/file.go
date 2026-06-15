@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package compatgzip
+package gzip
 
 import (
 	"path/filepath"
 	"strings"
 
-	pkggzip "tractor.dev/wanix/rc/shell/compatgzip/pkggzip"
+	pkggzip "tractor.dev/wanix/rc/gzip/pkggzip"
 )
 
 func getOutputPath(f *pkggzip.File) string {

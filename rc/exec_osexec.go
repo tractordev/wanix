@@ -1,6 +1,6 @@
 //go:build !(js && wasm)
 
-package shell
+package rc
 
 import (
 	"context"
