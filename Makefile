@@ -43,7 +43,7 @@ examples: $(EXAMPLE_DEPS)
 
 ## Run tests against examples
 test: $(EXAMPLE_DEPS)
-	go test -v ./test
+	go test -v -count=1 ./test
 .PHONY: test
 
 ## Build Wanix (command and runtime) using Docker

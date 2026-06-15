@@ -17,7 +17,7 @@
         <wanix-bind dst="." src="#ramfs"></wanix-bind>
         
         <!-- now we can write files -->
-        <wanix-bind dst="myfile.txt" type="file" mode="0666">
+        <wanix-bind dst="myfile.txt" type="file" perm="0666">
             Hello, world!
         </wanix-bind>
 

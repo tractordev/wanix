@@ -161,15 +161,15 @@ func main() {
 				}
 				// union := binding.Get("union").String()
 
-				var mode fs.FileMode
-				if !binding.Get("mode").IsUndefined() {
+				var perm fs.FileMode
+				if !binding.Get("perm").IsUndefined() {
 					// Convert mode string (like "644" or "0644") to int
-					modeStr := binding.Get("mode").String()
+					modeStr := binding.Get("perm").String()
 					m, err := strconv.ParseInt(modeStr, 8, 32)
 					if err != nil {
-						log.Fatalf("invalid file mode %q: %v", modeStr, err)
+						log.Fatalf("invalid file permission %q: %v", modeStr, err)
 					}
-					mode = fs.FileMode(m)
+					perm = fs.FileMode(m)
 				}
 
 				switch {
@@ -207,7 +207,7 @@ func main() {
 						return
 					}
 					filefs := memfs.New()
-					if err := fs.WriteFile(filefs, path.Base(dst), buf, mode); err != nil {
+					if err := fs.WriteFile(filefs, path.Base(dst), buf, perm); err != nil {
 						log.Println("error writing fetch", err)
 						return
 					}
@@ -226,11 +226,11 @@ func main() {
 						log.Println("error reading fetch", err)
 						return
 					}
-					if err := fs.WriteFile(task.NS(), dst, buf, mode); err != nil {
+					if err := fs.WriteFile(task.NS(), dst, buf, perm); err != nil {
 						log.Fatalf("error writing file %s: %v", dst, err)
 					}
 					// TODO: FIX this, why do we have to chmod here? we set mode in writefile!
-					if err := fs.Chmod(task.NS(), dst, mode); err != nil {
+					if err := fs.Chmod(task.NS(), dst, perm); err != nil {
 						log.Println("error chmodding fetch", err)
 						return
 					}

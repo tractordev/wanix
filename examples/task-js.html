@@ -11,7 +11,7 @@
         <wanix-bind dst="." src="#ramfs"></wanix-bind>
 
         <!-- write a script that waits for the worker start message logs it -->
-        <wanix-bind dst="myscript.js" type="file" mode="0766">
+        <wanix-bind dst="myscript.js" type="file" perm="0766">
             const worker = await new Promise(r => {
                 globalThis.onmessage = (e) => {if (e.data.worker) r(e.data.worker)};
             });

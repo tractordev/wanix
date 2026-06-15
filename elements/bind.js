@@ -9,7 +9,7 @@ export class BindElement extends HTMLElement {
 
         this.dst = this.getAttribute('dst');
         this.src = this.getAttribute('src') || null;
-        this.mode = this.getAttribute('mode') || "0644";
+        this.perm = this.getAttribute('perm') || "0644";
         this.union = this.getAttribute('union') || "after";
         this.type = this.getAttribute('type') || "ns";
         // this.trim = this.hasAttribute('trim');

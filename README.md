@@ -43,7 +43,7 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
     <!-- bind ramfs to namespace root -->
     <wanix-bind dst="." src="#ramfs"></wanix-bind>
     <!-- bind inline file into namespace -->
-    <wanix-bind type="file" dst="hello.sh" mode="0755">
+    <wanix-bind type="file" dst="hello.sh" perm="0755">
       echo "Hello from Wanix!"
     </wanix-bind>
     <!-- bind wasm executable from url -->
@@ -104,7 +104,7 @@ Mount a source into the namespace at `dst`.
 | `dst` | Destination path. `.` is the namespace root. Paths *do not* start with `/`. |
 | `src` | Source path or URL. System paths use `#` prefix (e.g. `#ramfs`, `#web/opfs`). |
 | `type` | Bind type (see below). Default: `ns`. |
-| `mode` | File mode for `file` binds. Default: `0644`. |
+| `perm` | File permission mode for `file` binds. Default: `0644`. |
 | `union` | Union mode when binding to an existing directory. Default: `after`. |
 
 #### Bind types
@@ -238,7 +238,7 @@ Create a virtual filesystem to use via JS:
 ```html
 <wanix-system>
   <wanix-bind dst="." src="#ramfs"></wanix-bind>
-  <wanix-bind dst="greeting.txt" type="file" mode="0644">
+  <wanix-bind dst="greeting.txt" type="file" perm="0644">
     Hello, world!
   </wanix-bind>
 </wanix-system>
@@ -253,7 +253,7 @@ Run inline JS in a Wanix task:
 ```html
 <wanix-system>
   <wanix-bind dst="." src="#ramfs"></wanix-bind>
-  <wanix-bind dst="task.js" type="file" mode="0766">
+  <wanix-bind dst="task.js" type="file" perm="0766">
     console.log("JS task running!");
   </wanix-bind>
   <wanix-task cmd="task.js" start></wanix-task>
@@ -343,7 +343,7 @@ Persist files in the browser with Origin Private File System:
 ```html
 <wanix-system>
   <wanix-bind dst="." src="#web/opfs"></wanix-bind>
-  <wanix-bind dst="main.js" type="file" mode="0644">
+  <wanix-bind dst="main.js" type="file" perm="0644">
     export default function() { return 42; }
   </wanix-bind>
   <wanix-workbench open="main.js" assets="/workbench"></wanix-workbench>
