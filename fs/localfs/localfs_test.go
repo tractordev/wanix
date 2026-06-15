@@ -5,6 +5,7 @@ package localfs
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"tractor.dev/wanix/fs"
@@ -142,14 +143,22 @@ func TestChownFS(t *testing.T) {
 		t.Skip("Sys() returned nil, skipping verification")
 	}
 
-	if statInfo, ok := sys.(*pstat.Stat); ok {
+	switch statInfo := sys.(type) {
+	case *pstat.Stat:
 		if statInfo.Uid != 2000 {
 			t.Errorf("Expected uid 2000, got %d", statInfo.Uid)
 		}
 		if statInfo.Gid != 2000 {
 			t.Errorf("Expected gid 2000, got %d", statInfo.Gid)
 		}
-	} else {
-		t.Fatalf("Sys() did not return *stat.Stat_t, got %T", sys)
+	case *syscall.Stat_t:
+		if statInfo.Uid != 2000 {
+			t.Errorf("Expected uid 2000, got %d", statInfo.Uid)
+		}
+		if statInfo.Gid != 2000 {
+			t.Errorf("Expected gid 2000, got %d", statInfo.Gid)
+		}
+	default:
+		t.Fatalf("Sys() did not return *pstat.Stat or *syscall.Stat_t, got %T", sys)
 	}
 }

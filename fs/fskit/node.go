@@ -59,18 +59,12 @@ func RawNode(attrs ...any) *Node {
 			n.path = v
 		case fs.FileMode:
 			n.mode = v
-			if v&fs.ModeDir != 0 && n.size == 0 {
-				n.size = 2 // Set initial size to 2 for "." and ".." entries
-			}
 		case fs.FileInfo:
 			n.path = v.Name()
 			n.mode = v.Mode()
 			n.size = v.Size()
 			n.modTime = v.ModTime()
 			n.sys = v.Sys()
-			if n.mode&fs.ModeDir != 0 && n.size == 0 {
-				n.size = 2 // Set initial size to 2 for "." and ".." entries
-			}
 
 		// these must come after fs.FileInfo since
 		// some of our fs.FileInfo implementations

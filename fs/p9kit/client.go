@@ -351,8 +351,12 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 
 	entries := make([]fs.DirEntry, 0, len(dirents))
 	for _, entry := range dirents {
-		// To fully mimic os.DirFS semantics, we can Walk and Stat, but for now just minimal implementation:
-		fi, err := fileInfo(f, entry.Name)
+		_, child, err := f.Walk([]string{entry.Name})
+		if err != nil {
+			continue
+		}
+		fi, err := fileInfo(child, entry.Name)
+		child.Close()
 		if err != nil {
 			continue // Skip entries we can't stat
 		}

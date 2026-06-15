@@ -30,9 +30,20 @@ func (f UnionFS) OpenContext(ctx context.Context, name string) (fs.File, error) 
 	}
 
 	if name != "." {
-		//log.Printf("non-root open: %s (=> %T %s)", name, rfsys, rname)
-		// if non-root open and not resolved, it does not exist
-		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+		var entries []fs.DirEntry
+		for _, fsys := range f {
+			e, err := fs.ReadDirContext(ctx, fsys, name)
+			if err != nil {
+				continue
+			}
+			entries = append(entries, e...)
+		}
+		if len(entries) == 0 {
+			//log.Printf("non-root open: %s (=> %T %s)", name, rfsys, rname)
+			// if non-root open and not resolved, it does not exist
+			return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+		}
+		return DirFile(Entry(name, 0555), entries...), nil
 	}
 
 	var entries []fs.DirEntry
@@ -84,16 +95,14 @@ func (f UnionFS) ResolveFS(ctx context.Context, name string) (fs.FS, string, err
 	}
 
 	for _, fsys := range toStat {
-		_, err := fs.StatContext(ctx, fsys, name)
+		fi, err := fs.StatContext(ctx, fsys, name)
 		if err != nil {
 			continue
 		}
-		if fs.IsReadOnly(ctx) {
-			return fsys, name, nil
+		if fi.IsDir() {
+			continue // union may merge this directory across members
 		}
-		if _, ok := fsys.(fs.CreateFS); ok {
-			return fsys, name, nil
-		}
+		return fsys, name, nil
 	}
 
 	return f, name, nil

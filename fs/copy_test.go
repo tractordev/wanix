@@ -127,8 +127,8 @@ func TestCopyAll_Symlink(t *testing.T) {
 		t.Fatalf("CopyAll failed: %v", err)
 	}
 
-	// Verify symlink was copied
-	info, err := fs.Stat(fsys, "copylink.txt")
+	// Verify symlink was copied (Lstat: Stat follows symlinks)
+	info, err := fs.Lstat(fsys, "copylink.txt")
 	if err != nil {
 		t.Fatalf("Failed to stat copied symlink: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestCopyAll_Symlink(t *testing.T) {
 	}
 }
 
-func TestCopyAll_OverwriteProtection(t *testing.T) {
+func TestCopyAll_Overwrite(t *testing.T) {
 	// Create filesystem with source and destination files
 	fsys := memfs.New()
 	now := time.Now()
@@ -154,13 +154,18 @@ func TestCopyAll_OverwriteProtection(t *testing.T) {
 	fsys.SetNode("test.txt", fskit.Entry("test.txt", 0644, []byte("source content"), now))
 	fsys.SetNode("existing.txt", fskit.Entry("existing.txt", 0644, []byte("existing content"), now))
 
-	// Test that CopyAll refuses to overwrite existing files
+	// CopyAll overwrites existing files (unix convention)
 	err := fs.CopyAll(fsys, "test.txt", "existing.txt")
-	if err == nil {
-		t.Error("Expected error when trying to overwrite existing file, got nil")
+	if err != nil {
+		t.Fatalf("CopyAll failed: %v", err)
 	}
-	if err != nil && err.Error() != `will not overwrite "existing.txt"` {
-		t.Errorf("Unexpected error message: %v", err)
+
+	content, err := fs.ReadFile(fsys, "existing.txt")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(content) != "source content" {
+		t.Errorf("Content mismatch: got %q, want %q", string(content), "source content")
 	}
 }
 
