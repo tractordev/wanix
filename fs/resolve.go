@@ -11,6 +11,28 @@ type ResolveFS interface {
 	ResolveFS(ctx context.Context, name string) (FS, string, error)
 }
 
+const maxResolveDepth = 32
+
+// finishResolve follows ResolveFS until the filesystem and relative name
+// reach a fixed point.
+func finishResolve(ctx context.Context, fsys FS, name string) (FS, string, error) {
+	for range maxResolveDepth {
+		r, ok := fsys.(ResolveFS)
+		if !ok {
+			return fsys, name, nil
+		}
+		nfsys, nname, err := r.ResolveFS(ctx, name)
+		if err != nil {
+			return nil, "", err
+		}
+		if Equal(nfsys, fsys) && nname == name {
+			return fsys, name, nil
+		}
+		fsys, name = nfsys, nname
+	}
+	return nil, "", fmt.Errorf("resolve: exceeded max depth")
+}
+
 // ResolveTo resolves the name to an FS extension type if possible. It uses
 // ResolveFS if available, otherwise it falls back to SubFS.
 func ResolveTo[T FS](fsys FS, ctx context.Context, name string) (T, string, error) {
@@ -19,15 +41,6 @@ func ResolveTo[T FS](fsys FS, ctx context.Context, name string) (T, string, erro
 	rfsys, rname, err := Resolve(fsys, ctx, name)
 	if err != nil {
 		return tfsys, "", err
-	}
-
-	// try to resolve again from here
-	if res, ok := rfsys.(ResolveFS); ok {
-		rrfsys, rrname, err := res.ResolveFS(ctx, rname)
-		if err == nil && (!Equal(rrfsys, rfsys) || rrname != rname) {
-			rfsys = rrfsys
-			rname = rrname
-		}
 	}
 
 	if v, ok := rfsys.(T); ok {
@@ -59,8 +72,13 @@ func Resolve(fsys FS, ctx context.Context, name string) (rfsys FS, rname string,
 	// 		log.Println(strings.ReplaceAll(line, "fskit.", ""))
 	// 	}
 	// }()
-	if rfsys, ok := fsys.(ResolveFS); ok {
-		return rfsys.ResolveFS(ctx, name)
+	if res, ok := fsys.(ResolveFS); ok {
+		var resolved FS
+		resolved, rname, err = res.ResolveFS(ctx, name)
+		if err != nil {
+			return
+		}
+		return finishResolve(ctx, resolved, rname)
 	}
 
 	if name == "." {
@@ -78,7 +96,7 @@ func Resolve(fsys FS, ctx context.Context, name string) (rfsys FS, rname string,
 	if Equal(dirfs, fsys) {
 		rfsys = fsys
 		rname = name
-		return
+		return finishResolve(ctx, rfsys, rname)
 	}
 
 	if subfs, ok := dirfs.(*SubdirFS); ok {
@@ -86,14 +104,17 @@ func Resolve(fsys FS, ctx context.Context, name string) (rfsys FS, rname string,
 
 		if Equal(subfs.Fsys, fsys) {
 			rname = name
-			return
+			return finishResolve(ctx, rfsys, rname)
 		}
 
 		rname, err = subfs.fullName("resolve", path.Base(name))
-		return
+		if err != nil {
+			return
+		}
+		return finishResolve(ctx, rfsys, rname)
 	}
 
 	rfsys = dirfs
 	rname = path.Base(name)
-	return
+	return finishResolve(ctx, rfsys, rname)
 }
