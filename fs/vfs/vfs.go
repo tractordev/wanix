@@ -14,11 +14,13 @@ import (
 )
 
 type BindOption = fs.BindOption
+type BindType = fs.BindType
 
 const (
 	BindAfter   = fs.BindAfter
 	BindReplace = fs.BindReplace
 	BindBefore  = fs.BindBefore
+	BindName    = fs.BindNS
 )
 
 // BindAllocator is an interface that can be implemented by a filesystem

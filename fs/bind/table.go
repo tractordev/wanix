@@ -211,6 +211,10 @@ func (t *Table) Bind(ctx context.Context, src fs.FS, srcPath, dstPath string, op
 		return &fs.PathError{Op: "bind", Path: dstPath, Err: fs.ErrNotExist}
 	}
 
+	if fs.BindTypeOf(opts...) != "ns" {
+		return &fs.PathError{Op: "bind", Path: dstPath, Err: fs.ErrNotSupported}
+	}
+
 	rfsys, rname, err := fs.Resolve(src, ctx, srcPath)
 	if err != nil {
 		return err

@@ -12,6 +12,14 @@ const (
 	BindBefore  BindOption = "before"
 )
 
+// BindType is a bind type value (e.g. "ns") or type option (e.g. "type=ns").
+type BindType = BindOption
+
+const (
+	// BindNS sets type=ns. Omitted by default — namespace binds assume ns.
+	BindNS BindType = "type=ns"
+)
+
 // ParseBindOptions parses bind options into a map. Options without "=" are
 // tags (key with empty value). Later options overwrite earlier keys.
 func ParseBindOptions(opts ...BindOption) map[string]string {
@@ -36,6 +44,14 @@ func BindPlacement(opts ...BindOption) BindOption {
 		}
 	}
 	return BindAfter
+}
+
+// BindTypeOf returns the bind type value from opts (the type= value). Default is "ns".
+func BindTypeOf(opts ...BindOption) BindType {
+	if v := ParseBindOptions(opts...)["type"]; v != "" {
+		return BindType(v)
+	}
+	return "ns"
 }
 
 // BindFS is implemented by filesystems that support Plan9-style bind operations.
