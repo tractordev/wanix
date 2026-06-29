@@ -1,0 +1,17 @@
+name = "wanix-site"
+main = "src/index.js"
+compatibility_date = "2025-06-24"
+preview_urls = false
+workers_dev = false
+routes = [
+  { pattern = "*.wanix.site/*", zone_name = "wanix.site" },
+  { pattern = "wanix.site/*", zone_name = "wanix.site" },
+]
+
+[[r2_buckets]]
+binding = "bucket"
+bucket_name = "wanix-site"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"

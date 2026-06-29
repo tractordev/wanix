@@ -251,6 +251,13 @@ export async function templateFetch(req) {
 }
 
 
+export async function cacheTemplate(cacheName, path) {
+  const res = await templateFetch(new Request(new URL(path, location.origin)));
+  if (!res) return;
+  const cache = await caches.open(cacheName);
+  await cache.put(path, res);
+}
+
 let cachePopulate = null;
 export async function ensureCache(name, prefetch=[]) {
   const cache = await caches.open(name);

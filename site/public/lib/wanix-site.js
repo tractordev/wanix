@@ -1,7 +1,8 @@
-import { register, templateFetch, cacheFetch, ensureCache } from './wanix-sw.js';
+import { register, templateFetch, cacheFetch, ensureCache, cacheTemplate } from '../wanix-sw.js';
 
 const CACHE_NAME = "wanix-v1";
 const CACHE_SENTINEL = "/index.html";
+const CACHE_POLL_INTERVAL = 500;
 const OVERLAY_STYLE_ID = "wanix-site-overlay-styles";
 
 const OVERLAY_STYLES = `
@@ -80,8 +81,9 @@ function injectOverlayStyles() {
   document.head.append(style);
 }
 
+let swReady;
 if (window === window.top) {
-  register({
+  swReady = register({
     onfetch: async (req) => {
       const cached = await cacheFetch(req, CACHE_NAME);
       if (cached) return cached;
@@ -90,10 +92,15 @@ if (window === window.top) {
       if (template) return template;
     },
     oninstall: async () => {
+      const resources = performance.getEntriesByType('resource').map(r => r.name);
       await ensureCache(CACHE_NAME, [
+        "/",
         "/index.html", 
-        ...performance.getEntriesByType('resource').map(r => r.name)
+        "/lib/wanix.min.js",
+        "/lib/wanix.debug.wasm",
+        ...resources,
       ]);
+      await cacheTemplate(CACHE_NAME, "/_editor.html");
     },
   });
 }
@@ -114,28 +121,53 @@ class WanixSite extends HTMLElement {
           bottom: 1rem;
           z-index: 2000;
         }
-        button {
-          margin: 0;
-          padding: 0.65rem 0.9rem;
+        .toolbar {
+          display: flex;
+          align-items: stretch;
           border: 1px solid #ddd;
           border-radius: 999px;
           background: #fff;
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+          overflow: hidden;
+        }
+        button {
+          margin: 0;
+          padding: 0.65rem 0.9rem;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          box-shadow: none;
           font: 0.8125rem system-ui, sans-serif;
           cursor: pointer;
         }
+        button + button {
+          border-left: 1px solid #ddd;
+        }
         button:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        button[aria-busy="true"] {
           opacity: 0.55;
           cursor: wait;
         }
       </style>
-      <button type="button" data-action="preview" aria-label="Open preview">Edit</button>
+      <div class="toolbar">
+        <button type="button" data-action="revert" hidden disabled aria-label="Revert changes">
+          Revert
+        </button>
+        <button type="button" data-action="preview" aria-label="Open editor">Edit</button>
+      </div>
     `;
+    this.revertButton = root.querySelector('[data-action="revert"]');
     this.previewButton = root.querySelector('[data-action="preview"]');
     this.overlay = null;
     this.panel = null;
     this.previewFrame = null;
     this.editorFrame = null;
+    this._cacheBaseline = null;
+    this._cacheWatchTimer = null;
+    this._lastEventFingerprint = null;
   }
 
   createOverlay() {
@@ -175,6 +207,9 @@ class WanixSite extends HTMLElement {
     this.previewButton.addEventListener("click", () => {
       void this.onPreviewClick();
     });
+    this.revertButton.addEventListener("click", () => {
+      void this.onRevertClick();
+    });
     if (document.readyState === "complete") {
       void this.startBootstrap();
     } else {
@@ -182,6 +217,10 @@ class WanixSite extends HTMLElement {
         once: true,
       });
     }
+  }
+
+  disconnectedCallback() {
+    this.stopCacheWatch();
   }
 
   async waitForCache(
@@ -203,12 +242,98 @@ class WanixSite extends HTMLElement {
   }
 
   async startBootstrap() {
+    if (swReady) {
+      await swReady;
+    }
     try {
       await this.waitForCache();
+      await this.captureCacheBaseline();
+      this.startCacheWatch();
     } catch (err) {
       console.warn("wanix-site: cache not ready, bootstrapping anyway", err);
     }
     this.bootstrapFrames();
+  }
+
+  async captureCacheBaseline(cacheName = CACHE_NAME) {
+    this._cacheBaseline = await snapshotCache(cacheName);
+    this._lastEventFingerprint = snapshotFingerprint(this._cacheBaseline);
+    return this._cacheBaseline;
+  }
+
+  async resetCacheBaseline(cacheName = CACHE_NAME) {
+    return this.captureCacheBaseline(cacheName);
+  }
+
+  async hasCacheChanges(cacheName = CACHE_NAME) {
+    if (!this._cacheBaseline) {
+      return false;
+    }
+    const current = await snapshotCache(cacheName);
+    return diffCacheSnapshots(this._cacheBaseline, current).changed;
+  }
+
+  async getCacheChanges(cacheName = CACHE_NAME) {
+    if (!this._cacheBaseline) {
+      return { added: [], removed: [], modified: [], changed: false };
+    }
+    const current = await snapshotCache(cacheName);
+    return diffCacheSnapshots(this._cacheBaseline, current);
+  }
+
+  startCacheWatch({ interval = CACHE_POLL_INTERVAL, cacheName = CACHE_NAME } = {}) {
+    this.stopCacheWatch();
+    this._cacheWatchTimer = setInterval(() => {
+      void this._pollCacheChanges(cacheName);
+    }, interval);
+  }
+
+  stopCacheWatch() {
+    if (this._cacheWatchTimer !== null) {
+      clearInterval(this._cacheWatchTimer);
+      this._cacheWatchTimer = null;
+    }
+  }
+
+  async _pollCacheChanges(cacheName) {
+    if (window !== window.top || !this._cacheBaseline) {
+      return;
+    }
+
+    const current = await snapshotCache(cacheName);
+    const diff = diffCacheSnapshots(this._cacheBaseline, current);
+    if (!diff.changed) {
+      this._lastEventFingerprint = snapshotFingerprint(current);
+      if (this.editMode) {
+        void this.updateRevertButton(false);
+      }
+      return;
+    }
+
+    const fingerprint = snapshotFingerprint(current);
+    if (fingerprint === this._lastEventFingerprint) {
+      if (this.editMode) {
+        void this.updateRevertButton(true);
+      }
+      return;
+    }
+    this._lastEventFingerprint = fingerprint;
+
+    this.dispatchEvent(
+      new CustomEvent("cachechange", {
+        bubbles: true,
+        composed: true,
+        detail: diff,
+      })
+    );
+
+    if (this.editMode) {
+      void this.updateRevertButton(true);
+    }
+
+    if (this.editMode && this.previewFrame?.contentWindow) {
+      this.previewFrame.contentWindow.location.reload();
+    }
   }
 
   bootstrapFrames() {
@@ -251,16 +376,53 @@ class WanixSite extends HTMLElement {
   }
 
   setPreviewButton(open) {
-    this.previewButton.textContent = open ? "Close" : "Edit";
+    this.previewButton.textContent = open ? "Done" : "Edit";
     this.previewButton.setAttribute(
       "aria-label",
-      open ? "Close preview" : "Open preview"
+      open ? "Done editing" : "Open editor"
     );
+    this.revertButton.hidden = !open;
+    if (open) {
+      void this.updateRevertButton();
+    } else {
+      this.revertButton.disabled = true;
+    }
+  }
+
+  async updateRevertButton(dirty = null) {
+    if (this.revertButton.hidden) {
+      return;
+    }
+    if (dirty === null) {
+      dirty = await this.hasCacheChanges();
+    }
+    this.revertButton.disabled = !dirty;
   }
 
   setBusy(loading) {
     this.previewButton.disabled = loading;
     this.previewButton.toggleAttribute("aria-busy", loading);
+    if (loading) {
+      this.revertButton.disabled = true;
+    } else if (this.editMode) {
+      void this.updateRevertButton();
+    }
+  }
+
+  async onRevertClick() {
+    if (!(await this.hasCacheChanges())) {
+      return;
+    }
+    this.setBusy(true);
+    try {
+      if ("caches" in globalThis) {
+        await caches.delete(CACHE_NAME);
+      }
+      window.location.reload();
+    } catch (err) {
+      console.error("wanix-site: failed to revert cache", err);
+      this.setBusy(false);
+    }
   }
 
   async open() {
@@ -271,20 +433,6 @@ class WanixSite extends HTMLElement {
         return;
       }
       this.overlay.classList.add("editor");
-
-      let lastHash = null;
-      setInterval(async () => {
-        if (window !== window.top) return;
-        const hash = await hashCachedBody(CACHE_NAME, CACHE_SENTINEL);
-        if (hash !== lastHash) {
-          if (lastHash !== null) {
-            this.previewFrame.contentWindow.location.reload();
-            // // this is supposed to fix safari rendering issues but it doesnt work
-            // this.previewFrame.addEventListener('load', () => nudge(this.previewFrame));
-          }
-          lastHash = hash;
-        }
-      }, 500);
     } finally {
       this.setBusy(false);
     }
@@ -340,22 +488,57 @@ if (!customElements.get("wanix-site")) {
   customElements.define("wanix-site", WanixSite);
 }
 
-async function hashCachedBody(cacheName, path, algorithm = 'SHA-256') {
-  const cache = await caches.open(cacheName);
-  const response = await cache.match(path);
-  if (!response) return null;
-
+async function hashResponse(response, algorithm = "SHA-256") {
   const buffer = await response.arrayBuffer();
   const hashBuffer = await crypto.subtle.digest(algorithm, buffer);
-
   return [...new Uint8Array(hashBuffer)]
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-function nudge(iframe) {
-  console.log("nudging", iframe);
-  iframe.style.transform = 'translateZ(0)';
-  iframe.offsetHeight; // force reflow
-  iframe.style.transform = '';
+async function snapshotCache(cacheName) {
+  if (!("caches" in globalThis)) {
+    return new Map();
+  }
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  const entries = new Map();
+  for (const req of keys) {
+    const res = await cache.match(req);
+    if (res) {
+      entries.set(req.url, await hashResponse(res));
+    }
+  }
+  return entries;
+}
+
+function snapshotFingerprint(entries) {
+  return [...entries.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, hash]) => `${key}\0${hash}`)
+    .join("\n");
+}
+
+function diffCacheSnapshots(baseline, current) {
+  const added = [];
+  const removed = [];
+  const modified = [];
+  for (const [key, hash] of current) {
+    if (!baseline.has(key)) {
+      added.push(key);
+    } else if (baseline.get(key) !== hash) {
+      modified.push(key);
+    }
+  }
+  for (const key of baseline.keys()) {
+    if (!current.has(key)) {
+      removed.push(key);
+    }
+  }
+  return {
+    added,
+    removed,
+    modified,
+    changed: added.length > 0 || removed.length > 0 || modified.length > 0,
+  };
 }

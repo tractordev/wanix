@@ -35,7 +35,7 @@
     }
 
   </style>
-  <script src="./wanix-site.js" type="module"></script>
+  <script src="/lib/wanix-site.js" type="module"></script>
 </head>
 <body>
   <main>
@@ -49,10 +49,10 @@
   <template data-path="/_editor.html" data-type="text/html">
     <html>
       <body>
-        <script src="/_site/wanix.min.js" type="module"></script>
-        <wanix-system id="editor" wasm="/_site/wanix.debug.wasm">
+        <script src="/lib/wanix.min.js" type="module"></script>
+        <wanix-system id="editor" wasm="/lib/wanix.debug.wasm">
           <wanix-bind dst="." src="#web/caches/wanix-v1"></wanix-bind>
-          <wanix-workbench open="index.html" sidebar="never" assets="/_site/workbench"></wanix-workbench>
+          <wanix-workbench open="index.html" sidebar="never" assets="/bench"></wanix-workbench>
           <script type="module">
             // Concatenate the host and the current path (excluding 
             // the last segment) to form a directory-like URL path
