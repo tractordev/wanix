@@ -367,7 +367,11 @@ func (fsys *Device) urlToPath(rawURL string) string {
 	}
 
 	// Build path: host/path (no scheme)
-	p := u.Host + u.Path
+	host := u.Host
+	if js.Global().Get("location").Get("host").String() == host {
+		host = "origin"
+	}
+	p := host + u.Path
 	if u.RawQuery != "" {
 		// Encode query string to be filesystem-safe
 		p += "?" + u.RawQuery
@@ -386,6 +390,12 @@ func (fsys *Device) pathToURL(filePath string) string {
 	// Infer scheme
 	scheme := "https"
 	hostWithoutPort := strings.Split(host, ":")[0]
+	hostParts := strings.Split(hostWithoutPort, ".")
+	if len(hostParts) > 1 {
+		if hostParts[len(hostParts)-1] == "localhost" {
+			hostWithoutPort = "localhost"
+		}
+	}
 	if hostWithoutPort == "localhost" || hostWithoutPort == "127.0.0.1" || hostWithoutPort == "0.0.0.0" {
 		scheme = "http"
 	}
