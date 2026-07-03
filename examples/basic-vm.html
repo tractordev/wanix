@@ -6,7 +6,7 @@
 <body style="height: 100vh; margin: 0;">
     
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system id="linux" wasm="../dist/wanix.debug.wasm" allow-origins="*" debug>
+    <wanix-namespace id="linux" allow-origins="*" debug>
 
         <!-- bind a (slightly custom) alpine linux root to our root -->
         <wanix-bind dst="." src="../extras/dist/wanix-linux.tgz" type="archive"></wanix-bind>
@@ -21,10 +21,10 @@
         <!-- wip: many vm attributes are hardcoded in dev atm -->
         <wanix-vm export="ttyS0" term start></wanix-vm>
 
-        <!-- terminal attached to vm terminal -->
-        <wanix-term path="#vm/1/term" raw></wanix-term>
+        <!-- terminal automatically attached to vm terminal -->
+        <wanix-term raw></wanix-term>
 
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>

@@ -1,0 +1,15 @@
+<html>
+<head>
+    <title>standalone-workbench</title>
+    <script src="../dist/wanix.min.js" type="module"></script>
+</head>
+<body style="height: 100vh;">
+
+    <wanix-workbench wd="root" assets="/workbench" term debug>
+        <wanix-bind type="archive" dst="root" src="../extras/dist/wanix-linux.tgz"></wanix-bind>
+        <wanix-bind type="file" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
+        <wanix-task role="shell" cmd="rc.wasm"></wanix-task>
+    </wanix-workbench>
+
+</body>
+</html>

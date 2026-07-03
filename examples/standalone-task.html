@@ -1,0 +1,14 @@
+<html>
+<head>
+    <title>standalone-task</title>
+    <script type="module" src="../dist/wanix.min.js"></script>
+</head>
+<body>
+    <p>Output in DevTools console.</p>
+    
+    <wanix-task cmd="gojs.wasm arg1 arg2" start debug>
+        <wanix-bind type="file" dst="gojs.wasm" src="../test/gojs/gojscheck.wasm"></wanix-bind>
+    </wanix-task>
+    
+</body>
+</html>

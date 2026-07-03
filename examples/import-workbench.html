@@ -6,7 +6,7 @@
 <body style="height: 100vh;">
 
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
+    <wanix-namespace debug>
 
         <!-- import a remote linux system into our namespace -->
         <wanix-bind type="import" dst="remote" 
@@ -23,7 +23,7 @@
 
         </wanix-workbench>
 
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>

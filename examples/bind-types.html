@@ -9,7 +9,7 @@
     <p>Uses fake URLs, may appear broken... Be sure to read the comments in the source.</p>
     
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
+    <wanix-namespace debug>
         <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
 
         <!-- the default bind type is "ns" if not specified -->
@@ -36,7 +36,7 @@
         <!-- you can always bind specific files on top of those layers -->
         <!-- <wanix-bind type="fetch" dst="root/boot/bzImage" src="https://example.com/bzImage"></wanix-bind> -->
 
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>

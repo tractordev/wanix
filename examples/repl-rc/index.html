@@ -8,7 +8,7 @@
 <body style="height: 100vh; margin: 0;">
     
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
+    <wanix-namespace debug>
         <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
 
         <!-- bind the task, term, and web namespaces to the system -->
@@ -23,7 +23,7 @@
         <wanix-task id="repl" cmd="rc.wasm" term start></wanix-task>
         <!-- render the terminal for the repl -->
         <wanix-term path="#task/repl/term"></wanix-term>
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>

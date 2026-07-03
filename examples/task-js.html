@@ -7,7 +7,7 @@
     <p>Output in DevTools console. Be sure to read the comments in the source.</p>
     
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
+    <wanix-namespace debug>
         <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
 
         <!-- write a script that waits for the worker start message logs it -->
@@ -21,7 +21,7 @@
         <!-- run the script -->
         <wanix-task cmd="myscript.js" start></wanix-task>
         
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>

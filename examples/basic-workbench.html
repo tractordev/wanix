@@ -6,13 +6,13 @@
 <body style="height: 100vh;">
 
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
+    <wanix-namespace debug>
 
         <!-- bind an archive to the name root in the namespace -->
         <wanix-bind type="archive" dst="root" src="../extras/dist/wanix-linux.tgz"></wanix-bind>
 
         <!-- fetch the rc.wasm file -->
-        <wanix-bind type="fetch" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
+        <wanix-bind type="file" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
 
         <!-- set up workbench with terminal starting in the root directory with rc.wasm as the shell -->
         <wanix-workbench wd="root" assets="/workbench" term>
@@ -22,7 +22,7 @@
 
         </wanix-workbench>
 
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>

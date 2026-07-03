@@ -6,7 +6,7 @@
 <body style="height: 100vh; margin: 0;">
 
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
+    <wanix-namespace debug>
 
         <!-- import a remote system into our namespace -->
         <wanix-bind type="import" dst="remote" 
@@ -14,10 +14,10 @@
 
         <!-- set up a wanix rc repl task to explore the remote namespace -->
         <wanix-bind type="file" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
-        <wanix-task id="repl" cmd="rc.wasm" term start></wanix-task>
-        <wanix-term path="#task/repl/term"></wanix-term>
+        <wanix-task cmd="rc.wasm" term start></wanix-task>
+        <wanix-term></wanix-term>
     
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>

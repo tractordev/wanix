@@ -10,7 +10,7 @@
         See exported files from <code>export.wasm</code>:<br />
         <code>cd task/2/export && ls -l</code>
     </p>
-    <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
+    <wanix-namespace debug>
         <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
         <wanix-bind dst="task" src="#task"></wanix-bind>
 
@@ -24,7 +24,7 @@
         
         <!-- render the terminal for the shell -->
         <wanix-term path="#task/rc/term"></wanix-term>
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>

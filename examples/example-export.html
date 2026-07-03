@@ -6,7 +6,7 @@
     <script type="module" src="../dist/wanix.min.js"></script>
 </head>
 <body>
-    <wanix-system id="main" wasm="../dist/wanix.debug.wasm" allow-origins="*" debug>
+    <wanix-namespace id="main" allow-origins="*" debug>
 
         <!-- bind a ramfs to the root of the namespace -->
         <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
@@ -24,7 +24,7 @@
         <wanix-bind dst="web" src="#web"></wanix-bind>
         
 
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>

@@ -1,0 +1,14 @@
+<html>
+<head>
+    <title>standalone-terminal</title>
+    <script type="module" src="../dist/wanix.min.js"></script>
+</head>
+<body style="height: 100vh; margin: 0;">
+
+    <wanix-term debug>
+        <wanix-bind type="file" dst="gojs.wasm" src="../test/gojs/gojscheck.wasm"></wanix-bind>
+        <wanix-task cmd="gojs.wasm arg1 arg2" term start></wanix-task>
+    </wanix-term>
+
+</body>
+</html>

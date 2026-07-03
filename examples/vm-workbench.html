@@ -6,7 +6,7 @@
 <body style="height: 100vh;">
 
     <!-- a wanix system is an empty root task/namespace -->
-    <wanix-system wasm="../dist/wanix.debug.wasm" debug>
+    <wanix-namespace debug>
 
         <!-- bind a (slightly custom) alpine linux root to our root -->
         <wanix-bind dst="." src="../extras/dist/wanix-linux.tgz" type="archive"></wanix-bind>
@@ -29,7 +29,7 @@
 
         </wanix-workbench>        
 
-    </wanix-system>
+    </wanix-namespace>
 
 </body>
 </html>
