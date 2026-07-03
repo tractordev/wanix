@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -11,24 +12,34 @@ type OpenFileFS interface {
 	OpenFile(name string, flag int, perm FileMode) (File, error)
 }
 
+type OpenFileContextFS interface {
+	FS
+	OpenFileContext(ctx context.Context, name string, flag int, perm FileMode) (File, error)
+}
+
 // OpenFile is a helper that opens a file with the given flag and permissions if supported.
 func OpenFile(fsys FS, name string, flag int, perm FileMode) (f File, err error) {
-	if o, ok := fsys.(OpenFileFS); ok {
-		return o.OpenFile(name, flag, perm)
-	}
-
-	ctx := ContextFor(fsys)
+	ctx := WithOrigin(ContextFor(fsys), fsys, name, "open")
 	if flag&os.O_RDONLY != 0 {
 		ctx = WithReadOnly(ctx)
+	}
+
+	if o, ok := fsys.(OpenFileContextFS); ok {
+		return o.OpenFileContext(ctx, name, flag, perm)
+	}
+
+	if rfsys, rname, err := ResolveTo[OpenFileContextFS](fsys, ctx, name); err == nil {
+		return rfsys.OpenFileContext(ctx, rname, flag, perm)
+	}
+
+	if o, ok := fsys.(OpenFileFS); ok {
+		return o.OpenFile(name, flag, perm)
 	}
 
 	rfsys, rname, err := ResolveTo[OpenFileFS](fsys, ctx, name)
 	if err == nil {
 		return rfsys.OpenFile(rname, flag, perm)
 	}
-
-	// Log all open flags
-	// log.Println(name, fsutil.ParseOpenFlags(flag), fsutil.ParseFileMode(perm))
 
 	// Handle write-only and read-write modes
 	if flag&(os.O_WRONLY|os.O_RDWR) != 0 {
