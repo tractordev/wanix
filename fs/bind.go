@@ -26,6 +26,9 @@ func ParseBindOptions(opts ...BindOption) map[string]string {
 	m := make(map[string]string, len(opts))
 	for _, o := range opts {
 		s := string(o)
+		if s == "" {
+			continue
+		}
 		if k, v, ok := strings.Cut(s, "="); ok {
 			m[k] = v
 		} else {

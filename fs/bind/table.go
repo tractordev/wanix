@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"path"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -16,12 +15,18 @@ import (
 	"tractor.dev/wanix/fs/fskit"
 )
 
+type Allocator interface {
+	BindAlloc(ctx context.Context, src, dst string, opts map[string]string) (fs.FS, string, error)
+}
+
 // Entry represents a reference to a name in a specific filesystem.
 type Entry struct {
-	FS      fs.FS
-	Path    string
-	Info    fs.FileInfo
-	Options map[string]string
+	FS   fs.FS
+	Path string
+	Info fs.FileInfo
+	Src  string
+	Dst  string
+	Opts map[string]string
 }
 
 // FileInfo returns file info for the binding with the given display name.
@@ -31,6 +36,25 @@ func (e *Entry) FileInfo(fname string) (*fskit.Node, error) {
 	// against remote filesystems (notably p9 guest mounts), which can starve
 	// in-flight directory reads.
 	return fskit.RawNode(e.Info, fname), nil
+}
+
+func (e *Entry) String() string {
+	var opts []string
+	for k, v := range e.Opts {
+		if k == "" {
+			continue
+		}
+		if v == "" {
+			opts = append(opts, k)
+			continue
+		}
+		opts = append(opts, fmt.Sprintf("%s=%s", k, v))
+	}
+	var optsStr string
+	if len(opts) > 0 {
+		optsStr = " -o " + strings.Join(opts, ",")
+	}
+	return fmt.Sprintf("bind%s %s %s", optsStr, e.Src, e.Dst)
 }
 
 // Table is a copy-on-write bind map with Plan9-style bind semantics.
@@ -215,6 +239,8 @@ func (t *Table) Bind(ctx context.Context, src fs.FS, srcPath, dstPath string, op
 		return &fs.PathError{Op: "bind", Path: dstPath, Err: fs.ErrNotSupported}
 	}
 
+	bindOpts := fs.ParseBindOptions(opts...)
+
 	rfsys, rname, err := fs.Resolve(src, ctx, srcPath)
 	if err != nil {
 		return err
@@ -225,6 +251,13 @@ func (t *Table) Bind(ctx context.Context, src fs.FS, srcPath, dstPath string, op
 		BindAllocFS(name string) (fs.FS, error)
 	}); ok {
 		rfsys, err = allocator.BindAllocFS(srcPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	if allocator, ok := rfsys.(Allocator); ok {
+		rfsys, _, err = allocator.BindAlloc(ctx, srcPath, dstPath, bindOpts)
 		if err != nil {
 			return err
 		}
@@ -241,10 +274,12 @@ func (t *Table) Bind(ctx context.Context, src fs.FS, srcPath, dstPath string, op
 	file.Close()
 
 	ref := Entry{
-		FS:      rfsys,
-		Path:    rname,
-		Info:    fi,
-		Options: fs.ParseBindOptions(opts...),
+		FS:   rfsys,
+		Path: rname,
+		Info: fi,
+		Src:  srcPath,
+		Dst:  dstPath,
+		Opts: bindOpts,
 	}
 
 	placement := fs.BindPlacement(opts...)
@@ -286,10 +321,14 @@ func (t *Table) Binds(name string) ([]fs.FileInfo, error) {
 // String returns a debug representation of all bindings.
 func (t *Table) String() string {
 	var lines []string
-	for dst, b := range t.Snapshot() {
+	for _, b := range t.Snapshot() {
 		for _, ref := range b {
-			lines = append(lines, fmt.Sprintf("%s -> %s:%s", dst, reflect.TypeOf(ref.FS), ref.Path))
+			if ref.Src == "." && strings.HasPrefix(ref.Dst, "#") {
+				continue
+			}
+			lines = append(lines, ref.String())
 		}
 	}
+	slices.Sort(lines)
 	return strings.Join(lines, "\n")
 }
