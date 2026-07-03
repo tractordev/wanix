@@ -13,24 +13,21 @@ replace github.com/fxamacker/cbor/v2 => ./misc/cbor
 replace tractor.dev/wanix/fs/r2fs => ./fs/r2fs
 
 require (
-	filippo.io/age v1.3.1
 	github.com/creack/pty v1.1.24
 	github.com/evanw/esbuild v0.28.0
 	github.com/fxamacker/cbor/v2 v2.9.0
-	github.com/go-rod/rod v0.116.2
 	github.com/gorilla/websocket v1.5.3
 	github.com/hanwen/go-fuse/v2 v2.7.2
 	github.com/hugelgupf/p9 v0.3.1-0.20240118043522-6f4f11e5296e
 	github.com/progrium/go-netstack v0.0.0-20240720002214-37b2b8227b91
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701
 	go.bug.st/serial v1.6.4
-	golang.org/x/net v0.47.0
-	golang.org/x/sys v0.43.0
+	golang.org/x/net v0.55.0
+	golang.org/x/sys v0.45.0
 	tractor.dev/toolkit-go v0.0.0-20250103001615-9a6753936c19
 )
 
 require (
-	filippo.io/hpke v0.4.0 // indirect
 	github.com/apparentlymart/go-cidr v1.1.0 // indirect
 	github.com/creack/goselect v0.1.2 // indirect
 	github.com/google/btree v1.1.2 // indirect
@@ -43,12 +40,6 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	github.com/ysmood/fetchup v0.2.3 // indirect
-	github.com/ysmood/goob v0.4.0 // indirect
-	github.com/ysmood/got v0.40.0 // indirect
-	github.com/ysmood/gson v0.7.3 // indirect
-	github.com/ysmood/leakless v0.9.0 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
