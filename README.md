@@ -34,14 +34,14 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
 <html>
 <head>
   <script type="module"
-    src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-rc1/dist/wanix.min.js">
+    src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-alpha8/dist/wanix.min.js">
   </script>
 </head>
 <body style="height: 100vh; margin: 0;">
 
   <wanix-system>
-    <!-- bind ramfs to namespace root -->
-    <wanix-bind dst="." src="#ramfs"></wanix-bind>
+    <!-- bind alloc ramfs to namespace root -->
+    <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
     <!-- bind inline file into namespace -->
     <wanix-bind type="file" dst="hello.sh" perm="0755">
       echo "Hello from Wanix!"
@@ -51,7 +51,7 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
       src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm">
     </wanix-bind>
     <!-- declare a task that will autostart -->
-    <wanix-task id="shell" type="gojs" cmd="rc.wasm -c hello.sh" term start></wanix-task>
+    <wanix-task id="shell" cmd="rc.wasm -c hello.sh" term start></wanix-task>
     <!-- show a terminal wired up to the task -->
     <wanix-term path="#task/shell/term"></wanix-term>
   </wanix-system>
@@ -224,7 +224,7 @@ Run a Go/TinyGo Wasm binary with a terminal:
 ```html
 <wanix-system>
   <wanix-bind type="file" dst="app.wasm" src="https://example.com/app.wasm"></wanix-bind>
-  <wanix-task id="app" type="gojs" cmd="app.wasm" term start></wanix-task>
+  <wanix-task id="app" cmd="app.wasm" term start></wanix-task>
   <wanix-term path="#task/app/term"></wanix-term>
 </wanix-system>
 ```
@@ -237,7 +237,7 @@ Create a virtual filesystem to use via JS:
 
 ```html
 <wanix-system>
-  <wanix-bind dst="." src="#ramfs"></wanix-bind>
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
   <wanix-bind dst="greeting.txt" type="file" perm="0644">
     Hello, world!
   </wanix-bind>
@@ -252,7 +252,7 @@ Run inline JS in a Wanix task:
 
 ```html
 <wanix-system>
-  <wanix-bind dst="." src="#ramfs"></wanix-bind>
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
   <wanix-bind dst="task.js" type="file" perm="0766">
     console.log("JS task running!");
   </wanix-bind>
@@ -309,7 +309,7 @@ Host workbench assets locally (`make -C workbench`), then:
     src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm">
   </wanix-bind>
   <wanix-workbench assets="/workbench" term>
-    <wanix-task role="shell" type="gojs" cmd="rc.wasm"></wanix-task>
+    <wanix-task role="shell" cmd="rc.wasm"></wanix-task>
   </wanix-workbench>
 </wanix-system>
 ```
@@ -356,7 +356,7 @@ Export a namespace from one page:
 
 ```html
 <wanix-system id="main" allow-origins="*">
-  <wanix-bind dst="." src="#ramfs"></wanix-bind>
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
   <wanix-bind dst="shared.txt" type="file">shared data</wanix-bind>
 </wanix-system>
 ```
@@ -367,7 +367,7 @@ Import it from another page:
 <wanix-system>
   <wanix-bind type="import" dst="remote"
     src="https://other.example/app.html#main"></wanix-bind>
-  <wanix-task id="repl" cmd="rc.wasm" type="gojs" term start></wanix-task>
+  <wanix-task id="repl" cmd="rc.wasm" term start></wanix-task>
   <wanix-term path="#task/repl/term"></wanix-term>
 </wanix-system>
 ```
