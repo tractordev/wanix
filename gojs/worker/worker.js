@@ -13,7 +13,7 @@ self.addEventListener("message", async (e) => {
     globalThis.sys = fs; // deprecated
     const tid = e.data.worker.tid;
     const env = (await fs.readText(`${TASKNS}/${tid}/env`)).trim().split("\n");
-    const args = (await fs.readText(`${TASKNS}/${tid}/cmd`)).trim().split(" ");
+    const args = (await fs.readText(`${TASKNS}/${tid}/args`)).trim().split("\n");
     globalThis.cwd = (await fs.readText(`${TASKNS}/${tid}/dir`)).trim() || "/";
     const bin = await fs.readFile(args[0]); 
 
@@ -39,30 +39,50 @@ function log(...args) {
 }
 
 
+function errorMessage(e) {
+    if (e == null) return "unknown error";
+    if (typeof e === "string") return e;
+    if (e instanceof Error) return e.message || String(e);
+    if (typeof e === "object") {
+        if (typeof e.message === "string") return e.message;
+        try {
+            return JSON.stringify(e);
+        } catch {
+            return String(e);
+        }
+    }
+    return String(e);
+}
+
+function errnoCode(msg) {
+    const lower = msg.toLowerCase();
+    if (lower.includes("does not exist") || lower.includes("not found")) return "ENOENT";
+    if (lower.includes("permission denied")) return "EPERM";
+    if (lower.includes("not a directory")) return "ENOTDIR";
+    if (lower.includes("is a directory")) return "EISDIR";
+    if (lower.includes("file already exists") || lower.includes("already exists")) return "EEXIST";
+    if (lower.includes("invalid argument")) return "EINVAL";
+    if (lower.includes("not supported")) return "ENOSYS";
+    if (lower.includes("read-only")) return "EROFS";
+    if (lower.includes("unauthorized") || lower.includes("http 401")) return "EACCES";
+    if (lower.includes("http 403") || lower.includes("forbidden")) return "EPERM";
+    if (lower.includes("failed to fetch") || lower.includes("network")) return "ENETUNREACH";
+    if (lower.startsWith("http ")) return "EIO";
+    return "EIO";
+}
+
+function fsErr(msg, code) {
+    return { message: msg, code: code || errnoCode(msg) || "EIO" };
+}
+
 function errback(cb, e) {
-    if (e instanceof Error) throw e;
-    log("errback", e);
-    const err = new Error(e);
-    if (e.includes("does not exist")) {
-        err.code = "ENOENT";
+    const msg = errorMessage(e);
+    const code = errnoCode(msg) || "EIO";
+    if (code === "EIO") {
+        console.warn("fs error:", msg);
     }
-    if (e.includes("permission denied")) {
-        err.code = "EPERM";
-        console.warn(err);
-    }
-    if (e.includes("not a directory")) {
-        err.code = "ENOTDIR";
-    }
-    if (e.includes("file already exists")) {
-        err.code = "EEXIST";
-    }
-    if (e.includes("invalid argument")) {
-        err.code = "EINVAL";
-    }
-    if (!err.code) {
-        console.warn(err);
-    }
-    cb(err);
+    // Go syscall.mapJSError reads err.code via js.Value.Get; plain objects work reliably.
+    cb(fsErr(msg, code));
 }
 
 // todo: support .. and ~
@@ -95,11 +115,7 @@ function cleanpath(path) {
 "use strict";
 
 (() => {
-	const enosys = () => {
-		const err = new Error("not implemented");
-		err.code = "ENOSYS";
-		return err;
-	};
+	const enosys = () => fsErr("not implemented", "ENOSYS");
 
 	if (!globalThis.fs) {
 		// let outputBuf = "";
