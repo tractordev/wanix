@@ -71,30 +71,72 @@ export class TerminalElement extends WanixElement {
         this._fitAddon = null;
     }
 
-    _awake() {
-        this.connect();
+    async _awake() {
+        await this._resolvePath();
+        await this.connect();
+    }
+
+    async _resolvePath() {
+        if (this.path) return;
+
+        // Parent task/vm with a terminal device.
+        const parent = this.parentElement;
+        if (parent?.tagName === "WANIX-TASK" || parent?.tagName === "WANIX-VM") {
+            await parent._nsReady;
+            if (parent.term) {
+                this.path = parent.term;
+                return;
+            }
+        }
+
+        // Child task/vm declarations under this term (standalone term host).
+        const children = [
+            ...this.querySelectorAll(":scope > wanix-task"),
+            ...this.querySelectorAll(":scope > wanix-vm"),
+        ];
+        if (children.length) {
+            await Promise.all(children.map((c) => c._nsReady));
+            const withTerm = children.find((c) => c.term);
+            if (withTerm) {
+                this.path = withTerm.term;
+                return;
+            }
+        }
+
+        // for= host: pick a task/vm with a term inside the referenced host.
+        const host = this._kernelHost;
+        if (host && host !== this) {
+            const peers = [
+                ...host.querySelectorAll(":scope > wanix-task"),
+                ...host.querySelectorAll(":scope > wanix-vm"),
+            ];
+            await Promise.all(peers.map((c) => c._nsReady));
+            const withTerm = peers.find((c) => c.term);
+            if (withTerm) {
+                this.path = withTerm.term;
+            }
+        }
     }
 
     async connect() {
         if (!this._term) return;
 
         const dataPath = this.path + "/data";
-        if (!dataPath || !this._system) return;
+        if (!this.path || !this._kernel) return;
 
         this.disconnect();
 
         try {
-            await this._system.root.waitFor(dataPath, 30000);
-            
-            // todo: use this for kvm updates
-            this._system._updateTerminals(this);
-       
+            await this._kernel.root.waitFor(dataPath, 30000);
 
-            const readable = await this._system.root.openReadable(dataPath);
+            // todo: use this for kvm updates
+            this._kernel._updateTerminals?.(this);
+
+            const readable = await this._kernel.root.openReadable(dataPath);
             this.#reader = readable.getReader();
             this._readLoop();
 
-            const writable = await this._system.root.openWritable(dataPath);
+            const writable = await this._kernel.root.openWritable(dataPath);
             this.#writer = writable.getWriter();
 
             const encoder = new TextEncoder();

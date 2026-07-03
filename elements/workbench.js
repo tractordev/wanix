@@ -27,8 +27,6 @@ export class WorkbenchElement extends WanixElement {
 
       this.extension = this.getAttribute("extension") || "wanix.workbench";
 
-      this.fsys = this.hasAttribute('fsys'); // todo: use this
-
       this.debug = this.hasAttribute('debug');
       this._term = this.hasAttribute('term');
       this._sidebar = parseSidebarMode(this.getAttribute("sidebar"));
@@ -44,9 +42,13 @@ export class WorkbenchElement extends WanixElement {
 
     async _awake() {
       this.tasks["shell"] = this.querySelector(':scope > wanix-task[role="shell"]');
-      const port = await this._system._openPort(); // todo: should workbench have a task?
+      // Wait for child shell template to finish setup when present.
+      if (this.tasks["shell"]) {
+        await this.tasks["shell"]._nsReady;
+      }
+      const port = await this._kernel._openPort(); // todo: should workbench have a task?
       if (this.wd) {
-        await this._system.root.waitFor(this.wd, 3000);
+        await this._kernel.root.waitFor(this.wd, 3000);
       }
       this.load(() => ({wanix: port}));
     }
