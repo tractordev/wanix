@@ -1,20 +1,11 @@
 package wanix
 
 import (
-	"io/fs"
-
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/misc"
 )
 
 var Version string
-
-type Resource interface {
-	fs.FS
-	ID() string
-}
-
-type Factory func(id, kind string) Resource
 
 func NewRoot() (*Task, error) {
 	return NewRootWithTasks(NewTaskFS())
