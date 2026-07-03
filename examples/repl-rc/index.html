@@ -9,7 +9,7 @@
     
     <!-- a wanix system is an empty root task/namespace -->
     <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
-        <wanix-bind dst="." src="#ramfs"></wanix-bind>
+        <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
 
         <!-- bind the task, term, and web namespaces to the system -->
         <wanix-bind dst="task" src="#task"></wanix-bind>
@@ -20,7 +20,7 @@
         <!-- fetch the rc.wasm file -->
         <wanix-bind type="file" dst="rc.wasm" src="./rc.wasm"></wanix-bind>
         <!-- run the rc.wasm file as a gojs task in the web directory -->
-        <wanix-task id="repl" cmd="rc.wasm" type="gojs" term start></wanix-task>
+        <wanix-task id="repl" cmd="rc.wasm" term start></wanix-task>
         <!-- render the terminal for the repl -->
         <wanix-term path="#task/repl/term"></wanix-term>
     </wanix-system>

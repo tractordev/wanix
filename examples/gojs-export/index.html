@@ -11,16 +11,16 @@
         <code>cd task/2/export && ls -l</code>
     </p>
     <wanix-system wasm="../../dist/wanix.debug.wasm" debug>
-        <wanix-bind dst="." src="#ramfs"></wanix-bind>
+        <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
         <wanix-bind dst="task" src="#task"></wanix-bind>
 
         <!-- fetch the export.wasm binary and run it as a gojs task -->
         <wanix-bind type="file" dst="export.wasm" src="./export.wasm"></wanix-bind>
-        <wanix-task cmd="export.wasm" type="gojs" start></wanix-task>
+        <wanix-task cmd="export.wasm" start></wanix-task>
 
         <!-- fetch the rc.wasm shell and run it as a gojs task -->
         <wanix-bind type="file" dst="rc.wasm" src="../repl-rc/rc.wasm"></wanix-bind>
-        <wanix-task id="rc" cmd="rc.wasm" type="gojs" term start></wanix-task>
+        <wanix-task id="rc" cmd="rc.wasm" term start></wanix-task>
         
         <!-- render the terminal for the shell -->
         <wanix-term path="#task/rc/term"></wanix-term>

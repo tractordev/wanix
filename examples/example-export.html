@@ -9,7 +9,7 @@
     <wanix-system id="main" wasm="../dist/wanix.debug.wasm" allow-origins="*" debug>
 
         <!-- bind a ramfs to the root of the namespace -->
-        <wanix-bind dst="." src="#ramfs"></wanix-bind>
+        <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
         
         <!-- now we can write files -->
         <wanix-bind dst="myfile.txt" type="file" perm="0644">

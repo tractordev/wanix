@@ -14,7 +14,7 @@
 
         <!-- set up a wanix rc repl task to explore the remote namespace -->
         <wanix-bind type="file" dst="rc.wasm" src="./repl-rc/rc.wasm"></wanix-bind>
-        <wanix-task id="repl" cmd="rc.wasm" type="gojs" term start></wanix-task>
+        <wanix-task id="repl" cmd="rc.wasm" term start></wanix-task>
         <wanix-term path="#task/repl/term"></wanix-term>
     
     </wanix-system>
