@@ -134,4 +134,14 @@ func TestConstructorsWithBasePath(t *testing.T) {
 	}
 }
 
+func TestParseFileInfoDirectory(t *testing.T) {
+	fsys := &FS{}
+	info := fsys.parseFileInfo(".", map[string]string{
+		"Content-Mode": "16877", // 040755 directory mode
+	}, 0, "application/x-directory")
+	if !info.IsDir() {
+		t.Fatalf("expected directory from S3 content type and mode, got file: mode=%v", info.mode)
+	}
+}
+
 // Removed TestRootDirectoryMode - it was causing panics with mock client

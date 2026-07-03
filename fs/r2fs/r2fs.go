@@ -447,7 +447,7 @@ func (fsys *FS) headRequest(ctx context.Context, path string) (*r2FileInfo, erro
 		return nil, err
 	}
 
-	info := fsys.parseFileInfo(path, resp.Metadata, *resp.ContentLength)
+	info := fsys.parseFileInfo(path, resp.Metadata, *resp.ContentLength, aws.ToString(resp.ContentType))
 
 	// Cache the result
 	fsys.setCachedHead(path, info)
@@ -472,12 +472,13 @@ func getMetadataValue(metadata map[string]string, key string) string {
 }
 
 // parseFileInfo extracts file information from R2 metadata
-func (fsys *FS) parseFileInfo(path string, metadata map[string]string, size int64) *r2FileInfo {
+func (fsys *FS) parseFileInfo(path string, metadata map[string]string, size int64, contentType string) *r2FileInfo {
 	name := filepath.Base(path)
 
 	mode := parseFileMode(getMetadataValue(metadata, "Content-Mode"))
 	modTime := parseModTime(getMetadataValue(metadata, "Content-Modified"))
-	isDir := getMetadataValue(metadata, "Content-Type") == "application/x-directory"
+	isDir := getMetadataValue(metadata, "Content-Type") == "application/x-directory" ||
+		contentType == "application/x-directory"
 
 	// Set default modes if not provided
 	if mode == 0 {
@@ -492,6 +493,9 @@ func (fsys *FS) parseFileInfo(path string, metadata map[string]string, size int6
 	if isDir && (mode&fs.ModeDir == 0) {
 		// If Content-Type says directory but mode doesn't, add the directory flag
 		mode = fs.ModeDir | (mode & fs.ModePerm)
+	}
+	if mode&fs.ModeDir != 0 {
+		isDir = true
 	}
 
 	return &r2FileInfo{
@@ -554,7 +558,7 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 		return nil, err
 	}
 
-	fileInfo := fsys.parseFileInfo(name, resp.Metadata, *resp.ContentLength)
+	fileInfo := fsys.parseFileInfo(name, resp.Metadata, *resp.ContentLength, aws.ToString(resp.ContentType))
 
 	return &r2File{
 		fs:       fsys,
