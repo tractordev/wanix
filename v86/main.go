@@ -21,6 +21,8 @@ import (
 var assets embed.FS
 
 func main() {
+	log.SetFlags(log.Lshortfile)
+
 	opts, err := parseFlags(os.Args[1:])
 	if err != nil {
 		log.Fatal(err)

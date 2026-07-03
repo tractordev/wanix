@@ -3,6 +3,10 @@ export DOCKER_CMD 	?= $(shell command -v docker)
 build: wasm bundle
 .PHONY: build
 
+extra: v86.tgz
+	@if [ -d ../extras/dist ]; then cp v86.tgz ../extras/dist/; fi
+.PHONY: extra
+
 wasm: bundle/v86-vm.wasm
 	GOWORK=off GOOS=js GOARCH=wasm go build -o ./bundle/v86-vm.wasm .
 .PHONY: wasm
