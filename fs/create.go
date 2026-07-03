@@ -19,6 +19,10 @@ func Create(fsys FS, name string) (File, error) {
 		return rfsys.Create(rname) //path.Join(rdir, path.Base(name)))
 	}
 
+	if rfsys, rname, err := ResolveTo[OpenFileContextFS](fsys, ctx, name); err == nil {
+		return rfsys.OpenFileContext(ctx, rname, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0o666)
+	}
+
 	if rfsys, rname, err := ResolveTo[OpenFileFS](fsys, ctx, name); err == nil {
 		return rfsys.OpenFile(rname, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0o666)
 	}
