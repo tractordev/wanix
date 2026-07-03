@@ -3,8 +3,6 @@
 package gojs
 
 import (
-	"log"
-
 	"tractor.dev/wanix"
 	gojsworker "tractor.dev/wanix/gojs/worker"
 	"tractor.dev/wanix/misc/wasmutil"
@@ -18,7 +16,7 @@ type Driver struct {
 func (d *Driver) Check(t *wanix.Task) bool {
 	typ, err := wasmutil.DetectType(t.NS(), t.Arg(0))
 	if err != nil {
-		log.Println("error detecting wasm type", err)
+		// log.Println("error detecting wasm type", err)
 		return false
 	}
 	if typ != "gojs" {
