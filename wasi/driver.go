@@ -3,9 +3,10 @@
 package wasi
 
 import (
-	"strings"
+	"log"
 
 	"tractor.dev/wanix"
+	"tractor.dev/wanix/misc/wasmutil"
 	wasiworker "tractor.dev/wanix/wasi/worker"
 	"tractor.dev/wanix/web/worker"
 )
@@ -15,8 +16,15 @@ type Driver struct {
 }
 
 func (d *Driver) Check(t *wanix.Task) bool {
-	// todo: wasi detection
-	return strings.HasSuffix(t.Arg(0), ".wasm")
+	typ, err := wasmutil.DetectType(t.NS(), t.Arg(0))
+	if err != nil {
+		log.Println("error detecting wasm type", err)
+		return false
+	}
+	if typ != "wasi" {
+		return false
+	}
+	return true
 }
 
 func (d *Driver) Start(t *wanix.Task) error {
