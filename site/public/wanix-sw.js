@@ -235,7 +235,30 @@ if (globalThis["ServiceWorkerGlobalScope"] && self instanceof ServiceWorkerGloba
 export async function networkFetch(path) {
     return fetch(new URL(path, location.origin), {
         headers: { [skipHeader]: "1" },
+        cache: "no-store",
     });
+}
+
+function normalizeCacheURL(url) {
+    if (url.pathname.endsWith("/")) {
+        return new URL(`${url.pathname}index.html`, url.origin);
+    }
+    return url;
+}
+
+function prefetchPath(path) {
+    return normalizeCacheURL(new URL(path, location.origin)).pathname;
+}
+
+function cacheRequest(pathOrUrl) {
+    if (pathOrUrl instanceof Request) {
+        const url = normalizeCacheURL(new URL(pathOrUrl.url));
+        return new Request(url, pathOrUrl);
+    }
+    if (pathOrUrl instanceof URL) {
+        return new Request(normalizeCacheURL(pathOrUrl));
+    }
+    return new Request(normalizeCacheURL(new URL(pathOrUrl, location.origin)));
 }
 
 export async function templateFetch(req) {
@@ -255,19 +278,20 @@ export async function cacheTemplate(cacheName, path) {
   const res = await templateFetch(new Request(new URL(path, location.origin)));
   if (!res) return;
   const cache = await caches.open(cacheName);
-  await cache.put(path, res);
+  await cache.put(cacheRequest(path), res);
 }
 
 let cachePopulate = null;
 export async function ensureCache(name, prefetch=[]) {
   const cache = await caches.open(name);
-  if (prefetch.length > 0 && await cache.match(prefetch[0])) return cache;
+  if (prefetch.length > 0 && await cache.match(cacheRequest(prefetch[0]))) return cache;
   if (!cachePopulate) {
     // console.log("cache not populated, populating");
     cachePopulate = Promise.all(
       prefetch.map(async (path) => {
-        const res = await networkFetch(path);
-        if (res.ok) await cache.put(path, res);
+        const fetchPath = prefetchPath(path);
+        const res = await networkFetch(fetchPath);
+        if (res.ok) await cache.put(cacheRequest(fetchPath), res);
       })
     ).finally(() => {
       cachePopulate = null;
@@ -277,17 +301,34 @@ export async function ensureCache(name, prefetch=[]) {
   return cache;
 }
 
-function cacheURL(url) {
-  if (url.pathname.endsWith("/")) return new URL(`${url.pathname}index.html`, url.origin);
-//   if (CACHE_PATHS.includes(url.pathname)) return url;
-  return url;
+export async function repopulateCache(name, prefetch = []) {
+  cachePopulate = null;
+  if ("caches" in globalThis) {
+    await caches.delete(name);
+  }
+  const cache = await caches.open(name);
+  await Promise.all(
+    prefetch.map(async (path) => {
+      if (path.split("/").pop().startsWith("_")) return;
+      const fetchPath = prefetchPath(path);
+      const res = await networkFetch(fetchPath);
+      if (res.ok) {
+        await cache.put(cacheRequest(fetchPath), res);
+      }
+    })
+  );
+  return cache;
+}
+
+export function cacheURL(url) {
+  return normalizeCacheURL(url);
 }
 
 export async function cacheFetch(req, cache="main") {
   const url = cacheURL(new URL(req.url));
   if (!url) return null;
   const c = await ensureCache(cache);
-  return (await c.match(url)) || null;
+  return (await c.match(cacheRequest(url))) || null;
 }
 
 /**

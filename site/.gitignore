@@ -1,6 +1,7 @@
-/public/bench
-/public/lib/wanix.debug.wasm
-/public/lib/wanix.min.js
+/public/.lib/bench
+/public/.lib/wanix.wasm
+/public/.lib/wanix.debug.wasm
+/public/.lib/wanix.min.js
 node_modules/
 .wrangler/
 

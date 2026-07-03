@@ -1,12 +1,17 @@
 name = "wanix-site"
-main = "src/index.js"
+main = "worker/index.js"
 compatibility_date = "2025-06-24"
 preview_urls = false
 workers_dev = false
+
+[env.production]
 routes = [
   { pattern = "*.wanix.site/*", zone_name = "wanix.site" },
   { pattern = "wanix.site/*", zone_name = "wanix.site" },
 ]
+
+[observability.logs]
+enabled = true
 
 [[r2_buckets]]
 binding = "bucket"
@@ -15,3 +20,4 @@ bucket_name = "wanix-site"
 [assets]
 directory = "./public"
 binding = "ASSETS"
+run_worker_first = true

@@ -1,0 +1,18 @@
+<html>
+<body>
+    <script src="/.lib/wanix.min.js" type="module"></script>
+    <wanix-workbench 
+        wasm="/.lib/wanix.debug.wasm" 
+        open="index.html" 
+        wd="origin" 
+        sidebar="never" 
+        assets="/.lib/bench">
+        <wanix-bind 
+            dst="." 
+            src="#cowfs/new" 
+            data-opt-base="#web/caches/remote" 
+            data-opt-overlay="#web/caches/local">
+        </wanix-bind>
+    </wanix-workbench>
+</body>
+</html>
