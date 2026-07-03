@@ -6,6 +6,7 @@
 //   -timeout    Set the max time to load the page (default 30s; accepts "15s", "1m", etc).
 //   -v          Print JavaScript exceptions and page errors to stderr (default false).
 //   -wait-load  Wait for networkIdle event before exiting (default true).
+//   -wait-done  Wait for window.__wtest_done === true (default false).
 //   -debug-port Remote debugging port for Chrome reuse (default 9222).
 //
 // Pass the URL of the web page to test (e.g., some local development server or test server).
@@ -13,6 +14,9 @@
 // a detached headless Chrome if none is running. The browser is left running for reuse.
 //
 // Intended to be run as part of automated Go tests, to validate example HTML apps.
+//
+// Exits 0 if no JS exceptions are thrown (and __wtest_done is set when -wait-done), 1 otherwise.
+// Test pages using -wait-done should set window.__wtest_done = true on success and throw on failure.
 
 package main
 
@@ -34,6 +38,7 @@ func main() {
 	timeout := flag.Duration("timeout", 30*time.Second, "page load timeout (e.g. 15s, 1m)")
 	verbose := flag.Bool("v", false, "print exceptions and page errors to stderr")
 	waitLoad := flag.Bool("wait-load", true, "wait for the networkIdle event before exiting")
+	waitDone := flag.Bool("wait-done", false, "wait for window.__wtest_done === true")
 	debugPort := flag.Int("debug-port", 9222, "remote debugging port for Chrome reuse")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: wtest [flags] <url>\n\nFlags:\n")
@@ -107,10 +112,16 @@ func main() {
 				fmt.Fprintf(os.Stderr, "[exception] %s  (%s:%d)\n", msg, src, line)
 			}
 		case *runtime.EventConsoleAPICalled:
-			if *verbose && ev.Type == runtime.APITypeError {
+			if *verbose {
+				var parts []string
 				for _, arg := range ev.Args {
-					fmt.Fprintf(os.Stderr, "[console.error] %s\n", arg.Value)
+					if arg.Value != nil {
+						parts = append(parts, fmt.Sprint(arg.Value))
+					} else if arg.Description != "" {
+						parts = append(parts, arg.Description)
+					}
 				}
+				fmt.Fprintf(os.Stderr, "[console.%s] %s\n", ev.Type, strings.Join(parts, " "))
 			}
 		}
 	})
@@ -122,7 +133,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "navigation error: %v\n", navErr)
 			os.Exit(1)
 		}
-		if waitErr != nil {
+		if waitErr != nil && !*waitDone {
 			fmt.Fprintf(os.Stderr, "wait-load error: %v\n", waitErr)
 			// Don't exit — still check collected exceptions below.
 		}
@@ -131,8 +142,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Give the event loop a moment to flush any final exceptions.
-	time.Sleep(300 * time.Millisecond)
+	if *waitDone {
+		if err := waitForWtestDone(ctx); err != nil {
+			mu.Lock()
+			n := len(exceptions)
+			exs := append([]jsError(nil), exceptions...)
+			mu.Unlock()
+			fmt.Fprintf(os.Stderr, "wait-done error: %v\n", err)
+			if n > 0 {
+				fmt.Fprintf(os.Stderr, "✗ %d JS exception(s) detected on %s:\n", n, url)
+				for i, ex := range exs {
+					fmt.Fprintf(os.Stderr, "  %d) %s  (%s:%d)\n", i+1, ex.msg, ex.source, ex.line)
+				}
+			}
+			// Best-effort log dump
+			var logText string
+			_ = chromedp.Run(ctx, chromedp.Evaluate(`document.getElementById("log")?.textContent || ""`, &logText))
+			if logText != "" {
+				fmt.Fprintf(os.Stderr, "page log:\n%s\n", logText)
+			}
+			os.Exit(1)
+		}
+	} else {
+		// Give the event loop a moment to flush any final exceptions.
+		time.Sleep(300 * time.Millisecond)
+	}
 
 	// ── report ────────────────────────────────────────────────────────────────
 	mu.Lock()
@@ -152,6 +186,25 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %d) %s  (%s:%d)\n", i+1, ex.msg, ex.source, ex.line)
 	}
 	os.Exit(1)
+}
+
+func waitForWtestDone(ctx context.Context) error {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		var done bool
+		if err := chromedp.Run(ctx, chromedp.Evaluate(`window.__wtest_done === true`, &done)); err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 func navigateAndWaitNetworkIdle(ctx context.Context, url string) (navErr, waitErr error) {
