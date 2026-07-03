@@ -46,9 +46,9 @@ func New(root *wanix.Task) *Device {
 	return d
 }
 
-func (d *Device) Alloc(kind string) (wanix.Resource, error) {
+func (d *Device) Alloc(kind string) (fs.FS, string, error) {
 	if !slices.Contains(Drivers(d.root), kind) {
-		return nil, fs.ErrNotExist
+		return nil, "", fs.ErrNotExist
 	}
 	d.nextID++
 	rid := strconv.Itoa(d.nextID)
@@ -58,7 +58,7 @@ func (d *Device) Alloc(kind string) (wanix.Resource, error) {
 		device: d,
 	}
 	d.resources[rid] = r
-	return r, nil
+	return r, rid, nil
 }
 
 // i really wish we could just get back a type from path via resolve
@@ -90,11 +90,11 @@ func (d *Device) OpenContext(ctx context.Context, name string) (fs.File, error) 
 			return &fskit.FuncFile{
 				Node: fskit.Entry(name, 0555),
 				ReadFunc: func(n *fskit.Node) error {
-					r, err := d.Alloc(name)
+					_, rid, err := d.Alloc(name)
 					if err != nil {
 						return err
 					}
-					fskit.SetData(n, []byte(r.ID()+"\n"))
+					fskit.SetData(n, []byte(rid+"\n"))
 					return nil
 				},
 			}, nil
