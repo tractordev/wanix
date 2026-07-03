@@ -4,11 +4,15 @@ package main
 
 import (
 	"archive/tar"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"path"
 	"strconv"
+	"strings"
 	"syscall/js"
 	"time"
 
@@ -17,16 +21,20 @@ import (
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/api"
 	"tractor.dev/wanix/fs"
+	"tractor.dev/wanix/fs/cowfs"
+	"tractor.dev/wanix/fs/httpfs"
 	"tractor.dev/wanix/fs/memfs"
 	"tractor.dev/wanix/fs/p9kit"
 	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/fs/signal"
 	"tractor.dev/wanix/fs/tarfs"
 	"tractor.dev/wanix/misc"
+	"tractor.dev/wanix/misc/allocfs"
 	"tractor.dev/wanix/misc/jsutil"
 	"tractor.dev/wanix/term"
 	"tractor.dev/wanix/vm"
 	"tractor.dev/wanix/web"
+	"tractor.dev/wanix/web/idbfs"
 	"tractor.dev/wanix/web/jsfs"
 	"tractor.dev/wanix/web/sys"
 	"tractor.dev/wanix/web/worker"
@@ -49,13 +57,95 @@ func main() {
 		{"#vm", vm.New(root)},
 		{"#pipe", &pipe.Allocator{}},
 		{"#signal", &signal.Allocator{}},
-		{"#ramfs", &memfs.Allocator{}},
+		// {"#ramfs", &memfs.Allocator{}},
 		{"#js", jsfs.NewFS(js.Global())},
 	}
 	for _, b := range sysbindings {
 		if err := root.NS().Bind(b.fsys, ".", b.dst); err != nil {
 			log.Fatal(err)
 		}
+	}
+
+	ramfs := allocfs.New(func(ctx context.Context, id string, opts map[string]string) (fs.FS, error) {
+		return memfs.New(), nil
+	})
+	if err := root.NS().Bind(ramfs, ".", "#ramfs"); err != nil {
+		log.Fatal(err)
+	}
+
+	httpfs := allocfs.New(func(ctx context.Context, id string, opts map[string]string) (fs.FS, error) {
+		u, err := url.Parse(opts["url"])
+		if err != nil {
+			return nil, err
+		}
+		if u.Scheme == "" {
+			return nil, fmt.Errorf("url is required")
+		}
+		if t, ok := opts["token"]; ok {
+			q := u.Query()
+			q.Set("token", t)
+			u.RawQuery = q.Encode()
+		}
+		fmt.Println("url", u.String())
+		hfs := httpfs.New(u.String(), nil)
+		if _, err := hfs.Stat("."); err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return nil, err
+			}
+			if err := fs.Mkdir(hfs, ".", 0755); err != nil && !errors.Is(err, fs.ErrExist) {
+				if _, statErr := hfs.Stat("."); statErr != nil {
+					return nil, err
+				}
+			}
+		}
+		_, err = hfs.ReadDir(".")
+		if err != nil {
+			return nil, err
+		}
+		return hfs, nil
+	})
+	if err := root.NS().Bind(httpfs, ".", "#httpfs"); err != nil {
+		log.Fatal(err)
+	}
+
+	idbfs := allocfs.New(func(ctx context.Context, id string, opts map[string]string) (fs.FS, error) {
+		n, ok := opts["name"]
+		if !ok {
+			return nil, fmt.Errorf("name is required")
+		}
+		return idbfs.New(n), nil
+	})
+	if err := root.NS().Bind(idbfs, ".", "#idbfs"); err != nil {
+		log.Fatal(err)
+	}
+
+	cwfs := allocfs.New(func(ctx context.Context, id string, opts map[string]string) (fs.FS, error) {
+		originfs, _, ok := fs.Origin(ctx)
+		if !ok {
+			return nil, fmt.Errorf("no origin in context")
+		}
+		b, ok := opts["base"]
+		if !ok {
+			return nil, fmt.Errorf("base is required")
+		}
+		bfsys, err := fs.Sub(originfs, b)
+		if err != nil {
+			return nil, err
+		}
+
+		o, ok := opts["overlay"]
+		if !ok {
+			return nil, fmt.Errorf("overlay is required")
+		}
+		ofsys, err := fs.Sub(originfs, o)
+		if err != nil {
+			return nil, err
+		}
+
+		return &cowfs.FS{Base: bfsys, Overlay: ofsys}, nil
+	})
+	if err := root.NS().Bind(cwfs, ".", "#cowfs"); err != nil {
+		log.Fatal(err)
 	}
 
 	el := sys.Element()
@@ -161,6 +251,21 @@ func main() {
 				}
 				// union := binding.Get("union").String()
 
+				optsObj := binding.Get("opts")
+				var opts []fs.BindOption
+				if optsObj.Truthy() && optsObj.InstanceOf(js.Global().Get("Object")) {
+					keys := js.Global().Get("Object").Call("keys", optsObj)
+					for i := 0; i < keys.Length(); i++ {
+						k := strings.TrimPrefix(keys.Index(i).String(), "opt")
+						if len(k) > 0 {
+							k = strings.ToLower(k[:1]) + k[1:]
+						}
+						v := optsObj.Get(keys.Index(i).String()).String()
+						opts = append(opts, fs.BindOption(fmt.Sprintf("%s=%s", k, v)))
+
+					}
+				}
+
 				var perm fs.FileMode
 				if !binding.Get("perm").IsUndefined() {
 					// Convert mode string (like "644" or "0644") to int
@@ -236,7 +341,7 @@ func main() {
 					}
 				case typ == "ns":
 					// jsutil.Log("binding ns", src, dst, task.ID())
-					if err := task.Bind(src, dst); err != nil {
+					if err := task.Bind(src, dst, opts...); err != nil {
 						log.Fatal(err)
 					}
 				case typ == "import":
