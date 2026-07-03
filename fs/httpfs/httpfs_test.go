@@ -1,13 +1,20 @@
 package httpfs
 
 import (
+	"archive/tar"
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
 	"tractor.dev/wanix/fs"
+	"tractor.dev/wanix/fs/localfs"
 	"tractor.dev/wanix/fs/memfs"
 )
 
@@ -230,25 +237,108 @@ func TestSymlink(t *testing.T) {
 	}
 }
 
+func TestBuildURLWithQuery(t *testing.T) {
+	fsys := New("http://localhost:8787/~/?token=abc", nil)
+	if got := fsys.buildURL("token"); got != "http://localhost:8787/~/token?token=abc" {
+		t.Fatalf("buildURL(token) = %q, want %q", got, "http://localhost:8787/~/token?token=abc")
+	}
+	if got := fsys.buildURL("."); got != "http://localhost:8787/~/?token=abc" {
+		t.Fatalf("buildURL(.) = %q, want %q", got, "http://localhost:8787/~/?token=abc")
+	}
+}
+
+func TestOpenFileCreateWrite(t *testing.T) {
+	memFS, server, client := newTestServer()
+	defer server.Close()
+
+	f, err := client.OpenFile("hello", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		t.Fatalf("OpenFile: %v", err)
+	}
+	if _, err := fs.Write(f, []byte("hello\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	content, err := fs.ReadFile(memFS, "hello")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(content) != "hello\n" {
+		t.Fatalf("got %q, want %q", content, "hello\n")
+	}
+}
+
+func TestOpenFileCreateWithQueryURL(t *testing.T) {
+	memFS := memfs.New()
+	server := httptest.NewServer(NewServer(memFS))
+	defer server.Close()
+
+	client := New(server.URL+"/?token=abc", nil)
+	f, err := client.OpenFile("hello", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		t.Fatalf("OpenFile: %v", err)
+	}
+	if _, err := fs.Write(f, []byte("hi")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	f.Close()
+
+	content, err := fs.ReadFile(memFS, "hello")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(content) != "hi" {
+		t.Fatalf("got %q", content)
+	}
+}
+
+func TestPutWithOwnershipLocalFS(t *testing.T) {
+	dir := t.TempDir()
+	fsys, err := localfs.New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(NewServer(fsys))
+	defer server.Close()
+
+	client := New(server.URL, nil)
+	if err := client.WriteFile("hello", []byte("hello"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	content, err := fs.ReadFile(fsys, "hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "hello" {
+		t.Fatalf("got %q", content)
+	}
+}
+
 func TestNotFound(t *testing.T) {
 	_, server, client := newTestServer()
 	defer server.Close()
 
 	// Try to stat non-existent file
 	_, err := client.Stat("nonexistent.txt")
-	if err != fs.ErrNotExist {
+	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Expected ErrNotExist, got %v", err)
+	}
+	if err == fs.ErrNotExist {
+		t.Error("expected *fs.PathError wrapper, got bare ErrNotExist")
 	}
 
 	// Try to open non-existent file
 	_, err = client.Open("nonexistent.txt")
-	if err != fs.ErrNotExist {
+	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Expected ErrNotExist, got %v", err)
 	}
 
 	// Try to remove non-existent file
 	err = client.Remove("nonexistent.txt")
-	if err != fs.ErrNotExist {
+	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("Expected ErrNotExist, got %v", err)
 	}
 }
@@ -391,4 +481,240 @@ func TestWriteFile(t *testing.T) {
 	if string(content) != string(newData) {
 		t.Errorf("Expected content '%s', got '%s'", string(newData), string(content))
 	}
+}
+
+func TestDirectoryModeWithoutContentMode(t *testing.T) {
+	memFS := memfs.New()
+	inner := NewServer(memFS)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec := httptest.NewRecorder()
+		inner.ServeHTTP(rec, r)
+		for k, v := range rec.Header() {
+			if k == "Content-Mode" {
+				continue
+			}
+			for _, vv := range v {
+				w.Header().Add(k, vv)
+			}
+		}
+		w.WriteHeader(rec.Code)
+		w.Write(rec.Body.Bytes())
+	}))
+	defer server.Close()
+	client := New(server.URL, nil)
+
+	info, err := client.Stat(".")
+	if err != nil {
+		t.Fatalf("Stat root: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("expected root to be a directory")
+	}
+	if info.Mode()&0111 == 0 {
+		t.Errorf("directory missing execute bit: %o", info.Mode()&0777)
+	}
+}
+
+func doRequest(t *testing.T, server *httptest.Server, method, path string, body io.Reader, headers http.Header) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(method, server.URL+path, body)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	for k, vals := range headers {
+		for _, v := range vals {
+			req.Header.Add(k, v)
+		}
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	return resp
+}
+
+func TestOptions(t *testing.T) {
+	_, server, _ := newTestServer()
+	defer server.Close()
+
+	resp := doRequest(t, server, http.MethodOptions, "/", nil, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if allow := resp.Header.Get("Allow"); allow != protocolMethods {
+		t.Errorf("Allow = %q, want %q", allow, protocolMethods)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != "OK\n" {
+		t.Errorf("body = %q, want %q", string(body), "OK\n")
+	}
+}
+
+func TestCopyFile(t *testing.T) {
+	memFS, server, client := newTestServer()
+	defer server.Close()
+
+	ctx := context.Background()
+	file, _ := client.CreateContext(ctx, "original.txt", []byte("copy me"), 0644)
+	file.Close()
+
+	resp := doRequest(t, server, "COPY", "/original.txt", nil, http.Header{
+		"Destination": {"/copy.txt"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("COPY failed: %d %s", resp.StatusCode, readBody(resp))
+	}
+
+	if _, err := fs.Stat(memFS, "original.txt"); err != nil {
+		t.Fatal("source should still exist after COPY")
+	}
+	content, err := fs.ReadFile(memFS, "copy.txt")
+	if err != nil {
+		t.Fatalf("copy not found: %v", err)
+	}
+	if string(content) != "copy me" {
+		t.Errorf("got %q", string(content))
+	}
+}
+
+func TestCopyDirectory(t *testing.T) {
+	memFS, server, client := newTestServer()
+	defer server.Close()
+
+	ctx := context.Background()
+	if err := client.Mkdir("srcdir", 0755); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := client.CreateContext(ctx, "srcdir/nested.txt", []byte("nested"), 0644)
+	f.Close()
+
+	resp := doRequest(t, server, "COPY", "/srcdir", nil, http.Header{
+		"Destination": {"/dstdir"},
+	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("COPY dir failed: %d %s", resp.StatusCode, readBody(resp))
+	}
+
+	if _, err := fs.Stat(memFS, "srcdir/nested.txt"); err != nil {
+		t.Fatal("source tree should remain")
+	}
+	content, err := fs.ReadFile(memFS, "dstdir/nested.txt")
+	if err != nil {
+		t.Fatalf("copied file not found: %v", err)
+	}
+	if string(content) != "nested" {
+		t.Errorf("got %q", string(content))
+	}
+}
+
+func TestMoveCopyOverwriteFails(t *testing.T) {
+	_, server, client := newTestServer()
+	defer server.Close()
+
+	ctx := context.Background()
+	a, _ := client.CreateContext(ctx, "a.txt", []byte("a"), 0644)
+	a.Close()
+	b, _ := client.CreateContext(ctx, "b.txt", []byte("b"), 0644)
+	b.Close()
+
+	for _, method := range []string{"MOVE", "COPY"} {
+		t.Run(method, func(t *testing.T) {
+			resp := doRequest(t, server, method, "/a.txt", nil, http.Header{
+				"Destination": {"/b.txt"},
+				"Overwrite":     {"F"},
+			})
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusPreconditionFailed {
+				t.Fatalf("expected 412, got %d: %s", resp.StatusCode, readBody(resp))
+			}
+		})
+	}
+}
+
+func TestRecursiveDelete(t *testing.T) {
+	memFS, server, client := newTestServer()
+	defer server.Close()
+
+	ctx := context.Background()
+	if err := client.Mkdir("removedir", 0755); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := client.CreateContext(ctx, "removedir/child.txt", []byte("x"), 0644)
+	f.Close()
+
+	if err := client.Remove("removedir"); err != nil {
+		t.Fatalf("Remove dir: %v", err)
+	}
+	if _, err := fs.Stat(memFS, "removedir"); err == nil {
+		t.Error("directory should be gone")
+	}
+	if _, err := fs.Stat(memFS, "removedir/child.txt"); err == nil {
+		t.Error("child should be gone")
+	}
+}
+
+func TestTarPatch(t *testing.T) {
+	memFS, server, client := newTestServer()
+	defer server.Close()
+
+	ctx := context.Background()
+	f, _ := client.CreateContext(ctx, "keep.txt", []byte("stay"), 0644)
+	f.Close()
+	f2, _ := client.CreateContext(ctx, "remove.txt", []byte("go"), 0644)
+	f2.Close()
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+
+	addHdr := &tar.Header{
+		Name:     "added.txt",
+		Mode:     0644,
+		Size:     7,
+		Typeflag: tar.TypeReg,
+	}
+	if err := tw.WriteHeader(addHdr); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write([]byte("newfile")); err != nil {
+		t.Fatal(err)
+	}
+
+	delHdr := &tar.Header{
+		Name:       "remove.txt",
+		Typeflag:   tar.TypeReg,
+		PAXRecords: map[string]string{"delete": ""},
+	}
+	if err := tw.WriteHeader(delHdr); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := client.Patch(ctx, ".", tarBuf); err != nil {
+		t.Fatalf("Patch: %v", err)
+	}
+
+	if _, err := fs.Stat(memFS, "remove.txt"); err == nil {
+		t.Error("remove.txt should be deleted")
+	}
+	if _, err := fs.Stat(memFS, "keep.txt"); err != nil {
+		t.Error("keep.txt should remain")
+	}
+	content, err := fs.ReadFile(memFS, "added.txt")
+	if err != nil {
+		t.Fatalf("added.txt: %v", err)
+	}
+	if string(content) != "newfile" {
+		t.Errorf("got %q", string(content))
+	}
+}
+
+func readBody(resp *http.Response) string {
+	b, _ := io.ReadAll(resp.Body)
+	return string(b)
 }

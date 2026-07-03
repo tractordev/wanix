@@ -103,15 +103,54 @@ func (fsys *FS) normalizeHTTPPath(name string) string {
 	return name
 }
 
-// buildURL constructs the full HTTP URL for a path
-func (fsys *FS) buildURL(path string) string {
-	return fsys.baseURL + fsys.normalizeHTTPPath(path)
+// buildURL constructs the full HTTP URL for a path, preserving query parameters.
+func (fsys *FS) buildURL(name string) string {
+	u, err := url.Parse(fsys.baseURL)
+	if err != nil {
+		return fsys.baseURL + fsys.normalizeHTTPPath(name)
+	}
+	rel := strings.TrimPrefix(fsys.normalizeHTTPPath(name), "/")
+	if rel == "." {
+		rel = ""
+	}
+	basePath := strings.TrimSuffix(u.Path, "/")
+	if rel != "" {
+		u.Path = basePath + "/" + rel
+	} else {
+		u.Path = basePath + "/"
+	}
+	return u.String()
 }
 
 // doRequest logs and executes an HTTP request
 func (fsys *FS) doRequest(req *http.Request) (*http.Response, error) {
 	fsys.log.Debug(req.Method, "url", req.URL)
 	return fsys.client.Do(req)
+}
+
+// pathError wraps an HTTP error response as a *fs.PathError.
+func pathError(op, name string, resp *http.Response) error {
+	return &fs.PathError{Op: op, Path: name, Err: responseError(resp)}
+}
+
+// responseError maps HTTP error responses to fs errors where possible.
+func responseError(resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+	msg := strings.TrimSpace(string(body))
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return fs.ErrNotExist
+	}
+	if strings.Contains(msg, fs.ErrExist.Error()) {
+		return fs.ErrExist
+	}
+	if strings.Contains(msg, fs.ErrNotExist.Error()) || strings.Contains(msg, "Object Not Found") {
+		return fs.ErrNotExist
+	}
+	if msg == "" {
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+	}
+	return fmt.Errorf("HTTP %d: %s", resp.StatusCode, msg)
 }
 
 // parseDirectory parses the directory listing content into fileNode entries
@@ -134,6 +173,9 @@ func parseDirectory(fsys wrappedFS, basepath string, content []byte) ([]*Node, e
 		modeStr := parts[1]
 		mode := parseMode(modeStr)
 		isDir := mode&fs.ModeDir != 0
+		if isDir {
+			mode = ensureDirMode(mode)
+		}
 
 		// Construct full path for the entry
 		entryPath := basepath
@@ -155,16 +197,28 @@ func parseDirectory(fsys wrappedFS, basepath string, content []byte) ([]*Node, e
 	return entries, nil
 }
 
-// parseMode converts a Unix mode string to fs.FileMode
+// parseMode converts a Unix mode string to fs.FileMode.
+// Returns 0 when the mode is missing or invalid so callers can apply defaults.
 func parseMode(modeStr string) fs.FileMode {
 	if modeStr == "" {
-		return fs.FileMode(0644)
+		return 0
 	}
 	unixMode, err := strconv.ParseUint(modeStr, 10, 32)
 	if err != nil {
-		return fs.FileMode(0644)
+		return 0
 	}
 	return pstat.UnixModeToFileMode(uint32(unixMode))
+}
+
+// ensureDirMode makes sure directory modes include the execute bit required for traversal.
+func ensureDirMode(mode fs.FileMode) fs.FileMode {
+	if mode&fs.ModeDir == 0 {
+		mode = fs.ModeDir | (mode & fs.ModePerm)
+	}
+	if mode&0111 == 0 {
+		mode |= 0111
+	}
+	return mode
 }
 
 // formatMode converts a Go fs.FileMode to Unix mode string

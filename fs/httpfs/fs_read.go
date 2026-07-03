@@ -21,7 +21,7 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 // OpenContext opens the named file for reading with context
 func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	if fsys.shouldIgnore(name) {
-		return nil, fs.ErrNotExist
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
 	fsys.log.Debug("Open", "name", name)
 	url := fsys.buildURL(name)
@@ -37,11 +37,8 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fs.ErrNotExist
-	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return nil, pathError("open", name, resp)
 	}
 
 	content, err := io.ReadAll(resp.Body)
@@ -65,7 +62,7 @@ func (fsys *FS) Stat(name string) (fs.FileInfo, error) {
 // StatContext performs a HEAD request to get file metadata
 func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, error) {
 	if fsys.shouldIgnore(name) {
-		return nil, fs.ErrNotExist
+		return nil, &fs.PathError{Op: "stat", Path: name, Err: fs.ErrNotExist}
 	}
 	fsys.log.Debug("Stat", "name", name)
 	url := fsys.buildURL(name)
@@ -81,11 +78,8 @@ func (fsys *FS) StatContext(ctx context.Context, name string) (fs.FileInfo, erro
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fs.ErrNotExist
-	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return nil, pathError("stat", name, resp)
 	}
 
 	node, err := ParseNode(fsys, name, resp.Header, nil)
@@ -117,11 +111,8 @@ func (fsys *FS) ReadDirContext(ctx context.Context, name string) ([]fs.DirEntry,
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fs.ErrNotExist
-	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return nil, pathError("readdir", name, resp)
 	}
 
 	content, err := io.ReadAll(resp.Body)
@@ -152,7 +143,7 @@ func (fsys *FS) Readlink(name string) (string, error) {
 
 func (fsys *FS) ReadlinkContext(ctx context.Context, name string) (string, error) {
 	if fsys.shouldIgnore(name) {
-		return "", fs.ErrNotExist
+		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrNotExist}
 	}
 	fsys.log.Debug("Readlink", "name", name)
 
@@ -169,12 +160,8 @@ func (fsys *FS) ReadlinkContext(ctx context.Context, name string) (string, error
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return "", fs.ErrNotExist
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return "", pathError("readlink", name, resp)
 	}
 
 	if resp.Header.Get("Content-Type") != "application/x-symlink" {
@@ -195,7 +182,7 @@ func (fsys *FS) ReadFile(name string) ([]byte, error) {
 
 func (fsys *FS) ReadFileContext(ctx context.Context, name string) ([]byte, error) {
 	if fsys.shouldIgnore(name) {
-		return nil, fs.ErrNotExist
+		return nil, &fs.PathError{Op: "read", Path: name, Err: fs.ErrNotExist}
 	}
 	fsys.log.Debug("ReadFile", "name", name)
 
@@ -210,12 +197,8 @@ func (fsys *FS) ReadFileContext(ctx context.Context, name string) ([]byte, error
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, fs.ErrNotExist
-	}
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return nil, pathError("read", name, resp)
 	}
 
 	content, err := io.ReadAll(resp.Body)
@@ -256,13 +239,8 @@ func (fsys *FS) streamTree(ctx context.Context, name string) iter.Seq2[*Node, er
 		}
 		defer resp.Body.Close()
 
-		if resp.StatusCode == http.StatusNotFound {
-			yield(nil, fs.ErrNotExist)
-			return
-		}
-
 		if resp.StatusCode != http.StatusOK {
-			yield(nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status))
+			yield(nil, pathError("stream", name, resp))
 			return
 		}
 

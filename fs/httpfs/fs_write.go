@@ -3,6 +3,7 @@ package httpfs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,7 +35,7 @@ func (fsys *FS) Patch(ctx context.Context, name string, tarBuf bytes.Buffer) err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return pathError("patch", name, resp)
 	}
 
 	return nil
@@ -70,7 +71,7 @@ func (fsys *FS) WriteFileContext(ctx context.Context, name string, data []byte, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return pathError("write", name, resp)
 	}
 
 	return nil
@@ -100,6 +101,57 @@ func (fsys *FS) CreateContext(ctx context.Context, name string, content []byte, 
 	}, nil
 }
 
+// OpenFile opens a file with the given flags.
+func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) {
+	return fsys.OpenFileContext(context.Background(), name, flag, perm)
+}
+
+// OpenFileContext opens a file with the given flags and context.
+func (fsys *FS) OpenFileContext(ctx context.Context, name string, flag int, perm fs.FileMode) (fs.File, error) {
+	if fsys.shouldIgnore(name) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
+	if perm == 0 {
+		perm = 0644
+	}
+	if flag&(os.O_WRONLY|os.O_RDWR) != 0 {
+		_, err := fsys.StatContext(ctx, name)
+		if err != nil {
+			if !errors.Is(err, fs.ErrNotExist) {
+				return nil, err
+			}
+			if flag&os.O_CREATE == 0 {
+				return nil, err
+			}
+			return fsys.CreateContext(ctx, name, nil, perm)
+		}
+		if flag&os.O_TRUNC != 0 {
+			if err := fsys.WriteFileContext(ctx, name, nil, perm, time.Now()); err != nil {
+				return nil, err
+			}
+			return &Node{
+				path:    name,
+				size:    0,
+				mode:    perm,
+				modTime: time.Now(),
+				fs:      fsys,
+			}, nil
+		}
+		n, err := fsys.OpenContext(ctx, name)
+		if err != nil {
+			return nil, err
+		}
+		if flag&os.O_APPEND != 0 {
+			if _, err := fs.Seek(n, 0, io.SeekEnd); err != nil {
+				_ = n.Close()
+				return nil, err
+			}
+		}
+		return n, nil
+	}
+	return fsys.OpenContext(ctx, name)
+}
+
 func (fsys *FS) Symlink(oldname, newname string) error {
 	return fsys.SymlinkContext(context.Background(), oldname, newname)
 }
@@ -126,7 +178,7 @@ func (fsys *FS) SymlinkContext(ctx context.Context, oldname, newname string) err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return pathError("symlink", newname, resp)
 	}
 
 	return nil
@@ -158,7 +210,7 @@ func (fsys *FS) RenameContext(ctx context.Context, oldname, newname string) erro
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return pathError("rename", oldname, resp)
 	}
 
 	return nil
@@ -194,7 +246,7 @@ func (fsys *FS) MkdirContext(ctx context.Context, name string, perm fs.FileMode)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return pathError("mkdir", name, resp)
 	}
 
 	return nil
@@ -221,11 +273,8 @@ func (fsys *FS) RemoveContext(ctx context.Context, name string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return fs.ErrNotExist
-	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return pathError("remove", name, resp)
 	}
 
 	return nil
@@ -255,11 +304,8 @@ func (fsys *FS) ChmodContext(ctx context.Context, name string, mode fs.FileMode)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return fs.ErrNotExist
-	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return pathError("chmod", name, resp)
 	}
 
 	return nil
@@ -290,11 +336,8 @@ func (fsys *FS) ChownContect(ctx context.Context, name string, uid, gid int) err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return fs.ErrNotExist
-	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return pathError("chown", name, resp)
 	}
 
 	return nil
@@ -325,11 +368,8 @@ func (fsys *FS) ChtimesContext(ctx context.Context, name string, atime time.Time
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return fs.ErrNotExist
-	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		return pathError("chtimes", name, resp)
 	}
 
 	return nil

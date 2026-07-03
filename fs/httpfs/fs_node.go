@@ -56,16 +56,12 @@ func ParseNode(fsys wrappedFS, path string, headers http.Header, content []byte)
 	mode := parseMode(headers.Get("Content-Mode"))
 	if mode == 0 {
 		if isDir {
-			mode = fs.ModeDir | 0744
+			mode = fs.ModeDir | 0755
 		} else {
 			mode = 0644
 		}
-	}
-
-	// Check if mode indicates directory (parseFileMode should have handled this)
-	if isDir && (mode&fs.ModeDir == 0) {
-		// If Content-Type says directory but mode doesn't, add the directory flag
-		mode = fs.ModeDir | (mode & fs.ModePerm)
+	} else if isDir {
+		mode = ensureDirMode(mode)
 	}
 
 	var (
@@ -125,7 +121,7 @@ func (n *Node) Stat() (fs.FileInfo, error) {
 	if n.closed {
 		return nil, fs.ErrClosed
 	}
-	return fs.Stat(n.fs, n.path)
+	return n, nil
 }
 
 func (n *Node) Read(p []byte) (int, error) {

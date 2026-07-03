@@ -3,6 +3,7 @@ package httpfs
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -194,7 +195,7 @@ func (fsys *Cacher) PullNode(ctx context.Context, name string, recursivePrefetch
 	// Use the underlying FS to open the file
 	file, err := fsys.fs.OpenContext(ctx, name)
 	if err != nil {
-		if err == fs.ErrNotExist {
+		if errors.Is(err, fs.ErrNotExist) {
 			fsys.CacheNodeError(name, fs.ErrNotExist)
 		}
 		return nil, nil, err
@@ -290,7 +291,7 @@ func (fsys *Cacher) PullMeta(ctx context.Context, path string) (*Node, error) {
 
 	node, err := fsys.fs.StatContext(ctx, path)
 	if err != nil {
-		if err == fs.ErrNotExist {
+		if errors.Is(err, fs.ErrNotExist) {
 			// Cache the 404 error
 			fsys.CacheNodeError(path, fs.ErrNotExist)
 		}
@@ -325,7 +326,7 @@ func (fsys *Cacher) OpenContext(ctx context.Context, name string) (fs.File, erro
 	// We need an unclosed file handle for read/write operations
 	file, err := fsys.fs.OpenContext(ctx, name)
 	if err != nil {
-		if err == fs.ErrNotExist {
+		if errors.Is(err, fs.ErrNotExist) {
 			fsys.CacheNodeError(name, fs.ErrNotExist)
 		}
 		return nil, err
