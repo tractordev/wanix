@@ -12,7 +12,15 @@ export class BindElement extends HTMLElement {
         this.perm = this.getAttribute('perm') || "0644";
         this.union = this.getAttribute('union') || "after";
         this.type = this.getAttribute('type') || "ns";
+        this.opts = Object.fromEntries(
+            Object.entries(this.dataset).map(([k, v]) => [
+                k.startsWith("opt-") ? k.slice(4) : k,
+                v
+            ])
+        );
+   
         // this.trim = this.hasAttribute('trim');
+
 
         switch (this.type) {
         case "archive":

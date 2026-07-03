@@ -18,7 +18,7 @@ export class SystemElement extends WanixElement {
         this.instanceID = instanceID;
         this.isReady = false;
         this.debug = false;
-        
+
         this._ready = new Promise(resolve => this._wasmReady = resolve);
         this._ready.then(async () => {
             await this._setupNamespace("1", "", this.querySelectorAll(':scope > wanix-bind'));
@@ -69,6 +69,9 @@ export class SystemElement extends WanixElement {
         if (this.hasAttribute('wasm')) {
             return new URL(this.getAttribute('wasm'), document.baseURI).href;
         } else {
+            if (this.debug) {
+                return DEFAULT_WASM.replace(".wasm", ".debug.wasm");
+            }
             return DEFAULT_WASM;
         }
     }
@@ -105,6 +108,11 @@ export class SystemElement extends WanixElement {
 
     connectedCallback() {
         super.connectedCallback();
+
+        this.style.display = "flex";
+        this.style.flexDirection = "column";
+        this.style.height = "100%";
+        this.style.minHeight = "0";
 
         if (!window.__wanix) {
             window.__wanix = {};

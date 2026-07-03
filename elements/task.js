@@ -81,8 +81,12 @@ export class TaskElement extends WanixElement {
             await this.root.bind(program, [this.path, "fd/2"].join("/"));
             
         } else {
-            // await this.root.bind("#web/console", [this.path, "fd/1"].join("/"));
-            // await this.root.bind("#web/console", [this.path, "fd/2"].join("/"));
+            // torn on if this is the right default, but importantly it makes
+            // it easier to redirect output because bind to #web/console works better 
+            // than bind to #task/<id>/fd/1 for whatever reason right now
+            await this.root.bind("#web/console", [this.path, "fd/0"].join("/"));
+            await this.root.bind("#web/console", [this.path, "fd/1"].join("/"));
+            await this.root.bind("#web/console", [this.path, "fd/2"].join("/"));
         }
         
         if (!bindElements) {
