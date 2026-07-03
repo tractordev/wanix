@@ -23,12 +23,19 @@ import (
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"tractor.dev/wanix/rc/attach"
+	"tractor.dev/wanix/rc/bind"
 	"tractor.dev/wanix/rc/find"
 	"tractor.dev/wanix/rc/gzip"
 	"tractor.dev/wanix/rc/invoke"
 	"tractor.dev/wanix/rc/ls"
 	"tractor.dev/wanix/rc/stat"
+	"tractor.dev/wanix/rc/unbind"
+	"tractor.dev/wanix/rc/write"
 )
+
+// rcBindCmd is the internal exec name for bind. mvdan/sh treats bind as a bash
+// builtin, so the call handler rewrites user-facing bind to this name.
+const rcBindCmd = "__rc_bind"
 
 var coreutilsCommands = map[string]func() core.Command{
 	"cat":    func() core.Command { return cat.New() },
@@ -49,8 +56,11 @@ var coreutilsCommands = map[string]func() core.Command{
 	"gzcat":  func() core.Command { return gzip.New("gzcat") },
 	"gunzip": func() core.Command { return gzip.New("gunzip") },
 
-	"invoke": func() core.Command { return invoke.New() },
-	"attach": func() core.Command { return attach.New() },
+	"invoke":  func() core.Command { return invoke.New() },
+	"attach":  func() core.Command { return attach.New() },
+	rcBindCmd: func() core.Command { return bind.New() },
+	"unbind":  func() core.Command { return unbind.New() },
+	"write":   func() core.Command { return write.New() },
 }
 
 func urootCoreutilsMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
@@ -81,7 +91,11 @@ func urootCoreutilsMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHan
 				if errors.Is(err, flag.ErrHelp) {
 					return nil
 				}
-				fmt.Fprintf(hc.Stderr, "rc: %s: %v\n", args[0], err)
+				name := args[0]
+				if name == rcBindCmd {
+					name = "bind"
+				}
+				fmt.Fprintf(hc.Stderr, "rc: %s: %v\n", name, err)
 				return interp.ExitStatus(1)
 			}
 			return nil
@@ -92,6 +106,10 @@ func urootCoreutilsMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHan
 func bundledCommandNames() []string {
 	names := make([]string, 0, len(coreutilsCommands)+1)
 	for name := range coreutilsCommands {
+		if name == rcBindCmd {
+			names = append(names, "bind")
+			continue
+		}
 		names = append(names, name)
 	}
 	names = append(names, "env")

@@ -231,12 +231,19 @@ func printHelp(hc interp.HandlerContext) {
 
 func helpCallHandler() interp.CallHandlerFunc {
 	return func(ctx context.Context, args []string) ([]string, error) {
+		if len(args) > 0 && args[0] == "bind" {
+			return append([]string{rcBindCmd}, args[1:]...), nil
+		}
 		if len(args) > 0 && args[0] == "help" {
 			if len(args) > 2 {
 				return nil, fmt.Errorf("help: usage: help [command-or-builtin]")
 			}
 			if len(args) == 2 {
-				return []string{args[1], "--help"}, nil
+				cmd := args[1]
+				if cmd == "bind" {
+					cmd = rcBindCmd
+				}
+				return []string{cmd, "--help"}, nil
 			}
 			printHelp(interp.HandlerCtx(ctx))
 			return []string{":"}, nil
