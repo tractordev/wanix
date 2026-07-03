@@ -85,9 +85,6 @@ func (d *Device) Alloc() (rid string, err error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	// force xterm css to load if not already
-	loadXtermCSS()
-
 	d.nextID++
 	rid = strconv.Itoa(d.nextID)
 	hub := signal.NewBroadcaster()

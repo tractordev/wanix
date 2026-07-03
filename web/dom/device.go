@@ -68,7 +68,6 @@ func (d *Device) rootFS() fskit.UnionFS {
 					var el js.Value
 					var termData *terminalReadWriter
 					if name == "xterm" {
-						// 	xterm.Load()
 						// 	el = js.Global().Get("document").Call("createElement", "div")
 						// 	el.Set("className", "wanix-terminal")
 						// 	term := js.Global().Get("Terminal").New(map[string]any{

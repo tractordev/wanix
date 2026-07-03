@@ -37,6 +37,7 @@ func main() {
 	wanixOpts.Loader = map[string]api.Loader{
 		".go.js":     api.LoaderText,
 		".tinygo.js": api.LoaderText,
+		".css":       api.LoaderText,
 	}
 	wg.Add(1)
 	go func() {

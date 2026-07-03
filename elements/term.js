@@ -1,6 +1,14 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import xtermCss from "@xterm/xterm/css/xterm.css";
 import { WanixElement } from "./base.js";
+
+if (typeof document !== "undefined" && !document.getElementById("wanix-xterm-css")) {
+    const style = document.createElement("style");
+    style.id = "wanix-xterm-css";
+    style.textContent = xtermCss;
+    document.head.appendChild(style);
+}
 
 export class TerminalElement extends WanixElement {
     #resizeObserver;
