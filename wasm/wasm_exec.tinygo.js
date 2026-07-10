@@ -290,6 +290,19 @@
 					},
 				},
 				gojs: {
+					// func getRandomData(r []byte)
+					"runtime.getRandomData": (slice_ptr, slice_len, slice_cap) => {
+						const buf = loadSlice(slice_ptr, slice_len, slice_cap);
+						// crypto.getRandomValues has a 65536-byte cap per call
+						for (let offset = 0; offset < buf.length; offset += 65536) {
+							crypto.getRandomValues(
+								buf.subarray(offset, Math.min(offset + 65536, buf.length))
+							);
+						}
+					},
+					// https://github.com/tinygo-org/tinygo/issues/5357
+
+				
 					// func ticks() int64
 					"runtime.ticks": () => {
 						return BigInt((timeOrigin + performance.now()) * 1e6);
