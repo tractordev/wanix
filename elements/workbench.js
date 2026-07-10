@@ -22,6 +22,7 @@ export class WorkbenchElement extends WanixElement {
 
       this.style.flex = "1";
       this.style.height = "100%";
+      this.style.width = "100%";
       this.style.display = "flex";
       this.style.flexDirection = "column";
 
@@ -184,7 +185,15 @@ export class WorkbenchElement extends WanixElement {
               console.log("todo: handle openFolder", workspace, options);
               return Promise.resolve(true);
             },
-          }
+          },
+          commands: [
+            {
+              id: '__wanix.fileSaved',
+              handler: (payload) => {
+                this.dispatchEvent(new CustomEvent('workbench:documentSaved', { detail: payload }));
+              }
+            },
+          ],
         });
         if (!config.messagePorts) {
           config.messagePorts = new Map();

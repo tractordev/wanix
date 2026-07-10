@@ -61,6 +61,12 @@ export async function activate(context: vscode.ExtensionContext) {
 			
 		}
 	});
+
+	vscode.workspace.onDidSaveTextDocument(doc => {
+		vscode.commands.executeCommand('__wanix.fileSaved', {
+			uri: doc.uri.toString(),
+		});
+	})
 	
 	console.log('System extension activated');
 }
