@@ -112,6 +112,11 @@ func (fsys *Device) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, 
 	cacheName := parts[0]
 	subPath := parts[1]
 
+	if strings.HasPrefix(subPath, "origin/") {
+		host := js.Global().Get("location").Get("host").String()
+		subPath = strings.Replace(subPath, "origin/", host+"/", 1)
+	}
+
 	// Validate the path has at least host/file structure
 	if !strings.Contains(subPath, "/") {
 		return nil, &fs.PathError{Op: "openfile", Path: name, Err: fs.ErrInvalid}
