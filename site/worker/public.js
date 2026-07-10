@@ -16,7 +16,7 @@ export async function handle(req, env) {
     return new Response("Site not found", { status: 404 });
   }
 
-  const cacheControl = { "Cache-Control": "no-store" };
+  const cacheControl = {  }; //"Cache-Control": "no-store"
 
   const bucketPath = `/${site}`;
   let objectKey = `${bucketPath}${sitePathname}`;

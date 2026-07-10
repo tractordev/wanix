@@ -174,13 +174,13 @@ if (window === window.top) {
         return null;
       }
       
-      // console.log("checking local cache");
+      // console.log("checking local cache", requestSite);
       const localcache = await cacheFetch(req, "local");
       if (localcache) {
         return localcache;
       }
 
-      // console.log("checking main cache");
+      // console.log("checking main cache", requestSite);
       const cached = await cacheFetch(req, REMOTE_CACHE_NAME);
       if (cached) {
         (async () => {
@@ -576,9 +576,13 @@ class WanixSite extends HTMLElement {
   }
 
   whenEditorAppReady(frame) {
-    return this.whenFrame(frame, { path: "/editor.html" }).then(() =>
-      this.waitForEditorWorkbench(frame)
-    );
+    return this.whenFrame(frame, { path: "/editor.html" }).then(() => {
+      this.waitForEditorWorkbench(frame);
+      frame.contentDocument.querySelector("wanix-workbench")
+        .addEventListener("workbench:documentSaved", (e) => {
+          this.previewFrame.contentWindow.location.reload();
+        });
+    });
   }
 
   waitForEditorWorkbench(frame) {

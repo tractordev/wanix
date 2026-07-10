@@ -328,7 +328,8 @@ export async function cacheFetch(req, cache="main") {
   const url = cacheURL(new URL(req.url));
   if (!url) return null;
   const c = await ensureCache(cache);
-  return (await c.match(cacheRequest(url))) || null;
+  const v = await c.match(cacheRequest(url));
+  return v || null;
 }
 
 /**
