@@ -339,18 +339,30 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	}
 	defer f.Close()
 
-	_, _, err = f.Open(p9.ReadOnly)
+	// 9P2000.L forbids walking from an open fid, so clone the directory fid and
+	// open the clone. f stays unopened to serve the per-entry walks below.
+	_, dir, err := f.Walk(nil)
+	if err != nil {
+		return nil, translateError("readdir", name, err)
+	}
+	defer dir.Close()
+
+	_, _, err = dir.Open(p9.ReadOnly)
 	if err != nil {
 		return nil, translateError("readdir", name, err)
 	}
 
-	dirents, err := f.Readdir(0, 65535) // max uint32 breaks p9kit server
+	dirents, err := dir.Readdir(0, 65535) // max uint32 breaks p9kit server
 	if err != nil {
 		return nil, translateError("readdir", name, err)
 	}
 
 	entries := make([]fs.DirEntry, 0, len(dirents))
 	for _, entry := range dirents {
+		// io/fs.ReadDir excludes the dot entries; real 9P servers report them.
+		if entry.Name == "." || entry.Name == ".." {
+			continue
+		}
 		_, child, err := f.Walk([]string{entry.Name})
 		if err != nil {
 			continue
