@@ -82,9 +82,11 @@ Full API: [api/handle.js](api/handle.js).
 Elements let you compose a Wanix system in HTML. The only visual elements are
 `<wanix-term>` and `<wanix-workbench>`.
 
-### `<wanix-system>`
+### `<wanix-namespace>`
 
-The root namespace and Wasm kernel. All other elements live inside it (or reference it with `for`).
+The root namespace and Wasm kernel. All other elements live inside it, reference it with `for`, or have an implicit namespace because they are the
+root element. Any element other than `<wanix-bind>` can be used as the root element instead of `<wanix-namespace>` and will additionally take its
+attributes. 
 
 | Attribute | Description |
 |-----------|-------------|
@@ -192,7 +194,9 @@ Embed a VS Code web workbench backed by the Wanix filesystem.
 | `open` | Space-separated file paths to open on startup. |
 | `term` | Enable integrated terminal panel. |
 | `raw` | Raw terminal mode for integrated terminal. |
-| `sidebar` | Initial sidebar state: `default`, `hidden`, or `never` (hidden even if user previously opened). |
+| `sidebar` | Initial sidebar state: `default`, `hidden`, `never` (hidden even if user previously opened), or `always` (open even if user previously closed). |
+| `panel` | Initial panel state: `default`, `hidden`, `never`, `always`, `max` (seed maximized), or `always-max` (maximized even if user previously restored). |
+| `fresh` | Clear stored workbench UI/profile state before startup (do not restore previous layout). |
 | `welcome` | Show welcome page on startup. |
 | `debug` | Verbose workbench logging. |
 | `task-ns`, `term-ns` | Override task/terminal namespace paths (e.g. for VM guest shells). |
