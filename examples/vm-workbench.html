@@ -10,7 +10,6 @@
 
         <!-- bind a (slightly custom) alpine linux root to our root -->
         <wanix-bind dst="." src="../extras/dist/wanix-linux.tgz" type="archive"></wanix-bind>
-    
 
         <!-- add the v86 vm driver to the namespace -->
         <wanix-bind dst="#vm/v86" src="../v86/v86.tgz" type="archive"></wanix-bind>

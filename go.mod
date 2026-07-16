@@ -2,7 +2,7 @@ module tractor.dev/wanix
 
 go 1.26
 
-replace github.com/hugelgupf/p9 => github.com/progrium/p9 v0.0.0-20260529042029-b49ec572080f
+replace github.com/hugelgupf/p9 => github.com/progrium/p9 v0.0.0-20260715041022-79858e13150c
 
 replace golang.org/x/sys => github.com/progrium/sys-wasm v0.0.0-20240620081741-5ccc4fc17421
 
