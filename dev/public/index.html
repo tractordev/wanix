@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wanix :: Wasm-native Unix sandboxing for the web</title>
+
+<!-- OpenGraph -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:creator" content="@progrium" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://wanix.dev/" />
+<meta property="og:site_name" content="Wanix" />
+<meta property="og:title" content="Wanix — Wasm-native Unix sandboxing for the web" />
+<meta name="twitter:title" content="Wanix — Wasm-native Unix sandboxing for the web" />
+<meta property="og:image" content="https://wanix.dev/assets/wanix-og.png" />
+<meta name="twitter:image" content="https://wanix.dev/assets/wanix-og.png" />
+<meta property="og:image:alt" content="Wanix: Plan 9 inspired composable compute namespaces in HTML" />
+<meta name="description" content="Run and interact with real Wasm and x86 programs sandboxed in the browser. No server. Inspired by Plan 9." />
+<meta property="og:description" content="Run and interact with real Wasm and x86 programs sandboxed in the browser. No server. Inspired by Plan 9." />
+<meta name="twitter:description" content="Run and interact with real Wasm and x86 programs sandboxed in the browser. No server. Inspired by Plan 9." />
+
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+  .hljs {
+    background: var(--color-dark);
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="topbar">
+    <a class="topbar-logo" href="#" aria-label="Wanix home"></a>
+    <a class="topbar-github" href="https://github.com/tractordev/wanix" aria-label="GitHub">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 0 0-2.2 13.65c.35.06.48-.15.48-.34v-1.2c-1.95.42-2.36-.94-2.36-.94-.32-.8-.78-1.02-.78-1.02-.64-.44.05-.43.05-.43.7.05 1.07.72 1.07.72.62 1.07 1.63.76 2.03.58.06-.45.24-.76.44-.94-1.56-.18-3.2-.78-3.2-3.48 0-.77.27-1.4.72-1.9-.07-.18-.31-.9.07-1.87 0 0 .59-.19 1.94.72a6.7 6.7 0 0 1 3.53 0c1.35-.91 1.94-.72 1.94-.72.38.97.14 1.69.07 1.87.45.5.72 1.13.72 1.9 0 2.71-1.64 3.3-3.21 3.47.25.22.48.65.48 1.3v1.93c0 .19.13.4.48.34A7 7 0 0 0 8 1z" fill="currentColor"/></svg>
+    </a>
+  </div>
+</header>
+
+<main>
+
+  <section class="hero">
+    <a class="badge-pill" href="https://github.com/tractordev/wanix/releases">
+      <span class="pill pill-solid">new</span>
+      <span>Wanix 0.4 — wanix elements</span>
+      <span class="arrow" aria-hidden="true">→</span>
+    </a>
+
+    <h1>Wasm-native Unix sandboxing for the web</h1>
+    <p class="lede">
+      Run and interact with real Wasm and x86 programs entirely sandboxed in the browser. No server. Inspired by <a href="https://en.wikipedia.org/wiki/Plan_9_from_Bell_Labs" target="_blank" rel="noopener noreferrer" style="text-decoration: underline;">Plan 9</a>.
+    </p>
+
+    <div class="hero-demo">
+      <pre class="code-panel" style="max-width: 512px;"><code><span class="tok-tag">&lt;wanix-term&gt;</span>
+  <span class="tok-tag">&lt;wanix-bind</span> <span class="tok-attr">dst</span>=<span class="tok-str">"rc.wasm"</span> <span class="tok-attr">type</span>=<span class="tok-str">"file"</span>
+    <span class="tok-attr">src</span>=<span class="tok-str">"https://wanix.dev/extras/rc.wasm"</span>&gt;
+  <span class="tok-tag">&lt;/wanix-bind&gt;</span>
+  <span class="tok-tag">&lt;wanix-task</span> <span class="tok-attr">cmd</span>=<span class="tok-str">"rc.wasm"</span> <span class="tok-attr">term start</span><span class="tok-tag">&gt;&lt;/wanix-task&gt;</span>
+<span class="tok-tag">&lt;/wanix-term&gt;</span></code></pre>
+
+      <span class="hero-arrow" aria-hidden="true">↓</span>
+
+      <pre class="code-panel code-panel-dark" style="max-width: 512px; min-width: 256px;"><code class="nohighlight">rc% ls
+rc.wasm
+rc% <span class="cursor" aria-hidden="true"></span></code></pre>
+    </div>
+    <p class="hero-demo-caption">
+      Three tags and our Plan 9 inspired shell rc gets us a tiny <br />
+      embedded, Wasm-native Unix-like environment.
+    </p>
+  </section>
+
+  <section class="recipes-section">
+    <p class="eyebrow">&lt;/&gt; wanix recipes</p>
+    <h2>Basic starting points using Wanix Elements</h2>
+
+    <div class="recipes-tabs" role="tablist" aria-label="Recipes">
+      <button class="recipe-tab" type="button" role="tab" aria-selected="true" data-recipe="run-shell">Run a Shell</button>
+      <button class="recipe-tab" type="button" role="tab" aria-selected="false" data-recipe="edit-files">Edit Files</button>
+      <button class="recipe-tab" type="button" role="tab" aria-selected="false" data-recipe="shell-workbench">Shell in Workbench</button>
+      <button class="recipe-tab" type="button" role="tab" aria-selected="false" data-recipe="boot-vm">Boot a VM</button>
+      <button class="recipe-tab" type="button" role="tab" aria-selected="false" data-recipe="vm-workbench">Linux Dev Workbench</button>
+      
+      <button class="recipe-tab" type="button" role="tab" aria-selected="false" data-recipe="export-ns">Export a Namespace</button>
+      
+      <button class="recipe-tab" type="button" role="tab" aria-selected="false" data-recipe="shell-ns">Shell onto Namespace</button>
+      <button class="recipe-tab" type="button" role="tab" aria-selected="false" data-recipe="edit-remote">Edit Remote Files</button>
+    </div>
+
+    <div class="recipes-panels">
+      <div class="recipe-panel" role="tabpanel" data-recipe="run-shell">
+        <div class="recipes-copy">
+          Allocates a new <code>#ramfs</code> to the namespace root,
+          binds in the rc shell and an inline file, then runs the shell
+          task with a terminal. Try running:
+          <ul style="font-size: smaller;">
+            <li><code>ls</code></li>
+            <li><code>cat shell.txt</code></li>
+          </ul>
+        </div>
+        <pre class="code-panel recipes-code"><code></code></pre>
+      </div>
+      
+      <div class="recipe-panel" role="tabpanel" data-recipe="edit-files" hidden>
+        <p class="recipes-copy">
+          Workbench can be used as a file editor and explorer for any namespace.
+          This uses <code>#ramfs</code> but it could be any other namespace, for
+          example <code>#web/opfs</code> for browser persistent storage.
+        </p>
+        <pre class="code-panel recipes-code"><code></code></pre>
+      </div>
+
+      <div class="recipe-panel" role="tabpanel" data-recipe="boot-vm" hidden>
+        <div class="recipes-copy">
+          A Linux VM can be booted directly off the namespace. 
+          Here we use an Alpine/Busybox archive with kernel that, given a moment, boots to a shell. Try running:
+          <ul style="font-size: smaller;">
+            <li><code>ls /bin</code></li>
+            <li><code>cat /etc/os-release</code></li>
+          </ul>
+        </div>
+        <pre class="code-panel recipes-code"><code></code></pre>
+      </div>
+
+      <div class="recipe-panel" role="tabpanel" data-recipe="shell-workbench" hidden>
+        <p class="recipes-copy">
+          If you provide Workbench a task template with <code>role="shell"</code> it will be run in a terminal.
+          Workbench layout can also be modified. Here we use <code>panel="max"</code> to make the terminal panel full screen.
+        </p>
+        <pre class="code-panel recipes-code"><code></code></pre>
+      </div>
+
+      <div class="recipe-panel" role="tabpanel" data-recipe="vm-workbench" hidden>
+        <p class="recipes-copy">
+          Workbench can be used on a VM namespace, but in order to use the shell 
+          and files <em>inside</em> the VM, we make sure to export the VM guest namespace and tell Workbench to use it for creating the terminal.
+        </p>
+        <pre class="code-panel recipes-code"><code></code></pre>
+      </div>
+
+      <div class="recipe-panel" role="tabpanel" data-recipe="export-ns" hidden>
+        <p class="recipes-copy">
+          If <code>id</code> and <code>allow-origins</code> are provided to a namespace, 
+          the namespace can be imported into other namespaces using an import bind.
+        </p>
+        <pre class="code-panel recipes-code"><code></code></pre>
+      </div>
+
+      <div class="recipe-panel" role="tabpanel" data-recipe="shell-ns" hidden>
+        <div class="recipes-copy">
+          We layer/union the imported namespace with a local namespace that includes the rc shell to shell "onto" a remote namespace. Try running:
+          <ul style="font-size: smaller;">
+            <li><code>cat exported.txt</code></li>
+            <li><code>ls web</code></li>
+          </ul>
+        </div>
+        <pre class="code-panel recipes-code"><code></code></pre>
+      </div>
+
+      <div class="recipe-panel" role="tabpanel" data-recipe="edit-remote" hidden>
+        <p class="recipes-copy">
+          Workbench can be used to edit files of a remote imported namespace quite easily. What other recipes can you find?
+        </p>
+        <pre class="code-panel recipes-code"><code></code></pre>
+      </div>
+
+      <iframe class="recipes-preview" src="/recipes/run-shell.html" style="border: 1px solid var(--color-border); width: 100%; height: 384px; margin-top: 2rem; border-radius: var(--radius-md);"></iframe>
+    </div>
+
+    <script type="text/plain" id="recipe-edit-files">
+<wanix-workbench open="foo.txt" sidebar="always" assets="./assets">
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="foo.txt" type="file">
+    Hello, foo!
+  </wanix-bind>
+  <wanix-bind dst="bar.txt" type="file">
+    Goodbye, bar!
+  </wanix-bind>
+</wanix-workbench>
+    </script>
+
+    <script type="text/plain" id="recipe-run-shell">
+<wanix-term>
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm"></wanix-bind>
+  <wanix-bind dst="shell.txt" type="file">
+    Hello, shell!
+  </wanix-bind>
+  <wanix-task cmd="rc.wasm" term start></wanix-task>
+</wanix-term>
+    </script>
+
+    <script type="text/plain" id="recipe-boot-vm">
+<wanix-term raw>
+  <wanix-bind dst="." type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz"></wanix-bind>
+  <wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/v86.tgz"></wanix-bind>
+  <wanix-vm export="ttyS0" term start></wanix-vm>
+</wanix-term>
+    </script>
+
+    <script type="text/plain" id="recipe-shell-workbench">
+<wanix-workbench sidebar="always" panel="max" term assets="/workbench">
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm"></wanix-bind>
+  <wanix-bind dst="shell.txt" type="file">
+    Hello, shell!
+  </wanix-bind>
+  <wanix-task role="shell" cmd="rc.wasm"></wanix-task>
+</wanix-workbench>
+    </script>
+
+    <script type="text/plain" id="recipe-vm-workbench">
+<wanix-workbench assets="./assets" 
+    task-ns="#vm/1/guest/#task" 
+    term-ns="#vm/1/guest/#term" 
+    raw term>
+  <wanix-bind dst="." type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz"></wanix-bind>
+  <wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/v86.tgz"></wanix-bind>
+  <wanix-vm export="ttyS0" start></wanix-vm>
+  <wanix-task role="shell" cmd="bin/sh"></wanix-task>
+</wanix-workbench> 
+    </script>
+
+    <script type="text/plain" id="recipe-export-ns">
+<wanix-namespace id="main" allow-origins="*">
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="web" src="#web"></wanix-bind>
+  <wanix-bind dst="exported.txt" type="file">
+    exported data
+  </wanix-bind>
+</wanix-namespace>
+    </script>
+
+    <script type="text/plain" id="recipe-shell-ns">
+<wanix-term>
+  <wanix-bind dst="." type="import" src="./export-ns.html#main"></wanix-bind>
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm"></wanix-bind>
+  <wanix-bind dst="local.txt" type="file">
+    Hello, local!
+  </wanix-bind>
+  <wanix-task cmd="rc.wasm" term start></wanix-task>
+</wanix-term>
+    </script>
+
+    <script type="text/plain" id="recipe-edit-remote">
+<wanix-workbench sidebar="always" assets="/workbench">
+  <wanix-bind dst="." type="import" src="./export-ns.html#main"></wanix-bind>
+</wanix-workbench>
+          </script>
+  </section>
+
+  <section class="api-section">
+    <p class="eyebrow">&lt;/&gt; wanix elements</p>
+    <h2>Just a few tags bootstrap a Unix for the web</h2>
+
+    <!--div class="callout">
+      <span class="pill pill-outline">ns</span>
+      <p>
+        Tags marked <strong>ns</strong> are namespaces too — any one can be
+        your single top-level element, with
+        <code class="inline-code">&lt;wanix-bind&gt;</code> inside defining
+        what it contains.
+      </p>
+    </div-->
+
+    <div class="tag-group">
+      <div class="tag-group-heading">
+        <h3>Core — the building blocks</h3>
+        <p class="group-sub">orthogonal primitives</p>
+      </div>
+
+      <details class="tag-row" open>
+        <summary>
+          <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <code class="tag-name">&lt;wanix-task&gt;</code>
+          <span class="tag-desc">runs an executable in a namespace</span>
+          <a class="tag-docs" href="https://github.com/tractordev/wanix#wanix-task" target="_blank" rel="noopener noreferrer">docs</a>
+        </summary>
+        <div class="tag-examples">
+          <div class="tag-example" data-example="task-wasm">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Bind a Wasm binary into the namespace, then start it.
+              <code>cmd</code> is the command line; <code>start</code> runs it
+              headless as soon as the system is ready.
+            </p>
+          </div>
+          <div class="tag-example" data-example="task-js">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Inline a JS file and run it as a task. Wanix supports task drivers for pluggable execution with built-in drivers for JS and Wasm.
+            </p>
+          </div>
+          <!--div class="tag-example" data-example="task-shell">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Name the task with <code>id</code>, allocate a terminal with
+              <code>term</code>, and pass args on <code>cmd</code> — then
+              wire a <code>&lt;wanix-term&gt;</code> to
+              <code>#task/shell/term</code>.
+            </p>
+          </div-->
+        </div>
+      </details>
+
+      <details class="tag-row">
+        <summary>
+          <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <code class="tag-name">&lt;wanix-term&gt;</code>
+          <span class="tag-desc">an xterm.js terminal for a task or vm</span>
+          <a class="tag-docs" href="https://github.com/tractordev/wanix#wanix-term" target="_blank" rel="noopener noreferrer">docs</a>
+        </summary>
+        <div class="tag-examples">
+          <div class="tag-example" data-example="term-wrap">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Typically tasks are started with a terminal allocation that <code>&lt;wanix-term&gt;</code> automatically wires up to. 
+              Its common to use <code>&lt;wanix-term&gt;</code> as the top-level element for a task.
+            </p>
+          </div>
+          <div class="tag-example" data-example="term-path">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Visual elements like <code>&lt;wanix-term&gt;</code> can be used outside a namespace for styling flexibility, 
+              they just need explicit <code>for</code> and <code>path</code> attributes to wire up to Wanix terminal.
+            </p>
+          </div>
+          <!--div class="tag-example" data-example="term-raw">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Use <code>raw</code> for VM serial consoles so bytes pass
+              through with no local line editing.
+            </p>
+          </div-->
+        </div>
+      </details>
+
+      <details class="tag-row">
+        <summary>
+          <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <code class="tag-name">&lt;wanix-vm&gt;</code>
+          <span class="tag-desc">runs a virtual machine in a namespace, powered by v86</span>
+          <a class="tag-docs" href="https://github.com/tractordev/wanix#wanix-vm" target="_blank" rel="noopener noreferrer">docs</a>
+        </summary>
+        <div class="tag-examples">
+          <div class="tag-example" data-example="vm-boot">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Boot a headless Linux VM by binding in the v86 emulator assets and the Linux system image.
+              It will detect the Linux kernel and boot to a shell.
+            </p>
+          </div>
+          <div class="tag-example" data-example="vm-mem">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <div class="tag-example-copy">
+              <p>
+              This is more typical where you would allocate and attach a terminal,
+              though for VM consoles the terminal needs to be in <code>raw</code> mode.
+              </p>
+              <p>
+              If the image supports, <code>export="ttyS0"</code> can be used to export
+              the internal namespace at <code>#vm/1/guest</code>.
+              </p>
+            </div>
+          </div>
+          <!--div class="tag-example" data-example="vm-guest">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Once running, the guest namespace is reachable under
+              <code>#vm/1/guest</code> — bind into it or point a workbench
+              at its task and term trees.
+            </p>
+          </div-->
+        </div>
+      </details>
+
+      <details class="tag-row">
+        <summary>
+          <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <code class="tag-name">&lt;wanix-namespace&gt;</code>
+          <span class="tag-desc">an explicit namespace container</span>
+          <a class="tag-docs" href="https://github.com/tractordev/wanix#wanix-system" target="_blank" rel="noopener noreferrer">docs</a>
+        </summary>
+        <div class="tag-examples">
+          <!-- <div class="tag-example" data-example="ns-root">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Use <code>&lt;wanix-namespace&gt;</code> to explicitly create a namespace.
+            </p>
+          </div> -->
+          <div class="tag-example" data-example="ns-ramfs">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Use <code>&lt;wanix-namespace&gt;</code> to explicitly create a namespace. 
+              Using any other tag as the top-level element will implicitly create a namespace.
+            </p>
+          </div>
+          <div class="tag-example" data-example="ns-export">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Give the namespace an <code>id</code> and
+              <code>allow-origins</code> so other pages can import this
+              namespace using an import bind.
+            </p>
+          </div>
+        </div>
+      </details>
+
+      <details class="tag-row">
+        <summary>
+          <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <code class="tag-name">&lt;wanix-bind&gt;</code>
+          <span class="tag-desc">bind mount files, archives, and other namespaces into the namespace</span>
+          <a class="tag-docs" href="https://github.com/tractordev/wanix#wanix-bind" target="_blank" rel="noopener noreferrer">docs</a>
+        </summary>
+        <div class="tag-examples">
+          <div class="tag-example" data-example="bind-file">
+            <pre class="code-panel tag-example-code"><code class="language-html"></code></pre>
+            <p class="tag-example-copy">
+              Bind can link names, allocate devices, or using <code>type="file"</code> it can fetch
+              or inline files. Bind is a versatile primitive for building namespaces.
+            </p>
+          </div>
+          <div class="tag-example" data-example="bind-archive">
+            <pre class="code-panel tag-example-code"><code class="language-html"></code></pre>
+            <p class="tag-example-copy">
+              Using <code>type="archive"</code> you can unpack a <code>.tar</code> / <code>.tgz</code> into a
+              directory tree. Layer multiple archives or directory binds to the same <code>dst</code> to create a recursive union.
+            </p>
+          </div>
+          <div class="tag-example" data-example="bind-import">
+            <pre class="code-panel tag-example-code"><code class="language-html"></code></pre>
+            <p class="tag-example-copy">
+              Using <code>type="import"</code> you can import a remote namespace using 9P over WebSocket or as an embedded iframe.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="tag-group">
+      <div class="tag-group-heading">
+        <h3>Extended — larger components</h3>
+        <p class="group-sub">require additional assets</p>
+      </div>
+
+      <details class="tag-row">
+        <summary>
+          <svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <code class="tag-name">&lt;wanix-workbench&gt;</code>
+          <span class="tag-desc">embedded VS Code workbench as editor, file explorer, full IDE, or app shell</span>
+          <a class="tag-docs" href="https://github.com/tractordev/wanix#wanix-workbench" target="_blank" rel="noopener noreferrer">docs</a>
+        </summary>
+        <div class="tag-examples">
+          <div class="tag-example" data-example="wb-basic">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Embed a VS Code workbench backed by the Wanix namespace. The <code>assets</code> attribute is required. A task
+              with <code>role="shell"</code> needs to be given to enable a terminal.
+            </p>
+          </div>
+          <div class="tag-example" data-example="wb-files">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              Using attributes like <code>open</code> and <code>sidebar</code> you can control the initial state of the workbench.
+              Here we simplify IDE to effectively be a single-file editor.
+            </p>
+          </div>
+          <div class="tag-example" data-example="wb-vm">
+            <pre class="code-panel tag-example-code"><code></code></pre>
+            <p class="tag-example-copy">
+              In the futre, you'll be able to add custom extensions and views to workbench and even live edit them
+              within the workbench itself.
+            </p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <script type="text/plain" id="example-task-wasm">
+<wanix-task cmd="hello.wasm arg1 arg2" start>
+  <wanix-bind dst="hello.wasm" type="file" 
+    src="./hello.wasm"></wanix-bind>
+</wanix-task>
+    </script>
+    <script type="text/plain" id="example-task-js">
+<wanix-namespace>
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="task.js" type="file" perm="0766">
+    console.log("JS task running!");
+  </wanix-bind>
+  <wanix-task cmd="task.js" start></wanix-task>
+</wanix-namespace>
+    </script>
+    <script type="text/plain" id="example-task-shell">
+<wanix-term>
+  <wanix-bind dst="rc.wasm" type="file"
+    src="https://wanix.sh/wanix-extras/rc.wasm">
+  </wanix-bind>
+  <wanix-task cmd="rc.wasm" term start></wanix-task>
+</wanix-term>
+    </script>
+
+    <script type="text/plain" id="example-term-wrap">
+<wanix-term>
+  <wanix-bind dst="rc.wasm" type="file"
+    src="/dist/extras/rc.wasm">
+  </wanix-bind>
+  <wanix-task cmd="rc.wasm" term start></wanix-task>
+</wanix-term>
+    </script>
+    <script type="text/plain" id="example-term-path">
+<wanix-term for="namespace-id" path="#vm/1/term" raw></wanix-term>
+    </script>
+    <script type="text/plain" id="example-term-raw">
+<wanix-term path="#vm/1/term" raw></wanix-term>
+    </script>
+
+    <script type="text/plain" id="example-vm-boot">
+<wanix-vm mem="1G" start>
+  <wanix-bind dst="#vm/v86" type="archive"
+    src="/dist/extras/v86.tgz"></wanix-bind>
+  <wanix-bind dst="." type="archive" 
+    src="/dist/extras/wanix-linux.tgz"></wanix-bind>
+</wanix-vm>
+    </script>
+    <script type="text/plain" id="example-vm-mem">
+<wanix-term raw>
+  <wanix-bind dst="#vm/v86" type="archive"
+    src="/dist/extras/v86.tgz"></wanix-bind>
+  <wanix-bind dst="." type="archive" 
+    src="/dist/extras/wanix-linux.tgz"></wanix-bind>
+  <wanix-vm export="ttyS0" term start></wanix-vm>
+</wanix-term>
+    </script>
+    <script type="text/plain" id="example-vm-guest">
+<wanix-bind dst="guest" src="#vm/1/guest"></wanix-bind>
+    </script>
+
+    <script type="text/plain" id="example-ns-root">
+<wanix-namespace>
+  <wanix-bind dst="task" src="#task"></wanix-bind>
+</wanix-namespace>
+    </script>
+    <script type="text/plain" id="example-ns-ramfs">
+<wanix-namespace>
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="greeting.txt" type="file">
+    Hello, world!
+  </wanix-bind>
+</wanix-namespace>
+    </script>
+    <script type="text/plain" id="example-ns-export">
+<wanix-namespace id="main" allow-origins="*">
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="exported.txt" type="file">
+    exported data
+  </wanix-bind>
+</wanix-namespace>
+    </script>
+
+    <script type="text/plain" id="example-bind-file">
+<wanix-namespace>
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="web" src="#web"></wanix-bind>
+  <wanix-bind dst="hello.wasm" type="file" 
+    src="./example/hello.wasm"></wanix-bind>
+  <wanix-bind dst="note.txt" type="file">
+    Hello from Wanix!
+  </wanix-bind>
+</wanix-namespace>
+    </script>
+    <script type="text/plain" id="example-bind-archive">
+<wanix-namespace>
+  <wanix-bind dst="." type="archive" 
+    src="./example/base.tgz">
+  </wanix-bind>
+  <wanix-bind dst="." type="archive" 
+    src="./example/overlay.tgz">
+  </wanix-bind>
+</wanix-namespace>
+    </script>
+    <script type="text/plain" id="example-bind-import">
+<wanix-namespace>
+  <wanix-bind dst="remote" type="import" 
+    src="https://other.example/app.html#main">
+  </wanix-bind>
+</wanix-namespace>
+    </script>
+
+    <script type="text/plain" id="example-wb-basic">
+<wanix-workbench assets="/workbench" term>
+  <wanix-task role="shell" cmd="bin/sh"></wanix-task>
+</wanix-workbench>
+    </script>
+    <script type="text/plain" id="example-wb-files">
+<wanix-workbench open="foo.txt" sidebar="never" 
+    assets="/workbench">
+  <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+  <wanix-bind dst="foo.txt" type="file">
+    Hello, foo!
+  </wanix-bind>
+</wanix-workbench>
+    </script>
+    <script type="text/plain" id="example-wb-vm">
+<wanix-workbench assets="/workbench"
+    data-ext-myextensionA="/myextensionA"
+    data-ext-myextensionB="/myextensionB">
+    <!-- !! hypothetical, not supported !! -->
+</wanix-workbench>
+    </script>
+  </section>
+
+  
+
+  <section class="dropin-section">
+    <p class="eyebrow">&lt;/&gt; script tag</p>
+    <h2>Add Wanix to any page</h2>
+    <p class="lede">
+      No npm, no bundler, no build step. One script tag and
+      you're ready to go.
+    </p>
+
+    <pre class="code-panel dropin-panel"><code>&lt;script type="module"
+  src="https://cdn.jsdelivr.net/npm/wanix/dist/wanix.min.js"&gt;&lt;/script&gt;
+</code></pre>
+  </section>
+
+  <section class="story-section">
+    <div class="story-video" id="story-video" data-youtube-id="kGBeT8lwbo0">
+      <p class="video-caption">the ideas behind wanix</p>
+      <a class="play-button" href="https://www.youtube.com/watch?v=kGBeT8lwbo0" target="_blank" rel="noopener noreferrer" data-play-video aria-label="Play the talk">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7l9 5-9 5V7z" fill="currentColor"/></svg>
+      </a>
+      <span class="duration-badge">19 min</span>
+    </div>
+
+    <div class="story-copy">
+      <p class="eyebrow">the full story</p>
+      <h2>The spirit of Plan 9, in Wasm</h2>
+      <p>
+        Where the ideas come from, per-process namespaces,
+        everything-is-a-file, and why a research OS from the 90s turns out
+        to be the right model for the local-first web.
+      </p>
+      <a class="link-arrow" href="https://www.youtube.com/watch?v=kGBeT8lwbo0" target="_blank" rel="noopener noreferrer" data-play-video>▷ watch the talk</a>
+      <!--a class="link-muted" href="#">⊞ or browse demos →</a-->
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <span class="footer-brand" role="img" aria-label="Wanix"></span>
+
+  <nav class="footer-nav">
+    <!-- <a href="#">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="2" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="2" y="9" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="9" y="9" width="5" height="5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+      Docs
+    </a> -->
+    <a href="https://github.com/tractordev/wanix">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 0 0-2.2 13.65c.35.06.48-.15.48-.34v-1.2c-1.95.42-2.36-.94-2.36-.94-.32-.8-.78-1.02-.78-1.02-.64-.44.05-.43.05-.43.7.05 1.07.72 1.07.72.62 1.07 1.63.76 2.03.58.06-.45.24-.76.44-.94-1.56-.18-3.2-.78-3.2-3.48 0-.77.27-1.4.72-1.9-.07-.18-.31-.9.07-1.87 0 0 .59-.19 1.94.72a6.7 6.7 0 0 1 3.53 0c1.35-.91 1.94-.72 1.94-.72.38.97.14 1.69.07 1.87.45.5.72 1.13.72 1.9 0 2.71-1.64 3.3-3.21 3.47.25.22.48.65.48 1.3v1.93c0 .19.13.4.48.34A7 7 0 0 0 8 1z" fill="currentColor"/></svg>
+      GitHub
+    </a>
+    <a href="https://discord.gg/nQbgRjEBU4">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M12.5 4.2A9.6 9.6 0 0 0 10 3.4l-.15.3a8.4 8.4 0 0 1 2.2.8 8.9 8.9 0 0 0-8.1 0 8 8 0 0 1 2.2-.8L6 3.4a9.6 9.6 0 0 0-2.5.8C1.8 6.9 1.3 9.5 1.5 12a9.7 9.7 0 0 0 2.9 1.5l.5-.8a6.4 6.4 0 0 1-1-.5l.25-.2a7 7 0 0 0 5.7 0l.25.2a6.4 6.4 0 0 1-1 .5l.5.8A9.7 9.7 0 0 0 14.5 12c.25-2.9-.5-5.4-2-7.8zM6 10.4c-.55 0-1-.5-1-1.1s.45-1.1 1-1.1 1 .5 1 1.1-.45 1.1-1 1.1zm4 0c-.55 0-1-.5-1-1.1s.45-1.1 1-1.1 1 .5 1 1.1-.45 1.1-1 1.1z" fill="currentColor"/></svg>
+      Discord
+    </a>
+    <!--a href="#">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3l4-1.2 4 1.2 4-1.2v10.4l-4 1.2-4-1.2-4 1.2V3z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M6 2v10.4M10 3.2v10.4" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      Roadmap
+    </a-->
+  </nav>
+
+  <span class="footer-license" style="text-align: right;">Made by <a href="https://progrium.xyz">progrium</a></span>
+</footer>
+<script>
+  (function () {
+    document.querySelectorAll('.tag-example[data-example]').forEach(function (example) {
+      var source = document.getElementById('example-' + example.dataset.example);
+      var code = example.querySelector('.tag-example-code code');
+      if (!source || !code) return;
+      code.textContent = source.textContent.trim();
+    });
+
+    document.querySelectorAll('.recipe-panel').forEach(function (panel) {
+      var source = document.getElementById('recipe-' + panel.dataset.recipe);
+      var code = panel.querySelector('.recipes-code code');
+      if (!source || !code) return;
+      code.textContent = source.textContent.trim();
+    });
+    hljs.highlightAll();
+  })();
+</script>
+<script>
+  (function () {
+    var rows = document.querySelectorAll('.api-section details.tag-row');
+    rows.forEach(function (row) {
+      row.addEventListener('toggle', function () {
+        if (!row.open) return;
+        rows.forEach(function (other) {
+          if (other !== row) other.removeAttribute('open');
+        });
+      });
+    });
+  })();
+</script>
+<script>
+  (function () {
+    var video = document.getElementById('story-video');
+    if (!video) return;
+
+    function playInline(event) {
+      event.preventDefault();
+      var id = video.dataset.youtubeId;
+      video.innerHTML =
+        '<iframe src="https://www.youtube.com/embed/' + id +
+        '?autoplay=1" title="Wanix — the ideas behind it" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>';
+    }
+
+    document.querySelectorAll('[data-play-video]').forEach(function (trigger) {
+      trigger.addEventListener('click', playInline);
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    if (typeof HTMLElement.prototype.animate !== 'function') return;
+
+    var DURATION = 160;
+    var EASING = 'ease-out';
+
+    document.querySelectorAll('.tag-row').forEach(function (row) {
+      var summary = row.querySelector('summary');
+      var content = row.querySelector('.tag-examples');
+      if (!summary || !content) return;
+
+      var animation = null;
+      var isClosing = false;
+      var isExpanding = false;
+
+      function onAnimationFinish(open) {
+        row.open = open;
+        animation = null;
+        isClosing = false;
+        isExpanding = false;
+        row.style.height = row.style.overflow = '';
+      }
+
+      function shrink() {
+        isClosing = true;
+        var startHeight = row.offsetHeight + 'px';
+        var endHeight = summary.offsetHeight + 'px';
+        if (animation) animation.cancel();
+        animation = row.animate({ height: [startHeight, endHeight] }, { duration: DURATION, easing: EASING });
+        animation.onfinish = function () { onAnimationFinish(false); };
+        animation.oncancel = function () { isClosing = false; };
+      }
+
+      function expand() {
+        isExpanding = true;
+        var startHeight = row.offsetHeight + 'px';
+        var endHeight = summary.offsetHeight + content.offsetHeight + 'px';
+        if (animation) animation.cancel();
+        animation = row.animate({ height: [startHeight, endHeight] }, { duration: DURATION, easing: EASING });
+        animation.onfinish = function () { onAnimationFinish(true); };
+        animation.oncancel = function () { isExpanding = false; };
+      }
+
+      function openRow() {
+        row.style.height = row.offsetHeight + 'px';
+        row.open = true;
+        window.requestAnimationFrame(expand);
+      }
+
+      summary.addEventListener('click', function (event) {
+        if (event.target.closest('a')) return;
+        event.preventDefault();
+        row.style.overflow = 'hidden';
+        if (isClosing || !row.open) {
+          openRow();
+        } else if (isExpanding || row.open) {
+          shrink();
+        }
+      });
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    var tabs = document.querySelectorAll('.recipe-tab');
+    var panels = document.querySelectorAll('.recipe-panel');
+    var preview = document.querySelector('.recipes-preview');
+    if (!tabs.length) return;
+
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var target = tab.dataset.recipe;
+
+        tabs.forEach(function (t) {
+          t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+        });
+
+        panels.forEach(function (panel) {
+          panel.hidden = panel.dataset.recipe !== target;
+        });
+
+        if (preview) preview.src = "recipes/" + target + '.html';
+
+        tab.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>

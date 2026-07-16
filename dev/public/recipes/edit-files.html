@@ -1,0 +1,10 @@
+<script type="module" src="/assets/wanix.min.js"></script>
+<wanix-workbench fresh open="foo.txt" sidebar="always" assets="/workbench" debug>
+        <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+        <wanix-bind dst="foo.txt" type="file">
+        Hello, foo!
+        </wanix-bind>
+        <wanix-bind dst="bar.txt" type="file">
+        Goodbye, bar!
+        </wanix-bind>
+</wanix-workbench>

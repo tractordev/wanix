@@ -1,0 +1,12 @@
+<script type="module" src="/assets/wanix.min.js"></script>
+<body style="background-color: #000;">
+<wanix-term debug>
+    <wanix-bind dst="." type="import" src="./export-ns.html#main"></wanix-bind>
+    <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+    <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm"></wanix-bind>
+    <wanix-bind dst="local.txt" type="file">
+        Hello, local!
+    </wanix-bind>
+    <wanix-task cmd="rc.wasm" term start></wanix-task>
+</wanix-term>
+</body>

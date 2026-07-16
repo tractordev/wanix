@@ -1,0 +1,8 @@
+<script type="module" src="/assets/wanix.min.js"></script>
+<body style="background-color: #000;">
+<wanix-term raw debug>
+    <wanix-bind dst="." type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz"></wanix-bind>
+    <wanix-bind dst="#vm/v86" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/v86.tgz" type="archive"></wanix-bind>
+    <wanix-vm export="ttyS0" term start></wanix-vm>
+</wanix-term>
+</body>

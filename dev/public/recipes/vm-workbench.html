@@ -1,0 +1,9 @@
+<script type="module" src="/assets/wanix.min.js"></script>
+<wanix-workbench fresh sidebar="always" assets="/workbench" debug raw term
+    task-ns="#vm/1/guest/#task" 
+    term-ns="#vm/1/guest/#term">
+    <wanix-bind dst="." type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz"></wanix-bind>
+    <wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/v86.tgz"></wanix-bind>
+    <wanix-vm export="ttyS0" start></wanix-vm>
+    <wanix-task role="shell" cmd="bin/sh"></wanix-task>
+</wanix-workbench>

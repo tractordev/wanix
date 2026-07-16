@@ -1,0 +1,7 @@
+/public/workbench
+/public/assets/wanix.wasm
+/public/assets/wanix.debug.wasm
+/public/assets/wanix.min.js
+node_modules/
+.wrangler/
+

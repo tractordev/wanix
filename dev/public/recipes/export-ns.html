@@ -1,0 +1,10 @@
+<script type="module" src="/assets/wanix.min.js"></script>
+<wanix-namespace style="height: 0px;" id="main" allow-origins="*" debug>
+    <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+    <wanix-bind dst="web" src="#web"></wanix-bind>
+    <wanix-bind dst="exported.txt" type="file">
+      exported data
+    </wanix-bind>
+</wanix-namespace>
+<p>Nothing visible here, just an exported namespace.<br />
+  See it imported in the next recipes as <code>./export-ns.html#main</code></p>
