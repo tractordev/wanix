@@ -30,7 +30,9 @@ export class WorkbenchElement extends WanixElement {
 
       this.debug = this.hasAttribute('debug');
       this._term = this.hasAttribute('term');
+      this._fresh = this.hasAttribute('fresh');
       this._sidebar = parseSidebarMode(this.getAttribute("sidebar"));
+      this._panel = parsePanelMode(this.getAttribute("panel"));
       this._welcome = this.hasAttribute("welcome");
       this._openPaths = parseOpenPaths(this.getAttribute("open"));
       this.raw = this.hasAttribute('raw');
@@ -110,6 +112,7 @@ export class WorkbenchElement extends WanixElement {
           term: this._term,
           raw: this.raw,
           sidebar: this._sidebar,
+          panel: this._panel,
           ns: {
             task: this._taskpath,
             term: this._termpath,
@@ -153,6 +156,11 @@ export class WorkbenchElement extends WanixElement {
         "workbench.startupEditor": this._welcome ? "welcomePage" : "none",
         "editor.minimap.enabled": false,
       };
+      if (this._panel === "always-max") {
+        configurationDefaults["workbench.panel.opensMaximized"] = "always";
+      } else if (this._panel === "always") {
+        configurationDefaults["workbench.panel.opensMaximized"] = "never";
+      }
       const defaultConfig = {
         configurationDefaults,
         //   "workbench.tree.indent": 12,
@@ -160,14 +168,18 @@ export class WorkbenchElement extends WanixElement {
         //   "problems.visibility": false,
         //   "workbench.startupEditor": "none",
         //   "terminal.integrated.tabs.showActions": false,
-        //   "workbench.panel.opensMaximized": "always",
         developmentOptions: { logLevel: this.debug ? 2 : 0 },
         profile: buildWorkbenchProfile(this._sidebar),
       };
   
       require(["vs/workbench/workbench.web.main"], async (wb) => {
         const folderUri = wb.URI.parse(`wanix:/${this.wd}`);
-        await applySidebarLayout(folderUri.toString(), this._sidebar);
+        const folderUriString = folderUri.toString();
+        if (this._fresh) {
+          await resetWorkbenchStorage(folderUriString);
+        }
+        await applySidebarLayout(folderUriString, this._sidebar);
+        await applyPanelLayout(folderUriString, this._panel);
         const defaultLayout = buildDefaultLayout(this._sidebar, this._openPaths, wb, this.wd);
         if (defaultLayout) {
           defaultConfig.defaultLayout = defaultLayout;
@@ -223,6 +235,9 @@ export class WorkbenchElement extends WanixElement {
  * @returns {{ name: string, contents: string }}
  */
 const WORKBENCH_LAYOUT_SIDEBAR_HIDDEN_KEY = "workbench.sideBar.hidden";
+const WORKBENCH_LAYOUT_PANEL_HIDDEN_KEY = "workbench.panel.hidden";
+const WORKBENCH_LAYOUT_EDITOR_HIDDEN_KEY = "workbench.editor.hidden";
+const WORKBENCH_LAYOUT_PANEL_WAS_LAST_MAXIMIZED_KEY = "workbench.panel.wasLastMaximized";
 
 /** @param {string | null} value */
 function parseOpenPaths(value) {
@@ -231,7 +246,7 @@ function parseOpenPaths(value) {
 }
 
 /**
- * @param {"default" | "hidden" | "never"} sidebarMode
+ * @param {"default" | "hidden" | "never" | "always"} sidebarMode
  * @param {string[]} openPaths
  * @param {string} wd
  */
@@ -260,11 +275,27 @@ function toWanixFileUri(wb, wd, path) {
   return wb.URI.parse(`wanix:/${workspacePath}`);
 }
 
-/** @returns {"default" | "hidden" | "never"} */
+/** @returns {"default" | "hidden" | "never" | "always"} */
 function parseSidebarMode(value) {
   const mode = (value ?? "default").trim().toLowerCase();
   if (mode === "" || mode === "default") return "default";
-  if (mode === "hidden" || mode === "never") return mode;
+  if (mode === "hidden" || mode === "never" || mode === "always") return mode;
+  return "default";
+}
+
+/** @returns {"default" | "hidden" | "never" | "always" | "max" | "always-max"} */
+function parsePanelMode(value) {
+  const mode = (value ?? "default").trim().toLowerCase();
+  if (mode === "" || mode === "default") return "default";
+  if (
+    mode === "hidden" ||
+    mode === "never" ||
+    mode === "always" ||
+    mode === "max" ||
+    mode === "always-max"
+  ) {
+    return mode;
+  }
   return "default";
 }
 
@@ -281,8 +312,8 @@ function workspaceStorageId(folderUriString) {
   return hashString(folderUriString).toString(16);
 }
 
-function openWorkspaceStorageDb(workspaceId) {
-  const dbName = `vscode-web-state-db-${workspaceId}`;
+function openStateDb(id) {
+  const dbName = `vscode-web-state-db-${id}`;
   const storeName = "ItemTable";
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName);
@@ -295,6 +326,39 @@ function openWorkspaceStorageDb(workspaceId) {
     };
     request.onsuccess = () => resolve({ db: request.result, storeName });
   });
+}
+
+function openWorkspaceStorageDb(workspaceId) {
+  return openStateDb(workspaceId);
+}
+
+async function clearStateDb(id) {
+  const { db, storeName } = await openStateDb(id);
+  return new Promise((resolve, reject) => {
+    if (!db.objectStoreNames.contains(storeName)) {
+      db.close();
+      resolve();
+      return;
+    }
+    const tx = db.transaction(storeName, "readwrite");
+    tx.objectStore(storeName).clear();
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+/** Clear workspace + profile UI state so the workbench starts from defaults. */
+async function resetWorkbenchStorage(folderUriString) {
+  const workspaceId = workspaceStorageId(folderUriString);
+  await clearStateDb(workspaceId);
+  // Default profile uses application storage (`global`).
+  await clearStateDb("global");
 }
 
 async function readWorkspaceStorageEntry(workspaceId, key) {
@@ -331,7 +395,7 @@ async function writeWorkspaceStorageEntry(workspaceId, key, value) {
 
 /**
  * Apply sidebar visibility from the sidebar attribute.
- * @param {"default" | "hidden" | "never"} mode
+ * @param {"default" | "hidden" | "never" | "always"} mode
  */
 async function applySidebarLayout(folderUriString, mode) {
   if (mode === "default") return;
@@ -341,6 +405,10 @@ async function applySidebarLayout(folderUriString, mode) {
     await writeWorkspaceStorageEntry(workspaceId, WORKBENCH_LAYOUT_SIDEBAR_HIDDEN_KEY, "true");
     return;
   }
+  if (mode === "always") {
+    await writeWorkspaceStorageEntry(workspaceId, WORKBENCH_LAYOUT_SIDEBAR_HIDDEN_KEY, "false");
+    return;
+  }
   // hidden: seed only when the workspace has no saved layout yet
   const existing = await readWorkspaceStorageEntry(workspaceId, WORKBENCH_LAYOUT_SIDEBAR_HIDDEN_KEY);
   if (existing === undefined) {
@@ -348,8 +416,58 @@ async function applySidebarLayout(folderUriString, mode) {
   }
 }
 
+/**
+ * Apply panel visibility / maximized state from the panel attribute.
+ * @param {"default" | "hidden" | "never" | "always" | "max" | "always-max"} mode
+ */
+async function applyPanelLayout(folderUriString, mode) {
+  if (mode === "default") return;
+
+  const workspaceId = workspaceStorageId(folderUriString);
+  if (mode === "never") {
+    await writePanelVisible(workspaceId, false, false);
+    return;
+  }
+  if (mode === "always") {
+    await writePanelVisible(workspaceId, true, false);
+    return;
+  }
+  if (mode === "always-max") {
+    await writePanelVisible(workspaceId, true, true);
+    return;
+  }
+
+  // hidden / max: seed only when the workspace has no saved panel layout yet
+  const existing = await readWorkspaceStorageEntry(workspaceId, WORKBENCH_LAYOUT_PANEL_HIDDEN_KEY);
+  if (existing !== undefined) return;
+  if (mode === "hidden") {
+    await writePanelVisible(workspaceId, false, false);
+  } else if (mode === "max") {
+    await writePanelVisible(workspaceId, true, true);
+  }
+}
+
+/** @param {boolean} visible @param {boolean} maximized */
+async function writePanelVisible(workspaceId, visible, maximized) {
+  await writeWorkspaceStorageEntry(
+    workspaceId,
+    WORKBENCH_LAYOUT_PANEL_HIDDEN_KEY,
+    visible ? "false" : "true",
+  );
+  await writeWorkspaceStorageEntry(
+    workspaceId,
+    WORKBENCH_LAYOUT_EDITOR_HIDDEN_KEY,
+    visible && maximized ? "true" : "false",
+  );
+  await writeWorkspaceStorageEntry(
+    workspaceId,
+    WORKBENCH_LAYOUT_PANEL_WAS_LAST_MAXIMIZED_KEY,
+    maximized ? "true" : "false",
+  );
+}
+
 export function buildWorkbenchProfile(sidebarMode) {
-  const showViewlets = sidebarMode === "default";
+  const showViewlets = sidebarMode === "default" || sidebarMode === "always";
   return serializeWorkbenchProfile({
     name: "Default",
     contents: {
