@@ -101,10 +101,16 @@ export class WanixKernel {
             }
             window.addEventListener("message", async (event) => {
                 if (event.data.request != "wanix-import") return;
-                if (location.hash.slice(1) != this.host.id) return;
-                if (!this.allowOrigins.includes(event.origin) && !this.allowOrigins.includes("*")) return;
+                if (location.hash.slice(1) != this.host.id) {
+                    console.log("import rejected because no namespace provided");
+                    return;
+                }
+                if (!this.allowOrigins.includes(event.origin) && !this.allowOrigins.includes("*")) {
+                    console.log("import rejected because origin not allowed", event.origin, this.allowOrigins);
+                    return;
+                }
                 if (this.debug) {
-                    console.debug("import requested for", this.host.id, "from", event.origin);
+                    console.debug("import accepted for", this.host.id, "from", event.origin);
                 }
                 await this._ready;
 
