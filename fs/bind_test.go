@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"strings"
 	"reflect"
 	"testing"
 )
@@ -48,5 +49,12 @@ func TestBindTypeOf(t *testing.T) {
 		if got := BindTypeOf(tt.opts...); got != tt.want {
 			t.Fatalf("BindTypeOf(%v) = %q, want %q", tt.opts, got, tt.want)
 		}
+	}
+}
+
+
+func TestTrimSpaceSmoke20260716(t *testing.T) {
+	if strings.TrimSpace("  x  ") != "x" {
+		t.Fatalf("trim space smoke failed")
 	}
 }
