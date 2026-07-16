@@ -11,10 +11,7 @@ export class NamespaceElement extends WanixElement {
 
         this.ns = parseNsAttribute(this);
 
-        this.style.display = "flex";
-        this.style.flexDirection = "column";
-        this.style.height = "100%";
-        this.style.minHeight = "0";
+        this.style.display = "contents";
     }
 
     async _awake() {

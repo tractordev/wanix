@@ -16,6 +16,8 @@ export class TaskElement extends WanixElement {
     connectedCallback() {
         super.connectedCallback();
 
+        this.style.display = "contents";
+
         this.alias = this.getAttribute("alias") || this.getAttribute("id") || null;
         this.type = this.getAttribute("type") || "auto";
         this.role = this.getAttribute("role");

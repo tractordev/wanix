@@ -18,6 +18,8 @@ export class VMElement extends WanixElement {
     connectedCallback() {
         super.connectedCallback();
 
+        this.style.display = "contents";
+
         this.alias = this.getAttribute("alias") || this.getAttribute("id") || null;
         this.type = this.getAttribute("type") || "v86";
         this.ns = parseNsAttribute(this);
