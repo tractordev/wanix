@@ -1,14 +1,14 @@
 # Wanix
 [![Discord](https://img.shields.io/discord/415940907729420288?label=Discord)](https://discord.gg/nQbgRjEBU4) ![GitHub Sponsors](https://img.shields.io/github/sponsors/progrium?label=Sponsors)
 
-Wanix is an embeddable runtime that brings a Unix-like environment to the browser. Declare a `<wanix-system>`, bind files and archives into a namespace, run Wasm and JavaScript tasks, boot Linux in an x86 emulator, and wire up terminals and a VS Code workbench, all from HTML.
+Wanix is an embeddable runtime that brings a Unix-like environment to the browser. Declare a `<wanix-namespace>`, bind files and archives into it, run Wasm and JavaScript tasks, boot Linux in an x86 emulator, and wire up terminals and a VS Code workbench, all from HTML.
 
 ```html
-<wanix-system>
+<wanix-namespace>
   <wanix-bind type="file" dst="helloworld.wasm" src="./helloworld.wasm"></wanix-bind>
   <wanix-task cmd="helloworld.wasm" term start></wanix-task>
   <wanix-term path="#task/1/term"></wanix-term>
-</wanix-system>
+</wanix-namespace>
 ```
 
 - **Everything is a file.** Processes, terminals, VMs, browser APIs, and storage are exposed through a unified namespace you compose with binds. The same idea as Plan 9, with improvements, in the browser.
@@ -39,7 +39,7 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
 </head>
 <body style="height: 100vh; margin: 0;">
 
-  <wanix-system>
+  <wanix-namespace>
     <!-- bind alloc ramfs to namespace root -->
     <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
     <!-- bind inline file into namespace -->
@@ -54,7 +54,7 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
     <wanix-task id="shell" cmd="rc.wasm -c hello.sh" term start></wanix-task>
     <!-- show a terminal wired up to the task -->
     <wanix-term path="#task/shell/term"></wanix-term>
-  </wanix-system>
+  </wanix-namespace>
 
 </body>
 </html>
@@ -62,11 +62,11 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
 
 ### JavaScript API
 
-After `<wanix-system>` fires a `ready` event, use the filesystem handle:
+After `<wanix-namespace>` fires a `ready` event, use the filesystem handle:
 
 ```html
 <script type="module">
-  const sys = document.querySelector('wanix-system');
+  const sys = document.querySelector('wanix-namespace');
   sys.addEventListener('ready', async () => {
     console.log(await sys.root.readDir('.'));
     await sys.root.writeFile('note.txt', 'saved from JS');
@@ -135,7 +135,7 @@ a task driver. Tasks run in their own namespace, by default inheriting the curre
 | `stdin` / `stdout` / `stderr` | Namespace paths for I/O redirection. |
 | `term` | Allocate a terminal device for this task. |
 | `start` | Start the task automatically when the system is ready. |
-| `for` | ID of a `<wanix-system>` to attach to (instead of being a direct child). |
+| `for` | ID of a `<wanix-namespace>` to attach to (instead of being a direct child). |
 
 Terminal path after allocation: `#task/<id>/term` (or `#task/<rid>/term` without alias).
 
@@ -179,7 +179,7 @@ Render an [xterm.js](https://xtermjs.org/) terminal connected to a Wanix termina
 |-----------|-------------|
 | `path` | Terminal device path (e.g. `#term/1`, `#task/shell/term`, `#vm/1/term`). |
 | `raw` | Raw mode — no local line editing; bytes pass through directly. Use for VM serial consoles. |
-| `for` | ID of a `<wanix-system>` to attach to. |
+| `for` | ID of a `<wanix-namespace>` to attach to. |
 
 Style the element with `height: 100%` (and flex layout on parents) for full-page terminals.
 
@@ -226,11 +226,11 @@ These `#` paths are provided by the kernel and can be bound into your namespace:
 Run a Go/TinyGo Wasm binary with a terminal:
 
 ```html
-<wanix-system>
+<wanix-namespace>
   <wanix-bind type="file" dst="app.wasm" src="https://example.com/app.wasm"></wanix-bind>
   <wanix-task id="app" cmd="app.wasm" term start></wanix-task>
   <wanix-term path="#task/app/term"></wanix-term>
-</wanix-system>
+</wanix-namespace>
 ```
 
 See [examples/basic-terminal.html](examples/basic-terminal.html).
@@ -240,12 +240,12 @@ See [examples/basic-terminal.html](examples/basic-terminal.html).
 Create a virtual filesystem to use via JS:
 
 ```html
-<wanix-system>
+<wanix-namespace>
   <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
   <wanix-bind dst="greeting.txt" type="file" perm="0644">
     Hello, world!
   </wanix-bind>
-</wanix-system>
+</wanix-namespace>
 ```
 
 See [examples/basic-namespace.html](examples/basic-namespace.html).
@@ -255,13 +255,13 @@ See [examples/basic-namespace.html](examples/basic-namespace.html).
 Run inline JS in a Wanix task:
 
 ```html
-<wanix-system>
+<wanix-namespace>
   <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
   <wanix-bind dst="task.js" type="file" perm="0766">
     console.log("JS task running!");
   </wanix-bind>
   <wanix-task cmd="task.js" start></wanix-task>
-</wanix-system>
+</wanix-namespace>
 ```
 
 See [examples/task-js.html](examples/task-js.html).
@@ -271,14 +271,14 @@ See [examples/task-js.html](examples/task-js.html).
 Stack archives and overlay individual files — later binds win:
 
 ```html
-<wanix-system>
+<wanix-namespace>
   <wanix-bind type="archive" dst="root"
     src="https://example.com/base-rootfs.tar.gz"></wanix-bind>
   <wanix-bind type="archive" dst="root"
     src="https://example.com/overlay.tar.gz"></wanix-bind>
   <wanix-bind type="file" dst="root/boot/bzImage"
     src="https://example.com/custom-kernel"></wanix-bind>
-</wanix-system>
+</wanix-namespace>
 ```
 
 See [examples/bind-types.html](examples/bind-types.html).
@@ -286,7 +286,7 @@ See [examples/bind-types.html](examples/bind-types.html).
 ### Boot Linux in v86
 
 ```html
-<wanix-system>
+<wanix-namespace>
   <wanix-bind dst="." type="archive"
     src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz">
   </wanix-bind>
@@ -295,7 +295,7 @@ See [examples/bind-types.html](examples/bind-types.html).
   </wanix-bind>
   <wanix-vm export="ttyS0" mem="1G" term start></wanix-vm>
   <wanix-term path="#vm/1/term" raw></wanix-term>
-</wanix-system>
+</wanix-namespace>
 ```
 
 See [examples/basic-vm.html](examples/basic-vm.html).
@@ -305,7 +305,7 @@ See [examples/basic-vm.html](examples/basic-vm.html).
 Host workbench assets locally (`make -C workbench`), then:
 
 ```html
-<wanix-system debug>
+<wanix-namespace debug>
   <wanix-bind type="archive" dst="root"
     src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz">
   </wanix-bind>
@@ -315,7 +315,7 @@ Host workbench assets locally (`make -C workbench`), then:
   <wanix-workbench assets="/workbench" term>
     <wanix-task role="shell" cmd="rc.wasm"></wanix-task>
   </wanix-workbench>
-</wanix-system>
+</wanix-namespace>
 ```
 
 See [examples/basic-workbench.html](examples/basic-workbench.html).
@@ -325,7 +325,7 @@ See [examples/basic-workbench.html](examples/basic-workbench.html).
 Edit files on the host namespace while running shells inside a Linux VM:
 
 ```html
-<wanix-system debug>
+<wanix-namespace debug>
   <wanix-bind dst="." type="archive" src="/assets/wanix-linux.tgz"></wanix-bind>
   <wanix-bind dst="#vm/v86" type="archive" src="/assets/v86.tgz"></wanix-bind>
   <wanix-vm export="ttyS0" start></wanix-vm>
@@ -335,7 +335,7 @@ Edit files on the host namespace while running shells inside a Linux VM:
     raw term>
     <wanix-task role="shell" cmd="bin/sh"></wanix-task>
   </wanix-workbench>
-</wanix-system>
+</wanix-namespace>
 ```
 
 See [examples/vm-workbench.html](examples/vm-workbench.html).
@@ -345,13 +345,13 @@ See [examples/vm-workbench.html](examples/vm-workbench.html).
 Persist files in the browser with Origin Private File System:
 
 ```html
-<wanix-system>
+<wanix-namespace>
   <wanix-bind dst="." src="#web/opfs"></wanix-bind>
   <wanix-bind dst="main.js" type="file" perm="0644">
     export default function() { return 42; }
   </wanix-bind>
   <wanix-workbench open="main.js" assets="/workbench"></wanix-workbench>
-</wanix-system>
+</wanix-namespace>
 ```
 
 ### Export and import namespaces
@@ -359,21 +359,21 @@ Persist files in the browser with Origin Private File System:
 Export a namespace from one page:
 
 ```html
-<wanix-system id="main" allow-origins="*">
+<wanix-namespace id="main" allow-origins="*">
   <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
   <wanix-bind dst="shared.txt" type="file">shared data</wanix-bind>
-</wanix-system>
+</wanix-namespace>
 ```
 
 Import it from another page:
 
 ```html
-<wanix-system>
+<wanix-namespace>
   <wanix-bind type="import" dst="remote"
     src="https://other.example/app.html#main"></wanix-bind>
   <wanix-task id="repl" cmd="rc.wasm" term start></wanix-task>
   <wanix-term path="#task/repl/term"></wanix-term>
-</wanix-system>
+</wanix-namespace>
 ```
 
 Import over WebSocket 9P:
@@ -389,7 +389,7 @@ See [examples/example-export.html](examples/example-export.html) and [examples/b
 Import a VM running on another origin and attach a workbench to its guest namespace:
 
 ```html
-<wanix-system debug>
+<wanix-namespace debug>
   <wanix-bind type="import" dst="remote"
     src="https://vm-host.example/linux.html#linux"></wanix-bind>
   <wanix-workbench assets="/workbench"
@@ -398,7 +398,7 @@ Import a VM running on another origin and attach a workbench to its guest namesp
     raw term>
     <wanix-task role="shell" cmd="bin/sh"></wanix-task>
   </wanix-workbench>
-</wanix-system>
+</wanix-namespace>
 ```
 
 See [examples/import-workbench.html](examples/import-workbench.html).
