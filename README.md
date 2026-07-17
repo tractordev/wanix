@@ -34,7 +34,7 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
 <html>
 <head>
   <script type="module"
-    src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-alpha8/dist/wanix.min.js">
+    src="https://cdn.jsdelivr.net/npm/wanix@0.4.0-rc2/dist/wanix.min.js">
   </script>
 </head>
 <body style="height: 100vh; margin: 0;">
