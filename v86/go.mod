@@ -13,4 +13,4 @@ require (
 	tractor.dev/wanix v0.0.0-20260430024630-620f178de142
 )
 
-require golang.org/x/sys v0.43.0 // indirect
+require golang.org/x/sys v0.45.0 // indirect
