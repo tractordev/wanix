@@ -4,7 +4,7 @@ dist: clean dist/rc.wasm dist/workbench dist/v86.tgz dist/wanix-linux.tgz
 	ls -lah dist
 .PHONY: dist
 
-publish: dist
+publish:
 	npm publish --tag alpha
 .PHONY: publish
 

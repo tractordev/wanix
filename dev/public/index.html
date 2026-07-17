@@ -188,7 +188,7 @@ rc% <span class="cursor" aria-hidden="true"></span></code></pre>
     <script type="text/plain" id="recipe-run-shell">
 <wanix-term>
   <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
-  <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm"></wanix-bind>
+  <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/rc.wasm"></wanix-bind>
   <wanix-bind dst="shell.txt" type="file">
     Hello, shell!
   </wanix-bind>
@@ -198,8 +198,8 @@ rc% <span class="cursor" aria-hidden="true"></span></code></pre>
 
     <script type="text/plain" id="recipe-boot-vm">
 <wanix-term raw>
-  <wanix-bind dst="." type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz"></wanix-bind>
-  <wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/v86.tgz"></wanix-bind>
+  <wanix-bind dst="." type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/wanix-linux.tgz"></wanix-bind>
+  <wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/v86.tgz"></wanix-bind>
   <wanix-vm export="ttyS0" term start></wanix-vm>
 </wanix-term>
     </script>
@@ -207,7 +207,7 @@ rc% <span class="cursor" aria-hidden="true"></span></code></pre>
     <script type="text/plain" id="recipe-shell-workbench">
 <wanix-workbench sidebar="always" panel="max" term assets="/workbench">
   <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
-  <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm"></wanix-bind>
+  <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/rc.wasm"></wanix-bind>
   <wanix-bind dst="shell.txt" type="file">
     Hello, shell!
   </wanix-bind>
@@ -220,8 +220,8 @@ rc% <span class="cursor" aria-hidden="true"></span></code></pre>
     task-ns="#vm/1/guest/#task" 
     term-ns="#vm/1/guest/#term" 
     raw term>
-  <wanix-bind dst="." type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz"></wanix-bind>
-  <wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/v86.tgz"></wanix-bind>
+  <wanix-bind dst="." type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/wanix-linux.tgz"></wanix-bind>
+  <wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/v86.tgz"></wanix-bind>
   <wanix-vm export="ttyS0" start></wanix-vm>
   <wanix-task role="shell" cmd="bin/sh"></wanix-task>
 </wanix-workbench> 
@@ -241,7 +241,7 @@ rc% <span class="cursor" aria-hidden="true"></span></code></pre>
 <wanix-term>
   <wanix-bind dst="." type="import" src="./export-ns.html#main"></wanix-bind>
   <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
-  <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm"></wanix-bind>
+  <wanix-bind dst="rc.wasm" type="file" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/rc.wasm"></wanix-bind>
   <wanix-bind dst="local.txt" type="file">
     Hello, local!
   </wanix-bind>

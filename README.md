@@ -48,7 +48,7 @@ Wanix is an embeddable runtime that brings a Unix-like environment to the browse
     </wanix-bind>
     <!-- bind wasm executable from url -->
     <wanix-bind type="file" dst="rc.wasm"
-      src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm">
+      src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/rc.wasm">
     </wanix-bind>
     <!-- declare a task that will autostart -->
     <wanix-task id="shell" cmd="rc.wasm -c hello.sh" term start></wanix-task>
@@ -168,7 +168,7 @@ Allocate and run a virtual machine.
 Using `<wanix-vm>` requires a VM backend to be loaded using bind to `#vm/<type>`:
 
 ```html
-<wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/v86.tgz"></wanix-bind>
+<wanix-bind dst="#vm/v86" type="archive" src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/v86.tgz"></wanix-bind>
 ```
 
 ### `<wanix-term>`
@@ -288,10 +288,10 @@ See [examples/bind-types.html](examples/bind-types.html).
 ```html
 <wanix-namespace>
   <wanix-bind dst="." type="archive"
-    src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz">
+    src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/wanix-linux.tgz">
   </wanix-bind>
   <wanix-bind dst="#vm/v86" type="archive"
-    src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/v86.tgz">
+    src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/v86.tgz">
   </wanix-bind>
   <wanix-vm export="ttyS0" mem="1G" term start></wanix-vm>
   <wanix-term path="#vm/1/term" raw></wanix-term>
@@ -307,10 +307,10 @@ Host workbench assets locally (`make -C workbench`), then:
 ```html
 <wanix-namespace debug>
   <wanix-bind type="archive" dst="root"
-    src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/wanix-linux.tgz">
+    src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/wanix-linux.tgz">
   </wanix-bind>
   <wanix-bind type="fetch" dst="rc.wasm"
-    src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc1/dist/rc.wasm">
+    src="https://cdn.jsdelivr.net/npm/wanix-extras@0.4.0-rc2/dist/rc.wasm">
   </wanix-bind>
   <wanix-workbench assets="/workbench" term>
     <wanix-task role="shell" cmd="rc.wasm"></wanix-task>
