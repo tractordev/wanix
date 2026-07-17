@@ -251,6 +251,8 @@ main {
 
 .code-panel {
   margin: 0;
+  width: 100%;
+  box-sizing: border-box;
   text-align: left;
   font-family: var(--font-mono);
   font-size: var(--fs-small);
@@ -261,6 +263,7 @@ main {
   color: var(--color-on-dark);
   box-shadow: var(--shadow-card);
   white-space: pre;
+  overflow-x: auto;
 }
 
 .code-panel .tok-tag  { color: #7dd3a8; }
@@ -687,6 +690,16 @@ main {
   :root {
     --fs-h1: 1.9rem;
     --fs-h2: 1.35rem;
+  }
+
+  .site-header,
+  .hero,
+  .api-section,
+  .recipes-section,
+  .dropin-section,
+  .story-section,
+  .site-footer {
+    padding-inline: var(--space-5);
   }
 
   .tag-example {
