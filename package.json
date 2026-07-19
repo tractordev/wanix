@@ -1,6 +1,6 @@
 {
     "name": "wanix",
-    "version": "0.4.0-rc2",
+    "version": "0.4.0-beta",
     "type": "module",
     "main": "dist/wanix.js",
     "module": "index.ts",
