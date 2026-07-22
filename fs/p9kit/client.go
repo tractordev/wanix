@@ -44,14 +44,25 @@ func walkParts(name string) []string {
 }
 
 func (fsys *FS) walk(name string) (p9.File, error) {
+	_, f, err := fsys.walkQID(name)
+	return f, err
+}
+
+// walkQID walks to name and also reports the target's qid. A
+// zero-element walk (name ".") carries no qids on the wire, but the
+// attach root is by definition a directory, so it is typed as one.
+func (fsys *FS) walkQID(name string) (p9.QID, p9.File, error) {
 	if !fs.ValidPath(name) {
-		return nil, &fs.PathError{Op: "walk", Path: name, Err: fs.ErrInvalid}
+		return p9.QID{}, nil, &fs.PathError{Op: "walk", Path: name, Err: fs.ErrInvalid}
 	}
-	_, f, err := fsys.root.Walk(walkParts(name))
+	qids, f, err := fsys.root.Walk(walkParts(name))
 	if err != nil {
-		return nil, translateError("walk", name, err)
+		return p9.QID{}, nil, translateError("walk", name, err)
 	}
-	return f, nil
+	if len(qids) == 0 {
+		return p9.QID{Type: p9.TypeDir}, f, nil
+	}
+	return qids[len(qids)-1], f, nil
 }
 
 func (fsys *FS) Open(name string) (fs.File, error) {
@@ -63,26 +74,34 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 
-	f, err := fsys.walk(name)
+	qid, f, err := fsys.walkQID(name)
 	if err != nil {
 		return nil, err
 	}
 
-	// Try to open with read-write first
-	_, _, err = f.Open(p9.ReadWrite)
-	if err != nil {
-		// Fallback to read-only (might be a dir or read-only file)
+	writable := false
+	if qid.Type&p9.TypeDir != 0 {
+		// Directories reject write opens; don't waste a round-trip trying.
 		_, _, err = f.Open(p9.ReadOnly)
-		if err != nil {
-			return nil, translateError("open", name, err)
+	} else {
+		// Try read-write first, falling back for read-only files.
+		_, _, err = f.Open(p9.ReadWrite)
+		if err == nil {
+			writable = true
+		} else {
+			_, _, err = f.Open(p9.ReadOnly)
 		}
+	}
+	if err != nil {
+		return nil, translateError("open", name, err)
 	}
 
 	return &remoteFile{
-		file: f,
-		root: fsys.root,
-		name: path.Base(name),
-		path: walkParts(name),
+		file:     f,
+		root:     fsys.root,
+		name:     path.Base(name),
+		path:     walkParts(name),
+		writable: writable,
 	}, nil
 }
 
@@ -391,12 +410,13 @@ func (e *lazyEntry) Type() fs.FileMode {
 func (e *lazyEntry) Info() (fs.FileInfo, error) { return e.stat() }
 
 type remoteFile struct {
-	name   string
-	file   p9.File
-	root   p9.File
-	path   []string
-	offset int64
-	iter   *fskit.DirIter
+	name     string
+	file     p9.File
+	root     p9.File
+	path     []string
+	offset   int64
+	iter     *fskit.DirIter
+	writable bool
 }
 
 func (f *remoteFile) Read(p []byte) (n int, err error) {
@@ -451,8 +471,10 @@ func (f *remoteFile) WriteAt(p []byte, off int64) (n int, err error) {
 }
 
 func (f *remoteFile) Close() error {
-	if err := f.file.FSync(); err != nil {
-		return err
+	if f.writable {
+		if err := f.file.FSync(); err != nil {
+			return err
+		}
 	}
 	return f.file.Close()
 }

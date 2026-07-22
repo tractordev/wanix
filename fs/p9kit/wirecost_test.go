@@ -92,6 +92,124 @@ func expectCounts(t *testing.T, phase string, got map[uint8]int, want map[uint8]
 	}
 }
 
+// TestLsWireCostBaseline pins the wire cost of the client-side
+// operations the rc shell's `ls` drives through p9kit, so any
+// regression toward per-entry round-trips fails loudly:
+//
+//   - FS.ReadDir builds entries from the dirents it already holds:
+//     one walk+open+list+clunk regardless of entry count, attributes
+//     fetched only if Info() is called.
+//   - OpenContext types the target by its walk qid: directories open
+//     ReadOnly directly instead of failing a ReadWrite attempt first.
+//   - remoteFile.ReadDir types entries by their own dirent qids.
+//   - Close fsyncs only handles that were opened writable.
+//
+// Composite effect: one ls-shaped pass over 7 entries costs 28
+// messages (down from 51 with per-entry stats), and the remaining
+// floor is the caller's own per-entry Stat, not ReadDir overhead.
+func TestLsWireCostBaseline(t *testing.T) {
+	// Seven entries in the root: five files, two subdirectories.
+	backend := fskit.MapFS{
+		"f1": fskit.RawNode([]byte("x")), "f2": fskit.RawNode([]byte("x")),
+		"f3": fskit.RawNode([]byte("x")), "f4": fskit.RawNode([]byte("x")),
+		"f5":        fskit.RawNode([]byte("x")),
+		"sub/inner": fskit.RawNode([]byte("x")),
+		"sub2/deep": fskit.RawNode([]byte("x")),
+	}
+	fsys, cc, cleanup := countingSetup(t, backend)
+	defer cleanup()
+	cc.take() // discard version/attach setup traffic
+
+	t.Run("FS.ReadDir of 7 entries", func(t *testing.T) {
+		entries, err := fs.ReadDir(fsys, ".")
+		if err != nil {
+			t.Fatalf("ReadDir: %v", err)
+		}
+		if len(entries) != 7 {
+			t.Fatalf("entries = %d, want 7", len(entries))
+		}
+		expectCounts(t, "FS.ReadDir", cc.take(), map[uint8]int{
+			msgTwalk:    1, // just the directory itself — entries ride the dirents
+			msgTgetattr: 0,
+			msgTclunk:   1,
+			msgTlopen:   1,
+			msgTreaddir: 1,
+		})
+	})
+
+	t.Run("OpenContext of a directory", func(t *testing.T) {
+		f, err := fs.OpenContext(context.Background(), fsys, "sub")
+		if err != nil {
+			t.Fatalf("OpenContext: %v", err)
+		}
+		got := cc.take()
+		expectCounts(t, "OpenContext(dir)", got, map[uint8]int{
+			msgTlopen: 1, // walk qid says dir → straight to ReadOnly
+			msgTwalk:  1,
+		})
+
+		// remoteFile.ReadDir: the os.File-shaped path a WASI/gojs
+		// directory read lands on.
+		rdf, ok := f.(fs.ReadDirFile)
+		if !ok {
+			t.Fatalf("not a ReadDirFile: %T", f)
+		}
+		if _, err := rdf.ReadDir(-1); err != nil {
+			t.Fatalf("remoteFile.ReadDir: %v", err)
+		}
+		expectCounts(t, "remoteFile.ReadDir", cc.take(), map[uint8]int{
+			msgTreaddir: 1,
+			msgTgetattr: 0, // entry types come from the dirent qids
+			msgTwalk:    0,
+		})
+
+		if err := f.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		expectCounts(t, "Close", cc.take(), map[uint8]int{
+			msgTfsync: 0, // read-only handles are not fsynced
+			msgTclunk: 1,
+		})
+	})
+
+	t.Run("ls-shaped composite", func(t *testing.T) {
+		// The syscall sequence u-root ls's filepath.Walk drives for a
+		// non-recursive listing: lstat the dir, list it, lstat every
+		// entry. (The WASI shim's 1s readdir cache multiplies the
+		// whole block over slow links — wasi/wanix.ts — which is not
+		// reachable from Go; this pins the per-pass floor.)
+		if _, err := fs.Stat(fsys, "."); err != nil {
+			t.Fatal(err)
+		}
+		entries, err := fs.ReadDir(fsys, ".")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if _, err := fs.Stat(fsys, e.Name()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got := cc.take()
+		total := 0
+		for _, n := range got {
+			total += n
+		}
+		// Seven entries cost 28 messages per listing pass: Stat(dir)=3 +
+		// ReadDir=4 (walk+open+list+clunk) + 7×Stat(entry)=21. The
+		// per-entry Stats are the caller's own (filepath.Walk lstats
+		// everything); ReadDir itself adds no per-entry traffic.
+		if total != 28 {
+			t.Errorf("composite ls total = %d messages, want 28 (was 51 before the listing fixes)", total)
+		}
+		expectCounts(t, "composite", got, map[uint8]int{
+			msgTgetattr: 8, // dir + 7 in per-entry Stat; none from ReadDir
+			msgTwalk:    9,
+			msgTclunk:   9,
+		})
+	})
+}
+
 // TestServerReaddirWireCost pins the wire cost of the path the rc
 // shell actually drives: a p9kit SERVER fronting a namespace whose
 // directory is a p9kit CLIENT mount (the `3ds`-style relay mount).
@@ -230,5 +348,19 @@ func TestNSReadDirWireCost(t *testing.T) {
 	got := cc.take()
 	if got[msgTgetattr] > 1 {
 		t.Errorf("namespace ReadDir issued %d getattrs — some layer is statting every entry again", got[msgTgetattr])
+	}
+
+	// What filepath.Walk-style callers (ls -l, tab completion) then
+	// do: lstat every entry. Each lstat must cost ONE upstream stat
+	// (walk+getattr+clunk): with a single bind candidate there is no
+	// union ambiguity, so bind.Route adds no existence stat of its own.
+	for _, e := range entries {
+		if _, err := fs.Lstat(ns, "dev/"+e.Name()); err != nil {
+			t.Fatalf("Lstat %q: %v", e.Name(), err)
+		}
+	}
+	ls := cc.take()
+	if ls[msgTgetattr] != 10 {
+		t.Errorf("10 lstats issued %d getattrs, want 10 (one per entry)", ls[msgTgetattr])
 	}
 }
