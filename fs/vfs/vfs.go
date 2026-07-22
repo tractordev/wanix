@@ -187,13 +187,13 @@ func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 					log.Println("readdir error:", err)
 					return nil, err
 				}
-				for _, entry := range entries {
-					ei, err := entry.Info()
-					if err != nil {
-						return nil, err
-					}
-					dirEntries = append(dirEntries, fskit.RawNode(ei))
-				}
+				// Keep entries lazy: calling entry.Info() here would
+				// stat every child over the wire on every readdir (a
+				// p9kit mount turns that into walk+getattr+clunk per
+				// entry — the wanix `ls` storm). DirEntry.Name()/Type()
+				// suffice for merge, dedup, and the readdir reply;
+				// callers pay Info() only if they actually need it.
+				dirEntries = append(dirEntries, entries...)
 			} else {
 				if file, err := fs.OpenContext(ctx, ref.FS, ref.Path); err == nil {
 					return file, nil
@@ -224,13 +224,8 @@ func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 					log.Println("readdir error:", err)
 					return nil, err
 				}
-				for _, entry := range entries {
-					ei, err := entry.Info()
-					if err != nil {
-						return nil, err
-					}
-					dirEntries = append(dirEntries, fskit.RawNode(ei))
-				}
+				// Lazy: see the note in the direct-binding branch above.
+				dirEntries = append(dirEntries, entries...)
 			} else {
 				if file, err := fs.OpenContext(ctx, ref.FS, relativePath); err == nil {
 					return file, nil

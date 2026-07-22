@@ -71,6 +71,41 @@ func (c *command) listName(stringer lsfmt.Stringer, d string, prefix bool, f fla
 	var files []file
 	resolvedPath := c.ResolvePath(d)
 
+	// Fast path: a plain listing needs only names. filepath.Walk below
+	// lstats every entry to decide recursion — over a 9P mount that
+	// turns `ls` into a per-entry stat storm (Linux's ls trusts readdir
+	// and stats nothing). Readdirnames is the stat-free primitive: on
+	// js/wasm the readdir syscall carries no d_type, so os.ReadDir's
+	// DirEntry.Type would force an lstat per entry (os.file_unix
+	// newUnixDirent), but Readdirnames only collects names. Engage
+	// whenever no flag needs per-entry metadata; any error (e.g. a
+	// non-directory argument) falls through to the unchanged Walk path.
+	if !f.long && !f.size && !f.classify && !f.recurse && !f.directory {
+		if dirf, err := os.Open(resolvedPath); err == nil {
+			names, rerr := dirf.Readdirnames(-1)
+			dirf.Close()
+			if rerr == nil {
+				sort.Strings(names)
+				if prefix {
+					if f.quoted {
+						fmt.Fprintf(c.Stdout, "%q:\n", d)
+					} else {
+						fmt.Fprintf(c.Stdout, "%v:\n", d)
+					}
+				}
+				// The Walk path lists the directory itself as "."
+				// (shown only with -a); match that.
+				if f.all {
+					c.printFile(stringer, file{lsfi: lsfmt.FileInfo{Name: "."}}, f)
+				}
+				for _, name := range names {
+					c.printFile(stringer, file{lsfi: lsfmt.FileInfo{Name: name}}, f)
+				}
+				return
+			}
+		}
+	}
+
 	filepath.Walk(resolvedPath, func(path string, osfi os.FileInfo, err error) error {
 		file := file{path: path, osfi: osfi}
 		if osfi != nil && !errors.Is(err, os.ErrNotExist) {

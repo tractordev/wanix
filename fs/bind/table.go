@@ -136,7 +136,8 @@ func (t *Table) Route(ctx context.Context, self fs.FS, name string) (fs.FS, stri
 	for p := range b {
 		bindPaths = append(bindPaths, p)
 	}
-	for _, bindPath := range fskit.MatchPaths(bindPaths, name) {
+	matched := fskit.MatchPaths(bindPaths, name)
+	for _, bindPath := range matched {
 		refs := b[bindPath]
 		relativeName := strings.Trim(strings.TrimPrefix(name, bindPath), "/")
 		var toStat []Entry
@@ -158,6 +159,17 @@ func (t *Table) Route(ctx context.Context, self fs.FS, name string) (fs.FS, stri
 			toStat = append(toStat, ref)
 		}
 
+		// Only one bind point matches and it has a single fs: there is
+		// no union ambiguity to resolve, so skip the existence stat and
+		// let the caller's own operation surface ENOENT. The caller
+		// re-stats/opens this same path immediately, so verifying here
+		// just doubles the wire round-trips on a mounted fs (the wanix
+		// `ls` storm: every lstat cost two upstream stats, not one).
+		// With multiple candidates the stat is load-bearing — it picks
+		// the union member that actually holds the path.
+		if len(matched) == 1 && len(toStat) == 1 {
+			return toStat[0].FS, path.Join(toStat[0].Path, relativeName), nil
+		}
 		for _, ref := range toStat {
 			fullName := path.Join(ref.Path, relativeName)
 			_, err := fs.LstatContext(ctx, ref.FS, fullName)

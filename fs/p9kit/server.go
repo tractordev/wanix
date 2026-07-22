@@ -352,7 +352,17 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 		return nil, err
 	}
 
-	// Use the entries already fetched from fs.ReadDir above
+	// Use the entries already fetched from fs.ReadDir above.
+	//
+	// Build each dirent's QID from the DirEntry alone — no per-entry
+	// stat. A readdir QID needs only Type and Path: the type bit rides
+	// on the DirEntry (fs.DirEntry.Type, free from the listing — for a
+	// mounted 9P fs it comes straight off the .L dirent qid), and
+	// toQid hashes the path string, ignoring FileInfo. This is
+	// identical to what info() would compute, so a later Twalk+GetAttr
+	// on the entry yields the same QID (no client-side cache thrash),
+	// but it costs zero round-trips instead of walk+getattr+clunk per
+	// entry — the "300 stats for one ls" amplifier over a slow mount.
 	for _, e := range entries {
 		cursor++
 
@@ -374,17 +384,20 @@ func (l *p9file) Readdir(offset uint64, count uint32) (dents p9.Dirents, derr er
 		}
 		seenNames[entryName] = true
 
-		localEnt := p9file{path: path.Join(l.path, e.Name()), fsys: l.fsys, vattrs: l.vattrs}
-		qid, _, err := localEnt.info()
+		ninePath, err := toQid(path.Join(l.path, entryName), nil)
 		if err != nil {
-			log.Println("p9kit: readdir info", e.Name(), err)
+			log.Println("p9kit: readdir qid", entryName, err)
 			continue
+		}
+		qid := p9.QID{
+			Type: p9.ModeFromOS(e.Type()).QIDType(),
+			Path: ninePath,
 		}
 
 		p9Ents = append(p9Ents, p9.Dirent{
 			QID:    qid,
 			Type:   qidTypeToDirentType(qid.Type), // holy hell
-			Name:   e.Name(),
+			Name:   entryName,
 			Offset: cursor,
 		})
 	}
