@@ -339,20 +339,12 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 	}
 	defer f.Close()
 
-	// 9P2000.L forbids walking from an open fid, so clone the directory fid and
-	// open the clone. f stays unopened to serve the per-entry walks below.
-	_, dir, err := f.Walk(nil)
-	if err != nil {
-		return nil, translateError("readdir", name, err)
-	}
-	defer dir.Close()
-
-	_, _, err = dir.Open(p9.ReadOnly)
+	_, _, err = f.Open(p9.ReadOnly)
 	if err != nil {
 		return nil, translateError("readdir", name, err)
 	}
 
-	dirents, err := dir.Readdir(0, 65535) // max uint32 breaks p9kit server
+	dirents, err := f.Readdir(0, 65535) // max uint32 breaks p9kit server
 	if err != nil {
 		return nil, translateError("readdir", name, err)
 	}
@@ -363,21 +355,40 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 		if entry.Name == "." || entry.Name == ".." {
 			continue
 		}
-		_, child, err := f.Walk([]string{entry.Name})
-		if err != nil {
-			continue
-		}
-		fi, err := fileInfo(child, entry.Name)
-		child.Close()
-		if err != nil {
-			continue // Skip entries we can't stat
-		}
-		if dirEntry, ok := fi.(fs.DirEntry); ok {
-			entries = append(entries, dirEntry)
-		}
+		childPath := path.Join(name, entry.Name)
+		entries = append(entries, &lazyEntry{
+			name: entry.Name,
+			qt:   entry.QID.Type,
+			stat: func() (fs.FileInfo, error) { return fsys.Stat(childPath) },
+		})
 	}
 	return entries, nil
 }
+
+// lazyEntry is a directory entry built from a 9P dirent: the name and
+// file type ride along with the Rreaddir qid, so a listing needs no
+// per-entry round-trips. Full attributes cost one stat, paid only if
+// Info is actually called.
+type lazyEntry struct {
+	name string
+	qt   p9.QIDType
+	stat func() (fs.FileInfo, error)
+}
+
+func (e *lazyEntry) Name() string { return e.name }
+func (e *lazyEntry) IsDir() bool  { return e.qt&p9.TypeDir != 0 }
+
+func (e *lazyEntry) Type() fs.FileMode {
+	switch {
+	case e.qt&p9.TypeDir != 0:
+		return fs.ModeDir
+	case e.qt&p9.TypeSymlink != 0:
+		return fs.ModeSymlink
+	}
+	return 0
+}
+
+func (e *lazyEntry) Info() (fs.FileInfo, error) { return e.stat() }
 
 type remoteFile struct {
 	name   string
@@ -460,14 +471,25 @@ func (f *remoteFile) ReadDir(n int) ([]fs.DirEntry, error) {
 
 			entries := make([]fs.DirEntry, 0, len(dirents))
 			for _, entry := range dirents {
-				// To fully mimic os.DirFS semantics, we can Walk and Stat, but for now just minimal implementation:
-				fi, err := fileInfo(f.file, entry.Name)
-				if err != nil {
-					continue // Skip entries we can't stat
+				// os.File.ReadDir excludes the dot entries; real 9P servers report them.
+				if entry.Name == "." || entry.Name == ".." {
+					continue
 				}
-				if dirEntry, ok := fi.(fs.DirEntry); ok {
-					entries = append(entries, dirEntry)
-				}
+				childPath := append(append([]string{}, f.path...), entry.Name)
+				entries = append(entries, &lazyEntry{
+					name: entry.Name,
+					qt:   entry.QID.Type,
+					stat: func() (fs.FileInfo, error) {
+						// f.file is open; 9P forbids walking from an open
+						// fid, so reach the entry from the root instead.
+						_, child, err := f.root.Walk(childPath)
+						if err != nil {
+							return nil, translateError("stat", entry.Name, err)
+						}
+						defer child.Close()
+						return fileInfo(child, entry.Name)
+					},
+				})
 			}
 			return entries, nil
 		})
