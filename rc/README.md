@@ -108,7 +108,7 @@ etc.) plus custom `help`.
 
 It also bundles utility commands. Current bundled commands include:
 
-- `base64`, `cat`, `chmod`, `cp`, `env`, `find`
+- `base64`, `cat`, `chmod`, `cp`, `date`, `env`, `find`
 - `gzip`, `gzcat`, `gunzip`
 - `ls`, `mkdir`, `mv`, `rm`
 - `shasum`, `tar`, `touch`, `xargs`
