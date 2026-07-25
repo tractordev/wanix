@@ -156,7 +156,14 @@ export class TerminalElement extends WanixElement {
                 }
                 // may add line discipline as mode to terminals but for now we
                 // do as plan 9 and handle it here in "userspace"
-                if (data === '\r') {
+                if (data === '\x03') {          // Ctrl-C
+                    buffer = '';
+                    this._term.write('^C\r\n');
+                    if (this.#writer) {
+                        // send ETX now; newline wakes line-oriented readers
+                        this.#writer.write(encoder.encode('\x03\n'));
+                    }
+                } else if (data === '\r') {
                     this._term.write('\r\n');           // echo newline
                     if (this.#writer) {
                         this.#writer.write(encoder.encode(buffer+"\n"));

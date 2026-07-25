@@ -85,6 +85,7 @@ func runREPL(ctx context.Context, r *interp.Runner, parser *syntax.Parser, stdin
 			return nil
 		}
 		line := scanner.Text()
+		line = lineAfterInterrupt(line)
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
@@ -102,6 +103,13 @@ func runREPL(ctx context.Context, r *interp.Runner, parser *syntax.Parser, stdin
 	}
 }
 
+func lineAfterInterrupt(line string) string {
+	if interrupt := strings.LastIndexByte(line, '\x03'); interrupt >= 0 {
+		return line[interrupt+1:]
+	}
+	return line
+}
+
 func runSource(ctx context.Context, r *interp.Runner, parser *syntax.Parser, name string, src io.Reader) error {
 	prog, err := parser.Parse(src, name)
 	if err != nil {
@@ -114,6 +122,10 @@ func wanixExecMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHandlerF
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 		return func(ctx context.Context, args []string) error {
 			hc := interp.HandlerCtx(ctx)
+			stdin, stdout, stderr := ioForExec(ctx, hc)
+			hc.Stdin = stdin
+			hc.Stdout = stdout
+			hc.Stderr = stderr
 			if len(args) == 0 {
 				return next(ctx, args)
 			}
