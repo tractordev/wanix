@@ -92,4 +92,22 @@ func TestExamplesHTML(t *testing.T) {
 			}
 		})
 	}
+
+	// This regression remains red until #243 is merged. watch's external
+	// child exits, but rc currently hangs before watch can regain stdin.
+	t.Run("rc watch external task stdio", func(t *testing.T) {
+		build := exec.Command("make", "-C", "examples/repl-rc", "build")
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("Error building rc example: %v\nOutput:\n%s", err, string(out))
+		}
+
+		url := fmt.Sprintf("%s/test/html/rc-watch-external-task.html", baseURL)
+		cmd := exec.Command("go", "run", ".", "-wait-load=false", "-wait-done", "-timeout=15s", url)
+		cmd.Dir = "./test/wtest"
+		cmd.Env = append(os.Environ(), "GOWORK=off")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("Error running rc watch external task test: %v\nOutput:\n%s", err, string(out))
+		}
+	})
 }
