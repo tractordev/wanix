@@ -5,11 +5,13 @@ import (
 	"strconv"
 	"sync"
 
+	"tractor.dev/toolkit-go/engine/cli"
 	"tractor.dev/wanix"
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/fs/signal"
+	"tractor.dev/wanix/misc"
 )
 
 type Device struct {
@@ -89,15 +91,28 @@ func (d *Device) Alloc() (rid string, err error) {
 	rid = strconv.Itoa(d.nextID)
 	hub := signal.NewBroadcaster()
 	_, dataPF, progPF := pipe.NewFS(true)
-	// remove := func() {
-	// 	d.remove(rid)
-	// }
-	progWrap := &programFile{PortFile: progPF}
+	remove := func() {
+		d.remove(rid)
+	}
+	progWrap := &programFile{
+		PortFile: progPF,
+		remove:   remove,
+	}
 	root := fskit.MapFS{
 		"id":      fskit.RawNode([]byte(rid+"\n"), 0555),
 		"data":    fskit.FileFS(dataPF, "data"),
 		"program": fskit.FileFS(progWrap, "program"),
 		"winch":   signal.NewFS(hub),
+		"ctl": misc.ControlFile(&cli.Command{
+			Usage: "ctl",
+			Short: "control the terminal",
+			Run: func(_ *cli.Context, args []string) {
+				switch args[0] {
+				case "close":
+					remove()
+				}
+			},
+		}),
 	}
 	d.resources[rid] = &Resource{
 		id:    rid,
@@ -110,12 +125,13 @@ func (d *Device) Alloc() (rid string, err error) {
 
 func (d *Device) remove(rid string) {
 	d.mu.Lock()
-	res, err := d.Get(rid)
-	if err != nil {
-		d.mu.Unlock()
-		return
+	fsys, ok := d.resources[rid]
+	if ok {
+		delete(d.resources, rid)
 	}
-	delete(d.resources, rid)
 	d.mu.Unlock()
-	res.shutdown()
+
+	if ok {
+		fsys.(*Resource).shutdown()
+	}
 }

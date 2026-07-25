@@ -1,6 +1,8 @@
 package term
 
 import (
+	"io"
+
 	"tractor.dev/wanix/fs/fskit"
 	"tractor.dev/wanix/fs/pipe"
 	"tractor.dev/wanix/fs/signal"
@@ -28,7 +30,16 @@ func (r *Resource) shutdown() {
 
 type programFile struct {
 	*pipe.PortFile
-	prev byte // last input byte seen, for cross-call lookbehind
+	prev   byte // last input byte seen, for cross-call lookbehind
+	remove func()
+}
+
+func (c *programFile) Read(p []byte) (int, error) {
+	n, err := c.PortFile.Read(p)
+	if err == io.EOF {
+		c.remove()
+	}
+	return n, err
 }
 
 func (c *programFile) Write(p []byte) (int, error) {

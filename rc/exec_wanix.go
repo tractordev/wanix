@@ -25,11 +25,30 @@ func readString(path string) (string, error) {
 
 func runExternalCommand(ctx context.Context, hc interp.HandlerContext, path string, args []string) (int, error) {
 	argv := append([]string{path}, args...)
+	parentTaskID, err := readString("#task/self/id")
+	if err != nil {
+		return 1, err
+	}
+
 	termID, err := readString("#term/new")
 	if err != nil {
 		return 1, err
 	}
 	termPath := filepath.Join("#term", termID)
+	termClosed := false
+	closeTerm := func() error {
+		if termClosed {
+			return nil
+		}
+		if err := AppendFile(filepath.Join(termPath, "ctl"), []byte("close")); err != nil {
+			return err
+		}
+		termClosed = true
+		return nil
+	}
+	defer func() {
+		_ = closeTerm()
+	}()
 
 	// todo: need better auto so we dont have to use gojs here
 	taskID, err := readString("#task/new/gojs")
@@ -49,8 +68,15 @@ func runExternalCommand(ctx context.Context, hc interp.HandlerContext, path stri
 		return 1, err
 	}
 
+	forwardStdin := shouldForwardStdin(hc.Stdin)
+	// A foreground task inherits the shell's stdin. Copying it through a
+	// goroutine can leave a blocked reader competing with the resumed shell.
+	stdinPath := filepath.Join("#task", parentTaskID, "fd", "0")
+	if forwardStdin {
+		stdinPath = filepath.Join(termPath, "program")
+	}
 	ctlmsg := []string{
-		fmt.Sprintf("bind %s/program %s/fd/0", termPath, taskPath),
+		fmt.Sprintf("bind %s %s/fd/0", stdinPath, taskPath),
 		fmt.Sprintf("bind %s/program %s/fd/1", termPath, taskPath),
 		fmt.Sprintf("bind %s/program %s/fd/2", termPath, taskPath),
 	}
@@ -60,34 +86,49 @@ func runExternalCommand(ctx context.Context, hc interp.HandlerContext, path stri
 		}
 	}
 
-	termData, err := os.Open(filepath.Join(termPath, "data"))
+	termOutput, err := os.Open(filepath.Join(termPath, "data"))
 	if err != nil {
 		return 1, err
 	}
-	defer termData.Close()
 
-	if shouldForwardStdin(hc.Stdin) {
+	if forwardStdin {
+		termInput, err := os.Open(filepath.Join(termPath, "data"))
+		if err != nil {
+			_ = termOutput.Close()
+			return 1, err
+		}
 		// todo: do we need to do line discpline?
 		go func() {
-			println("copying stdin")
-			_, _ = io.Copy(termData, hc.Stdin)
-			println("stdin done")
+			defer termInput.Close()
+			_, _ = io.Copy(termInput, hc.Stdin)
 		}()
 	}
 
+	outputDone := make(chan struct{})
 	go func() {
-		println("copying stdout")
-		_, _ = io.Copy(hc.Stdout, termData)
-		println("stdout done")
+		defer close(outputDone)
+		_, _ = io.Copy(hc.Stdout, termOutput)
 	}()
 
 	if err := AppendFile(filepath.Join(taskPath, "ctl"), []byte("start")); err != nil {
+		if closeErr := closeTerm(); closeErr == nil {
+			<-outputDone
+			_ = termOutput.Close()
+		}
 		return 1, err
 	}
 
 	code, err := waitExitCode(ctx, filepath.Join(taskPath, "exit"))
+	closeErr := closeTerm()
+	if closeErr == nil {
+		<-outputDone
+		_ = termOutput.Close()
+	}
 	if err != nil {
 		return 1, err
+	}
+	if closeErr != nil {
+		return 1, closeErr
 	}
 
 	return code, nil
