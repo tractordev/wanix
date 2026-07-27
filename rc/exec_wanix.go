@@ -90,11 +90,11 @@ func runExternalCommand(ctx context.Context, hc interp.HandlerContext, path stri
 	if err != nil {
 		return 1, err
 	}
+	defer termOutput.Close()
 
 	if forwardStdin {
 		termInput, err := os.Open(filepath.Join(termPath, "data"))
 		if err != nil {
-			_ = termOutput.Close()
 			return 1, err
 		}
 		// todo: do we need to do line discpline?
@@ -113,7 +113,6 @@ func runExternalCommand(ctx context.Context, hc interp.HandlerContext, path stri
 	if err := AppendFile(filepath.Join(taskPath, "ctl"), []byte("start")); err != nil {
 		if closeErr := closeTerm(); closeErr == nil {
 			<-outputDone
-			_ = termOutput.Close()
 		}
 		return 1, err
 	}
@@ -122,7 +121,6 @@ func runExternalCommand(ctx context.Context, hc interp.HandlerContext, path stri
 	closeErr := closeTerm()
 	if closeErr == nil {
 		<-outputDone
-		_ = termOutput.Close()
 	}
 	if err != nil {
 		return 1, err
