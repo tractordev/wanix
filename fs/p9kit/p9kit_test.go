@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +108,72 @@ func TestIntegration_BasicReadWrite(t *testing.T) {
 			t.Errorf("ReadDir: expected foo3, got %s", entries[0].Name())
 		}
 	})
+}
+
+func TestIntegration_LargeDirectory(t *testing.T) {
+	tests := []struct {
+		name    string
+		count   int
+		padding int
+	}{
+		{name: "original count beyond one message", count: 408, padding: 160},
+		{name: "high entry count", count: 4096},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nodes := make(fskit.MapFS, tt.count)
+			names := make(map[string]struct{}, tt.count)
+			padding := strings.Repeat("x", tt.padding)
+			for i := 0; i < tt.count; i++ {
+				name := fmt.Sprintf("command-%05d-%s", i, padding)
+				nodes[name] = fskit.RawNode([]byte("#!/bin/sh\n"))
+				names[name] = struct{}{}
+			}
+
+			fsys, cleanup := testSetup(t, memfs.From(nodes))
+			defer cleanup()
+
+			checkEntries := func(t *testing.T, entries []fs.DirEntry, err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatalf("ReadDir: %v", err)
+				}
+				if len(entries) != tt.count {
+					t.Fatalf("got %d entries, want %d", len(entries), tt.count)
+				}
+				seen := make(map[string]bool, len(entries))
+				for _, entry := range entries {
+					if _, ok := names[entry.Name()]; !ok {
+						t.Fatalf("unexpected entry %q", entry.Name())
+					}
+					if seen[entry.Name()] {
+						t.Fatalf("duplicate entry %q", entry.Name())
+					}
+					seen[entry.Name()] = true
+				}
+			}
+
+			t.Run("FS.ReadDir", func(t *testing.T) {
+				entries, err := fs.ReadDir(fsys, ".")
+				checkEntries(t, entries, err)
+			})
+
+			t.Run("File.ReadDir", func(t *testing.T) {
+				f, err := fsys.Open(".")
+				if err != nil {
+					t.Fatalf("Open: %v", err)
+				}
+				defer f.Close()
+				rdf, ok := f.(fs.ReadDirFile)
+				if !ok {
+					t.Fatalf("not a ReadDirFile: %T", f)
+				}
+				entries, err := rdf.ReadDir(-1)
+				checkEntries(t, entries, err)
+			})
+		})
+	}
 }
 
 func TestIntegration_CreateAndWrite(t *testing.T) {

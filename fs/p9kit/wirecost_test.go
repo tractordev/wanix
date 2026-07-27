@@ -97,14 +97,15 @@ func expectCounts(t *testing.T, phase string, got map[uint8]int, want map[uint8]
 // regression toward per-entry round-trips fails loudly:
 //
 //   - FS.ReadDir builds entries from the dirents it already holds:
-//     one walk+open+list+clunk regardless of entry count, attributes
-//     fetched only if Info() is called.
+//     one walk+open, as many reads as the listing needs plus one for
+//     EOF, and one clunk; attributes are fetched only if Info() is
+//     called.
 //   - OpenContext types the target by its walk qid: directories open
 //     ReadOnly directly instead of failing a ReadWrite attempt first.
 //   - remoteFile.ReadDir types entries by their own dirent qids.
 //   - Close fsyncs only handles that were opened writable.
 //
-// Composite effect: one ls-shaped pass over 7 entries costs 28
+// Composite effect: one ls-shaped pass over 7 entries costs 29
 // messages (down from 51 with per-entry stats), and the remaining
 // floor is the caller's own per-entry Stat, not ReadDir overhead.
 func TestLsWireCostBaseline(t *testing.T) {
@@ -133,7 +134,7 @@ func TestLsWireCostBaseline(t *testing.T) {
 			msgTgetattr: 0,
 			msgTclunk:   1,
 			msgTlopen:   1,
-			msgTreaddir: 1,
+			msgTreaddir: 2, // entries, then empty reply confirming EOF
 		})
 	})
 
@@ -158,7 +159,7 @@ func TestLsWireCostBaseline(t *testing.T) {
 			t.Fatalf("remoteFile.ReadDir: %v", err)
 		}
 		expectCounts(t, "remoteFile.ReadDir", cc.take(), map[uint8]int{
-			msgTreaddir: 1,
+			msgTreaddir: 2, // entries, then empty reply confirming EOF
 			msgTgetattr: 0, // entry types come from the dirent qids
 			msgTwalk:    0,
 		})
@@ -195,15 +196,16 @@ func TestLsWireCostBaseline(t *testing.T) {
 		for _, n := range got {
 			total += n
 		}
-		// Seven entries cost 28 messages per listing pass: Stat(dir)=3 +
-		// ReadDir=4 (walk+open+list+clunk) + 7×Stat(entry)=21. The
+		// Seven entries cost 29 messages per listing pass: Stat(dir)=3 +
+		// ReadDir=5 (walk+open+list+EOF+clunk) + 7×Stat(entry)=21. The
 		// per-entry Stats are the caller's own (filepath.Walk lstats
 		// everything); ReadDir itself adds no per-entry traffic.
-		if total != 28 {
-			t.Errorf("composite ls total = %d messages, want 28 (was 51 before the listing fixes)", total)
+		if total != 29 {
+			t.Errorf("composite ls total = %d messages, want 29 (was 51 before the listing fixes)", total)
 		}
 		expectCounts(t, "composite", got, map[uint8]int{
 			msgTgetattr: 8, // dir + 7 in per-entry Stat; none from ReadDir
+			msgTreaddir: 2, // entries, then empty reply confirming EOF
 			msgTwalk:    9,
 			msgTclunk:   9,
 		})
