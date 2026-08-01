@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"testing"
+	"time"
 
 	"tractor.dev/wanix/fs"
 )
@@ -103,6 +104,54 @@ func TestProgramEOFRemoves(t *testing.T) {
 	s.mu.RUnlock()
 	if ok {
 		t.Fatal("resource should be removed after program EOF")
+	}
+}
+
+func TestCloseUnblocksDataReaderAndRemoves(t *testing.T) {
+	ctx := context.Background()
+	s := New(nil)
+	newf, err := fs.OpenContext(ctx, s, "new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := newf.Read(make([]byte, 8)); err != nil {
+		t.Fatal(err)
+	}
+	newf.Close()
+
+	data, err := fs.OpenContext(ctx, s, "1/data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer data.Close()
+
+	readErr := make(chan error, 1)
+	go func() {
+		_, err := data.Read(make([]byte, 8))
+		readErr <- err
+	}()
+
+	ctl, err := fs.OpenContext(ctx, s, "1/ctl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ctl.(io.Writer).Write([]byte("close")); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctl.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case err := <-readErr:
+		if err != io.EOF {
+			t.Fatalf("Read: got %v, want EOF", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("data reader remained blocked after close")
+	}
+	if _, err := s.Get("1"); err != fs.ErrNotExist {
+		t.Fatalf("Get: got %v, want %v", err, fs.ErrNotExist)
 	}
 }
 

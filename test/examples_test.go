@@ -92,4 +92,20 @@ func TestExamplesHTML(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("rc external task stdio", func(t *testing.T) {
+		build := exec.Command("make", "-C", "examples/repl-rc", "build")
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("Error building rc example: %v\nOutput:\n%s", err, string(out))
+		}
+
+		url := fmt.Sprintf("%s/test/html/rc-external-task.html", baseURL)
+		cmd := exec.Command("go", "run", ".", "-wait-load=false", "-wait-done", "-timeout=45s", url)
+		cmd.Dir = "./test/wtest"
+		cmd.Env = append(os.Environ(), "GOWORK=off")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("Error running rc external task test: %v\nOutput:\n%s", err, string(out))
+		}
+	})
 }

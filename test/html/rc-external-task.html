@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>rc external task stdio</title>
+    <script type="module" src="../../dist/wanix.min.js"></script>
+</head>
+<body>
+    <pre id="log"></pre>
+    <pre id="status"></pre>
+
+    <wanix-namespace wasm="../../dist/wanix.debug.wasm">
+        <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+        <wanix-bind type="file" dst="rc.wasm" src="../../examples/repl-rc/rc.wasm"></wanix-bind>
+        <wanix-task id="repl" cmd="rc.wasm" term></wanix-task>
+    </wanix-namespace>
+
+    <script type="module">
+        const logEl = document.getElementById("log");
+        const statusEl = document.getElementById("status");
+        const task = document.getElementById("repl");
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+        let output = "";
+
+        function promptCount() {
+            return (output.match(/rc%/g) || []).length;
+        }
+
+        async function waitFor(description, predicate, timeout = 10000) {
+            const deadline = Date.now() + timeout;
+            while (Date.now() < deadline) {
+                if (predicate()) return;
+                await new Promise((resolve) => setTimeout(resolve, 25));
+            }
+            throw new Error(`timeout waiting for ${description}\noutput:\n${output}`);
+        }
+
+        async function taskIDs() {
+            return (await task.root.readDir("#task"))
+                .filter((name) => /^\d+\/$/.test(name))
+                .map((name) => name.slice(0, -1));
+        }
+
+        function newTaskID(before, after) {
+            const added = after.filter((id) => !before.has(id));
+            if (added.length !== 1) {
+                throw new Error(`expected one new task, got ${added.length}`);
+            }
+            return added[0];
+        }
+
+        async function taskResult(id) {
+            return {
+                cmd: (await task.root.readText(`#task/${id}/cmd`)).trim(),
+                exit: (await task.root.readText(`#task/${id}/exit`)).trim(),
+            };
+        }
+
+        function assertTaskResult(result, cmd) {
+            if (result.cmd !== cmd || result.exit !== "0") {
+                throw new Error(
+                    `task result: got ${result.cmd} -> ${result.exit}, want ${cmd} -> 0`);
+            }
+        }
+
+        await task._nsReady;
+        await task.root.chmod("rc.wasm", 0o755);
+        await task.start();
+        const dataPath = `${task.term}/data`;
+        await task.root.waitFor(dataPath, 30000);
+        const reader = (await task.root.openReadable(dataPath)).getReader();
+        const writer = (await task.root.openWritable(dataPath)).getWriter();
+
+        (async () => {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) return;
+                output += decoder.decode(value, {stream: true});
+                logEl.textContent = output;
+            }
+        })();
+
+        async function send(command) {
+            await writer.write(encoder.encode(command + "\n"));
+        }
+
+        await waitFor("initial prompt", () => promptCount() >= 1);
+
+        const beforeCommand = new Set(await taskIDs());
+        await send("rc.wasm -c 'echo child'");
+        await waitFor("child output and parent prompt",
+            () => output.includes("child") && promptCount() >= 2);
+        const commandTaskID = newTaskID(beforeCommand, await taskIDs());
+        const commandResult = await taskResult(commandTaskID);
+        assertTaskResult(commandResult, "rc.wasm -c 'echo child'");
+
+        const beforeNested = new Set(await taskIDs());
+        await send("rc.wasm");
+        await waitFor("nested prompt", () => promptCount() >= 3);
+
+        await send("echo nested");
+        await waitFor("nested command", () => output.includes("nested") && promptCount() >= 4);
+
+        await send("exit");
+        await waitFor("parent prompt after nested exit", () => promptCount() >= 5);
+        const nestedTaskID = newTaskID(beforeNested, await taskIDs());
+        const nestedResult = await taskResult(nestedTaskID);
+        assertTaskResult(nestedResult, "rc.wasm");
+
+        await send("echo parent");
+        await waitFor("parent command", () => output.includes("parent") && promptCount() >= 6);
+
+        statusEl.textContent =
+            `#task/${commandTaskID}: ${commandResult.cmd} -> ${commandResult.exit}\n` +
+            `#task/${nestedTaskID}: ${nestedResult.cmd} -> ${nestedResult.exit}\n` +
+            "ALL PASSED\n";
+        window.__wtest_done = true;
+    </script>
+</body>
+</html>
