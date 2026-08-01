@@ -3,6 +3,11 @@ export default {
     async fetch(request, env) {
         const url = new URL(request.url);
 
+        if (url.hostname === 'wanix.sh') {
+            let redirectUrl = `https://wanix.dev${url.pathname}${url.search}`;
+            return Response.redirect(redirectUrl, 301);
+        }
+   
         if (url.pathname.startsWith('/lib/')) {
             // /lib/... or /lib/{version}/...
             let match = url.pathname.match(/^\/lib(?:\/([^\/]+))?\/(.+)$/);
