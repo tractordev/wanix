@@ -111,7 +111,7 @@ It also bundles utility commands. Current bundled commands include:
 - `base64`, `cat`, `chmod`, `cp`, `env`, `find`
 - `gzip`, `gzcat`, `gunzip`
 - `ls`, `mkdir`, `mv`, `rm`
-- `shasum`, `tar`, `touch`, `xargs`
+- `shasum`, `tar`, `touch`, `watch`, `xargs`
 
 Note: bundled commands are not shell "builtins"; they are just commands embedded
 in rc similar to busybox.

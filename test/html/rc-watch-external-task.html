@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>rc watch external task stdio</title>
+    <script type="module" src="../../dist/wanix.min.js"></script>
+</head>
+<body>
+    <pre id="log"></pre>
+    <pre id="status"></pre>
+
+    <wanix-namespace wasm="../../dist/wanix.debug.wasm">
+        <wanix-bind dst="." src="#ramfs/new"></wanix-bind>
+        <wanix-bind type="file" dst="rc.wasm" src="../../examples/repl-rc/rc.wasm"></wanix-bind>
+        <wanix-task id="repl" cmd="rc.wasm" term></wanix-task>
+    </wanix-namespace>
+
+    <script type="module">
+        const logEl = document.getElementById("log");
+        const statusEl = document.getElementById("status");
+        const task = document.getElementById("repl");
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder();
+        let output = "";
+
+        function promptCount() {
+            return (output.match(/rc%/g) || []).length;
+        }
+
+        async function waitFor(description, predicate, timeout = 10000) {
+            const deadline = Date.now() + timeout;
+            while (Date.now() < deadline) {
+                if (predicate()) return;
+                await new Promise((resolve) => setTimeout(resolve, 25));
+            }
+            throw new Error(`timeout waiting for ${description}\noutput:\n${output}`);
+        }
+
+        async function taskIDs() {
+            return (await task.root.readDir("#task"))
+                .filter((name) => /^\d+\/$/.test(name))
+                .map((name) => name.slice(0, -1));
+        }
+
+        await task._nsReady;
+        await task.root.chmod("rc.wasm", 0o755);
+        await task.start();
+        const dataPath = `${task.term}/data`;
+        await task.root.waitFor(dataPath, 30000);
+        const reader = (await task.root.openReadable(dataPath)).getReader();
+        const writer = (await task.root.openWritable(dataPath)).getWriter();
+
+        (async () => {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) return;
+                output += decoder.decode(value, {stream: true});
+                logEl.textContent = output;
+            }
+        })();
+
+        async function send(input) {
+            await writer.write(encoder.encode(input + "\n"));
+        }
+
+        await waitFor("initial prompt", () => promptCount() >= 1);
+
+        const beforeWatch = new Set(await taskIDs());
+        await send("watch -n 60 rc.wasm -c 'echo child'");
+        await waitFor("watched external command output", () => output.includes("child"));
+
+        await send("\x03");
+        await waitFor("parent prompt after interrupt", () => promptCount() >= 2);
+
+        await send("echo parent");
+        await waitFor("parent command", () => output.includes("parent") && promptCount() >= 3);
+
+        const childIDs = (await taskIDs()).filter((id) => !beforeWatch.has(id));
+        if (childIDs.length !== 1) {
+            throw new Error(`expected one watched child task, got ${childIDs.length}`);
+        }
+        const childID = childIDs[0];
+        const command = (await task.root.readText(`#task/${childID}/cmd`)).trim();
+        const exit = (await task.root.readText(`#task/${childID}/exit`)).trim();
+        if (command !== "rc.wasm -c 'echo child'" || exit !== "0") {
+            throw new Error(`task result: got ${command} -> ${exit}`);
+        }
+
+        statusEl.textContent =
+            `#task/${childID}: ${command} -> ${exit}\n` +
+            "watch interrupted; parent shell resumed\n" +
+            "ALL PASSED\n";
+        window.__wtest_done = true;
+    </script>
+</body>
+</html>

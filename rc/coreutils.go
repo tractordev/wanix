@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -30,6 +31,7 @@ import (
 	"tractor.dev/wanix/rc/ls"
 	"tractor.dev/wanix/rc/stat"
 	"tractor.dev/wanix/rc/unbind"
+	"tractor.dev/wanix/rc/watch"
 	"tractor.dev/wanix/rc/write"
 )
 
@@ -63,9 +65,24 @@ var coreutilsCommands = map[string]func() core.Command{
 	"write":   func() core.Command { return write.New() },
 }
 
+func newCoreutilsCommand(name string, execute commandExecutor) (core.Command, bool) {
+	if name == "watch" {
+		return watch.New(execute), true
+	}
+	newCommand, ok := coreutilsCommands[name]
+	if !ok {
+		return nil, false
+	}
+	return newCommand(), true
+}
+
 func urootCoreutilsMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 	return func(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
-		return func(ctx context.Context, args []string) error {
+		var execute interp.ExecHandlerFunc
+		executeCommand := func(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+			return execute(withExecIO(ctx, stdin, stdout, stderr), args)
+		}
+		execute = func(ctx context.Context, args []string) error {
 			if len(args) == 0 {
 				return next(ctx, args)
 			}
@@ -73,14 +90,14 @@ func urootCoreutilsMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHan
 				return runEnvCommand(ctx, args[1:], next)
 			}
 
-			newCmd, ok := coreutilsCommands[args[0]]
+			cmd, ok := newCoreutilsCommand(args[0], executeCommand)
 			if !ok {
 				return next(ctx, args)
 			}
 
 			hc := interp.HandlerCtx(ctx)
-			cmd := newCmd()
-			cmd.SetIO(hc.Stdin, hc.Stdout, hc.Stderr)
+			stdin, stdout, stderr := ioForExec(ctx, hc)
+			cmd.SetIO(stdin, stdout, stderr)
 			cmd.SetWorkingDir(hc.Dir)
 			cmd.SetLookupEnv(func(key string) (string, bool) {
 				v := hc.Env.Get(key)
@@ -95,16 +112,17 @@ func urootCoreutilsMiddleware() func(next interp.ExecHandlerFunc) interp.ExecHan
 				if name == rcBindCmd {
 					name = "bind"
 				}
-				fmt.Fprintf(hc.Stderr, "rc: %s: %v\n", name, err)
+				fmt.Fprintf(stderr, "rc: %s: %v\n", name, err)
 				return interp.ExitStatus(1)
 			}
 			return nil
 		}
+		return execute
 	}
 }
 
 func bundledCommandNames() []string {
-	names := make([]string, 0, len(coreutilsCommands)+1)
+	names := make([]string, 0, len(coreutilsCommands)+2)
 	for name := range coreutilsCommands {
 		if name == rcBindCmd {
 			names = append(names, "bind")
@@ -112,13 +130,14 @@ func bundledCommandNames() []string {
 		}
 		names = append(names, name)
 	}
-	names = append(names, "env")
+	names = append(names, "env", "watch")
 	sort.Strings(names)
 	return names
 }
 
 func runEnvCommand(ctx context.Context, args []string, next interp.ExecHandlerFunc) error {
 	hc := interp.HandlerCtx(ctx)
+	_, stdout, _ := ioForExec(ctx, hc)
 	env := map[string]string{}
 	hc.Env.Each(func(name string, vr expand.Variable) bool {
 		// We intentionally include all set vars available via interp env.
@@ -181,7 +200,7 @@ func runEnvCommand(ctx context.Context, args []string, next interp.ExecHandlerFu
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		fmt.Fprintf(hc.Stdout, "%s=%s\n", k, env[k])
+		fmt.Fprintf(stdout, "%s=%s\n", k, env[k])
 	}
 	return nil
 }
