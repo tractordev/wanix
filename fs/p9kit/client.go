@@ -2,6 +2,7 @@ package p9kit
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -363,7 +364,7 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 		return nil, translateError("readdir", name, err)
 	}
 
-	dirents, err := f.Readdir(0, 65535) // max uint32 breaks p9kit server
+	dirents, err := readDirents(f)
 	if err != nil {
 		return nil, translateError("readdir", name, err)
 	}
@@ -382,6 +383,33 @@ func (fsys *FS) ReadDir(name string) ([]fs.DirEntry, error) {
 		})
 	}
 	return entries, nil
+}
+
+const readdirCount = 65535 // max uint32 breaks p9kit server
+
+func readDirents(dir p9.File) (p9.Dirents, error) {
+	var (
+		dirents p9.Dirents
+		offset  uint64
+	)
+	for {
+		entries, err := dir.Readdir(offset, readdirCount)
+		if err != nil {
+			return nil, err
+		}
+		if len(entries) == 0 {
+			return dirents, nil
+		}
+
+		// A short non-empty 9P directory read is not EOF: the next
+		// complete dirent may simply not have fit in the response.
+		dirents = append(dirents, entries...)
+		next := entries[len(entries)-1].Offset
+		if next == offset {
+			return nil, fmt.Errorf("readdir made no progress at offset %d", offset)
+		}
+		offset = next
+	}
 }
 
 // lazyEntry is a directory entry built from a 9P dirent: the name and
@@ -486,7 +514,7 @@ func (f *remoteFile) Stat() (fs.FileInfo, error) {
 func (f *remoteFile) ReadDir(n int) ([]fs.DirEntry, error) {
 	if f.iter == nil {
 		f.iter = fskit.NewDirIter(func() ([]fs.DirEntry, error) {
-			dirents, err := f.file.Readdir(0, 65535) // max uint32 breaks p9kit server
+			dirents, err := readDirents(f.file)
 			if err != nil {
 				return nil, translateError("readdir", f.name, err)
 			}
