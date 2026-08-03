@@ -24,6 +24,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"tractor.dev/wanix/rc/attach"
 	"tractor.dev/wanix/rc/bind"
+	"tractor.dev/wanix/rc/date"
 	"tractor.dev/wanix/rc/find"
 	"tractor.dev/wanix/rc/gzip"
 	"tractor.dev/wanix/rc/invoke"
@@ -47,6 +48,7 @@ var coreutilsCommands = map[string]func() core.Command{
 	"base64": func() core.Command { return base64.New() },
 	"mkdir":  func() core.Command { return mkdir.New() },
 	"cp":     func() core.Command { return cp.New() },
+	"date":   func() core.Command { return date.New() },
 	"mv":     func() core.Command { return mv.New() },
 	"rm":     func() core.Command { return rm.New() },
 	"ls":     func() core.Command { return ls.New() },
