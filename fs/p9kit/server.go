@@ -218,17 +218,7 @@ func (l *p9file) Create(name string, mode p9.OpenFlags, permissions p9.FileMode,
 		return nil, p9.QID{}, 0, err
 	}
 
-	if uid.Ok() || gid != p9.NoGID {
-		u := -1
-		g := -1
-		if uid.Ok() {
-			u = int(uid)
-		}
-		if gid != p9.NoGID {
-			g = int(gid)
-		}
-		fs.Chown(l.fsys, newName, u, g) // best-effort
-	}
+	l.setNewOwner(newName, uid, gid)
 
 	l2 := &p9file{path: newName, file: f, fsys: l.fsys, vattrs: l.vattrs, openFlags: mode}
 	qid, _, err := l2.info()
@@ -239,6 +229,38 @@ func (l *p9file) Create(name string, mode p9.OpenFlags, permissions p9.FileMode,
 	return l2, qid, 0, nil
 }
 
+// setNewOwner records the creator's ownership on a newly created path,
+// virtually if a VirtualAttrStore is configured, otherwise via a
+// best-effort chown on the backing filesystem.
+func (l *p9file) setNewOwner(p string, uid p9.UID, gid p9.GID) {
+	if !uid.Ok() && !gid.Ok() {
+		return
+	}
+	if l.vattrs != nil {
+		attrs := &VirtualAttrs{}
+		if uid.Ok() {
+			u := uint32(uid)
+			attrs.UID = &u
+		}
+		if gid.Ok() {
+			g := uint32(gid)
+			attrs.GID = &g
+		}
+		if err := l.vattrs.Set(p, attrs); err != nil {
+			log.Println("p9kit: set owner on", p, err)
+		}
+		return
+	}
+	u, g := -1, -1
+	if uid.Ok() {
+		u = int(uid)
+	}
+	if gid.Ok() {
+		g = int(gid)
+	}
+	fs.Chown(l.fsys, p, u, g) // best-effort
+}
+
 // Mkdir implements p9.File.Mkdir.
 func (l *p9file) Mkdir(name string, permissions p9.FileMode, uid p9.UID, gid p9.GID) (p9.QID, error) {
 	newPath := path.Join(l.path, name)
@@ -246,17 +268,7 @@ func (l *p9file) Mkdir(name string, permissions p9.FileMode, uid p9.UID, gid p9.
 		return p9.QID{}, err
 	}
 
-	if uid.Ok() || gid != p9.NoGID {
-		u := -1
-		g := -1
-		if uid.Ok() {
-			u = int(uid)
-		}
-		if gid != p9.NoGID {
-			g = int(gid)
-		}
-		fs.Chown(l.fsys, newPath, u, g) // best-effort
-	}
+	l.setNewOwner(newPath, uid, gid)
 
 	child := &p9file{path: newPath, fsys: l.fsys, vattrs: l.vattrs}
 	qid, _, err := child.info()
@@ -286,7 +298,13 @@ func (l *p9file) RenameAt(oldName string, newDir p9.File, newName string) error 
 	oldPath := path.Join(l.path, oldName)
 	newPath := path.Join(newDir.(*p9file).path, newName)
 
-	return fs.Rename(l.fsys, oldPath, newPath)
+	if err := fs.Rename(l.fsys, oldPath, newPath); err != nil {
+		return err
+	}
+	if r, ok := l.vattrs.(virtualAttrRenamer); ok {
+		r.Rename(oldPath, newPath)
+	}
+	return nil
 }
 
 // Readlink implements p9.File.Readlink.
@@ -331,7 +349,13 @@ func (l *p9file) UnlinkAt(name string, flags uint32) error {
 	}
 
 	// Remove the file or directory
-	return fs.Remove(l.fsys, fullPath)
+	if err := fs.Remove(l.fsys, fullPath); err != nil {
+		return err
+	}
+	if r, ok := l.vattrs.(virtualAttrRemover); ok {
+		r.Remove(path.Join(l.path, name))
+	}
+	return nil
 }
 
 // Readdir implements p9.File.Readdir.

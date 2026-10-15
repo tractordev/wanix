@@ -3,6 +3,7 @@ package p9kit
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 
 	"tractor.dev/wanix/fs"
@@ -53,6 +54,65 @@ func (s *MemoryAttrStore) Set(path string, attrs *VirtualAttrs) error {
 
 	s.attrs[path] = attrs
 	return nil
+}
+
+// virtualAttrRenamer is implemented by stores keyed by path that must be
+// updated when a path is renamed.
+type virtualAttrRenamer interface {
+	Rename(oldpath, newpath string)
+}
+
+// virtualAttrRemover is implemented by stores keyed by path that must be
+// updated when a path is removed.
+type virtualAttrRemover interface {
+	Remove(path string)
+}
+
+// Rename moves attrs for oldpath and any descendants to newpath,
+// replacing any attrs previously at newpath.
+func (s *MemoryAttrStore) Rename(oldpath, newpath string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	moved := make(map[string]*VirtualAttrs)
+	for p, attrs := range s.attrs {
+		if rest, ok := underPath(p, oldpath); ok {
+			moved[newpath+rest] = attrs
+		}
+	}
+	s.removeLocked(oldpath)
+	s.removeLocked(newpath)
+	for p, attrs := range moved {
+		s.attrs[p] = attrs
+	}
+}
+
+// Remove drops attrs for path and any descendants.
+func (s *MemoryAttrStore) Remove(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.removeLocked(path)
+}
+
+func (s *MemoryAttrStore) removeLocked(path string) {
+	for p := range s.attrs {
+		if _, ok := underPath(p, path); ok {
+			delete(s.attrs, p)
+		}
+	}
+}
+
+// underPath reports whether p is dir or inside it, returning the
+// remainder of p after dir ("" or "/...").
+func underPath(p, dir string) (string, bool) {
+	if p == dir {
+		return "", true
+	}
+	if strings.HasPrefix(p, dir+"/") {
+		return p[len(dir):], true
+	}
+	return "", false
 }
 
 // XattrAttrStore implements VirtualAttrStore using extended attributes
