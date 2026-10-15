@@ -605,3 +605,49 @@ func TestRecursiveUnion(t *testing.T) {
 		t.Fatalf("bin/b: got %q", content)
 	}
 }
+
+// Stat must see synthesized parent directories of deep binds even when
+// routing hands the path to another binding (here the root bind) that
+// doesn't contain it. Open/ReadDir synthesize these; Stat must agree.
+func TestStatSynthesizedDirUnderRootBind(t *testing.T) {
+	root := fstest.MapFS{"x/f": {Data: []byte("1")}, "a/y": {Data: []byte("2")}}
+	file := fstest.MapFS{"file.txt": {Data: []byte("c")}}
+	ns := New(context.Background())
+	ns.Bind(root, ".", ".")
+	ns.Bind(file, "file.txt", "b/c/file.txt")
+	ns.Bind(file, "file.txt", "a/c/file.txt")
+
+	tests := []struct {
+		path    string
+		entries []string
+	}{
+		{"b", []string{"c"}},          // synthesized, not in root
+		{"b/c", []string{"file.txt"}}, // synthesized, not in root
+		{"a", []string{"c", "y"}},     // real dir in root, plus synthesized c
+		{"a/c", []string{"file.txt"}}, // synthesized under real dir
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			fi, err := fs.Stat(ns, tt.path)
+			if err != nil {
+				t.Fatalf("Stat(%q) error: %v", tt.path, err)
+			}
+			if !fi.IsDir() {
+				t.Errorf("Stat(%q) is not a directory: mode %v", tt.path, fi.Mode())
+			}
+
+			entries, err := fs.ReadDir(ns, tt.path)
+			if err != nil {
+				t.Fatalf("ReadDir(%q) error: %v", tt.path, err)
+			}
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			sort.Strings(names)
+			if !reflect.DeepEqual(names, tt.entries) {
+				t.Errorf("ReadDir(%q) = %v, want %v", tt.path, names, tt.entries)
+			}
+		})
+	}
+}

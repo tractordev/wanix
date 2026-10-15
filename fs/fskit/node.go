@@ -133,7 +133,7 @@ func (n *Node) ModTime() time.Time {
 func (n *Node) IsDir() bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	return n.mode&fs.ModeDir != 0
+	return (n.mode&fs.ModeDir != 0) || (n.mode&0o40000 != 0)
 }
 
 func (n *Node) Sys() any {
@@ -252,7 +252,6 @@ func (n *Node) GetGID() int {
 	defer n.mu.Unlock()
 	return n.gid
 }
-
 
 // fs.OpenContextFS
 var _ = (fs.OpenContextFS)((*Node)(nil))

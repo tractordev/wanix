@@ -25,10 +25,9 @@ func (s *syscaller) stat(r rpc.Responder, c *rpc.Call) {
 		IsDir   bool
 		ModTime time.Time
 	}{
-		Size: fi.Size(),
-		Mode: pstat.FileModeToUnixMode(fi.Mode()),
-		// Mode:    uint32(fi.Mode()),
-		IsDir:   fi.IsDir(),
+		Size:    fi.Size(),
+		Mode:    pstat.FileModeToUnixMode(fi.Mode()),
+		IsDir:   fs.IsDirInfo(fi),
 		ModTime: fi.ModTime(),
 	})
 }
@@ -49,10 +48,9 @@ func (s *syscaller) lstat(r rpc.Responder, c *rpc.Call) {
 		IsDir   bool
 		ModTime time.Time
 	}{
-		Size: fi.Size(),
-		Mode: pstat.FileModeToUnixMode(fi.Mode()),
-		// Mode:    uint32(fi.Mode()),
-		IsDir:   fi.IsDir(),
+		Size:    fi.Size(),
+		Mode:    pstat.FileModeToUnixMode(fi.Mode()),
+		IsDir:   fs.IsDirInfo(fi),
 		ModTime: fi.ModTime(),
 	})
 }
@@ -63,7 +61,7 @@ func (s *syscaller) fstat(r rpc.Responder, c *rpc.Call) {
 
 	fd, ok := args[0].(uint64)
 	if !ok {
-		log.Panicf("arg 0 is not a uint64: %T %v", args[1], args[1])
+		log.Panicf("arg 0 is not a uint64: %T %v", args[0], args[0])
 	}
 
 	f, _, err := s.task.FD(int(fd))
@@ -85,10 +83,9 @@ func (s *syscaller) fstat(r rpc.Responder, c *rpc.Call) {
 		IsDir   bool
 		ModTime time.Time
 	}{
-		Size: fi.Size(),
-		Mode: pstat.FileModeToUnixMode(fi.Mode()),
-		// Mode:    uint32(fi.Mode()),
-		IsDir:   fi.IsDir(),
+		Size:    fi.Size(),
+		Mode:    pstat.FileModeToUnixMode(fi.Mode()),
+		IsDir:   fs.IsDirInfo(fi),
 		ModTime: fi.ModTime(),
 	})
 }

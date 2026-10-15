@@ -7,6 +7,10 @@ import (
 	"reflect"
 )
 
+func IsDirInfo(fi FileInfo) bool {
+	return fi.IsDir() || (fi.Mode()&ModeDir != 0) || (fi.Mode()&0o40000 != 0)
+}
+
 func IsDir(fsys FS, path string) (bool, error) {
 	fi, err := Lstat(fsys, path)
 	if err != nil {
@@ -35,7 +39,7 @@ func IsEmpty(fsys FS, path string) (bool, error) {
 	return fi.Size() == 0, nil
 }
 
-func IsSymlink(mode FileMode) bool {
+func IsSymlinkMode(mode FileMode) bool {
 	return mode&ModeSymlink != 0
 }
 

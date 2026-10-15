@@ -170,7 +170,7 @@ func (fsys *FS) StatContext(ctx context.Context, name string) (fi fs.FileInfo, e
 	if err != nil {
 		return nil, err
 	}
-	if fs.FollowSymlinks(ctx) && fs.IsSymlink(fi.Mode()) {
+	if fs.FollowSymlinks(ctx) && fs.IsSymlinkMode(fi.Mode()) {
 		target, err := fs.Readlink(fsys, name)
 		if err != nil {
 			return nil, fmt.Errorf("memfs: readlink %s: %w", name, err)
@@ -223,7 +223,7 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (f fs.File, err er
 		fskit.SetLogger(n, fsys.log)
 	}
 	if n != nil {
-		if fs.FollowSymlinks(ctx) && fs.IsSymlink(n.Mode()) {
+		if fs.FollowSymlinks(ctx) && fs.IsSymlinkMode(n.Mode()) {
 			target, err := fs.Readlink(fsys, name)
 			if err != nil {
 				return nil, fmt.Errorf("memfs: readlink %s: %w", name, err)
@@ -709,7 +709,7 @@ func (fsys *FS) Readlink(name string) (link string, err error) {
 		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrNotExist}
 	}
 
-	if !fs.IsSymlink(n.Mode()) {
+	if !fs.IsSymlinkMode(n.Mode()) {
 		return "", &fs.PathError{Op: "readlink", Path: name, Err: fs.ErrInvalid}
 	}
 

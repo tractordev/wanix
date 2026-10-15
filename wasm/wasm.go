@@ -242,6 +242,8 @@ func main() {
 				// 	}
 				// }
 			}
+
+			// these bindings are set up in the bind custom element js
 			for _, binding := range bindings {
 				dst := binding.Get("dst").String()
 				typ := binding.Get("type").String()

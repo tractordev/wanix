@@ -112,10 +112,12 @@ func (ns *NS) StatContext(ctx context.Context, name string) (fs.FileInfo, error)
 		return fskit.Entry(name, fs.ModeDir|0755), nil
 	}
 
+	b := ns.table.Snapshot()
+
 	// Check direct bindings since they don't get resolved by the resolver.
 	// todo: again, if there is a direct binding by this name, it might also
 	// exist as a subpath of another binding. so this is not correct.
-	if refs, exists := ns.table.Snapshot()[name]; exists {
+	if refs, exists := b[name]; exists {
 		for _, ref := range refs {
 			fi, err := ref.FileInfo(path.Base(name))
 			if err != nil {
@@ -125,25 +127,51 @@ func (ns *NS) StatContext(ctx context.Context, name string) (fs.FileInfo, error)
 		}
 	}
 
+	// Routing may hand name to a binding that doesn't contain it even though
+	// name is a synthesized parent of deeper binds (as OpenContext would
+	// produce), so fall back to that before reporting not-exist.
+	orSynth := func(fi fs.FileInfo, err error) (fs.FileInfo, error) {
+		if errors.Is(err, fs.ErrNotExist) && hasBindsUnder(b, name) {
+			return synthDir(path.Base(name)), nil
+		}
+		return fi, err
+	}
+
 	tfsys, tname, err := fs.ResolveTo[fs.StatContextFS](ns, ctx, name)
 	if err != nil && !errors.Is(err, fs.ErrNotSupported) {
-		return nil, err
+		return orSynth(nil, err)
 	}
 	if err == nil && !fs.Equal(tfsys, ns) {
-		return tfsys.StatContext(ctx, tname)
+		return orSynth(tfsys.StatContext(ctx, tname))
 	}
 
 	rfsys, rname, err := fs.Resolve(ns, ctx, name)
 	if err != nil {
-		return nil, err
+		return orSynth(nil, err)
 	}
 
 	f, err := fs.OpenContext(ctx, rfsys, rname)
 	if err != nil {
-		return nil, err
+		return orSynth(nil, err)
 	}
 	defer f.Close()
 	return f.Stat()
+}
+
+// hasBindsUnder reports whether any bind point is a strict descendant of
+// name, meaning name exists as at least a synthesized directory.
+func hasBindsUnder(b map[string][]bind.Entry, name string) bool {
+	prefix := name + "/"
+	for p := range b {
+		if strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func synthDir(name string) *fskit.Node {
+	return fskit.Entry(name, fs.ModeDir|0o40000|0755)
 }
 
 // Open implements fs.FS interface
@@ -177,7 +205,7 @@ func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 	// Check direct bindings
 	if refs, exists := b[name]; exists {
 		for _, ref := range refs {
-			if ref.Info.IsDir() {
+			if fs.IsDirInfo(ref.Info) {
 				if dir == nil {
 					dir = fskit.RawNode(ref.Info, name)
 					foundDir = true
@@ -214,7 +242,7 @@ func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 			if err != nil {
 				continue
 			}
-			if fi.IsDir() {
+			if fs.IsDirInfo(fi) {
 				if dir == nil {
 					dir = fskit.RawNode(fi, name)
 					foundDir = true
@@ -276,11 +304,10 @@ func (ns *NS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 		delete(need, fi.Name())
 	}
 	for name := range need {
-		dirEntries = append(dirEntries, fskit.Entry(name, fs.ModeDir|0755))
+		dirEntries = append(dirEntries, synthDir(name))
 	}
 	slices.SortFunc(dirEntries, func(a, b fs.DirEntry) int {
 		return strings.Compare(a.Name(), b.Name())
 	})
-
-	return fskit.DirFile(fskit.Entry(name, fs.ModeDir|0755), dirEntries...), nil
+	return fskit.DirFile(synthDir(name), dirEntries...), nil
 }

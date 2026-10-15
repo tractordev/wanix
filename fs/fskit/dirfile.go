@@ -20,6 +20,7 @@ func DirFile(info *Node, entries ...fs.DirEntry) fs.File {
 	nodeCopy := *info
 	if !nodeCopy.IsDir() {
 		nodeCopy.mode |= fs.ModeDir
+		nodeCopy.mode |= 0o40000 // S_IFDIR
 	}
 	// not sure a better place to do this,
 	// but we'll filter entries starting with # to "hide" them
@@ -54,7 +55,6 @@ func (d *dirFile) GetGID() int {
 	}
 	return 0
 }
-
 
 func (d *dirFile) Read(b []byte) (int, error) {
 	return 0, &fs.PathError{Op: "read", Path: d.path, Err: fs.ErrInvalid}

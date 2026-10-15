@@ -10,7 +10,7 @@ func UnixModeToFileMode(unixMode uint32) fs.FileMode {
 	// Extract file type from Unix mode
 	switch unixMode & 0o170000 { // S_IFMT mask
 	case 0o40000: // S_IFDIR - directory
-		return fs.ModeDir | perm
+		return 0o40000 | fs.ModeDir | perm
 	case 0o120000: // S_IFLNK - symbolic link
 		return fs.ModeSymlink | perm
 	case 0o60000: // S_IFBLK - block device
@@ -36,6 +36,7 @@ func FileModeToUnixMode(mode fs.FileMode) uint32 {
 	// Add file type bits
 	if mode&fs.ModeDir != 0 {
 		unixMode |= 0o40000 // S_IFDIR
+		unixMode |= uint32(fs.ModeDir)
 	} else if mode&fs.ModeSymlink != 0 {
 		unixMode |= 0o120000 // S_IFLNK
 	} else if mode&fs.ModeDevice != 0 {
