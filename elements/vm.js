@@ -6,6 +6,8 @@ export class VMElement extends WanixElement {
         super();
         this.rid = null;
         this.task = new TaskElement();
+        this.etherNS = null;
+        this.etherChan = "0";
     }
 
     get path() {
@@ -34,7 +36,20 @@ export class VMElement extends WanixElement {
             "boot", "bios", "acpi", "fastboot", "kernel", "initrd", "netdev", "virtfs",
         ].forEach((attr) => {
             if (this.hasAttribute(attr)) {
-                args.push(`-${attr} ${this.getAttribute(attr)}`);
+                let val = this.getAttribute(attr);
+                if (attr === "netdev" && val.startsWith("user,")) {
+                    val.split(",").forEach(part => {
+                        const [key, value] = part.split("=");
+                        if (key === "ether") {
+                            this.etherNS = value.startsWith("/") ? value.slice(1) : value;
+                            val += ",relay_url=inbrowser";
+                        }
+                        if (key === "id") {
+                            this.etherChan = value;
+                        }
+                    });
+                }
+                args.push(`-${attr} ${val}`);
             }
         });
 
@@ -49,6 +64,26 @@ export class VMElement extends WanixElement {
 
     async _awake() {
         await this.allocate();
+        if (this.etherNS) {
+            let datafd = undefined;
+            const root = this._kernel.root;
+            // bug: not sure etherChan gets to v86 configuration correctly
+            const vnic = new BroadcastChannel(`v86-inbrowser-${this.etherChan}`);
+            vnic.onmessage = async (event) => {
+                if (!datafd) {
+                    const fd = await root.open(`${this.etherNS}/clone`);
+                    const id = (new TextDecoder()).decode(await root.read(fd, 8)).trim();
+                    datafd = await root.openFile(`${this.etherNS}/${id}/data`, 2, 0);
+                    (async () => {
+                        const stream = await root.readable(datafd);
+                        for await (const chunk of stream) {
+                            vnic.postMessage(chunk);
+                        }
+                    })();
+                }
+                await root.write(datafd, event.data);
+            };
+        }
         if (this._autostart) {
             await this.start();
         }

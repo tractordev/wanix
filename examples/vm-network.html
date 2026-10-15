@@ -1,0 +1,18 @@
+<html>
+<head>
+    <title>basic-vm</title>
+    <script type="module" src="../dist/wanix.min.js"></script>
+</head>
+<body style="height: 100vh; margin: 0;">
+    
+    <wanix-namespace id="linux" allow-origins="*" debug>
+        <wanix-bind dst="." src="../extras/dist/wanix-linux.tgz" type="archive"></wanix-bind>
+        <!-- this example assumes you're running `wanix host netfs` -->
+        <wanix-bind dst="net/ether0" type="import" src="ws://localhost:9090/"></wanix-bind>
+        <wanix-bind dst="vm" src="#vm"></wanix-bind>
+        <wanix-bind dst="#vm/v86" src="../v86/v86.tgz" type="archive"></wanix-bind>
+        <wanix-vm export="ttyS0" netdev="user,type=virtio,ether=/net/ether0" term start></wanix-vm>
+        <wanix-term raw></wanix-term>
+    </wanix-namespace>
+</body>
+</html>
