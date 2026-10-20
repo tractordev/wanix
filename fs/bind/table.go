@@ -275,9 +275,20 @@ func (t *Table) Bind(ctx context.Context, src fs.FS, srcPath, dstPath string, op
 		}
 	}
 
+	// A namespace bind is a mount: if the target doesn't exist, create it.
 	file, err := rfsys.Open(rname)
 	if err != nil {
-		return err
+		if errors.Is(err, fs.ErrNotExist) {
+			if mkErr := fs.MkdirAll(rfsys, rname, 0o755); mkErr != nil {
+				return fmt.Errorf("bind %s: %w (mkdirall: %v)", srcPath, err, mkErr)
+			}
+			file, err = rfsys.Open(rname)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	fi, err := file.Stat()
 	if err != nil {
