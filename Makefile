@@ -20,7 +20,7 @@ DIST_IMAGE		?= wanix-artifacts:dev
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
 
-EXAMPLE_DEPS 	:= dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist/wanix-linux.tgz test/gojs/gojscheck.wasm
+EXAMPLE_DEPS 	:= dist/wanix.debug.wasm dist/wanix.min.js workbench/code extras/dist/wanix-linux.tgz v86/v86.tgz test/gojs/gojscheck.wasm
 
 export DOCKER_CMD 	?= $(shell command -v docker)
 
@@ -152,6 +152,9 @@ workbench/code:
 
 extras/dist/wanix-linux.tgz:
 	make -C extras dist/wanix-linux.tgz
+
+v86/v86.tgz:
+	make -C v86
 
 
 ## Build distribution binaries
