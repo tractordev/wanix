@@ -151,7 +151,7 @@ workbench/code:
 	make -C workbench
 
 extras/dist/wanix-linux.tgz:
-	make -C extras
+	make -C extras dist/wanix-linux.tgz
 
 
 ## Build distribution binaries
