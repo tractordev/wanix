@@ -309,7 +309,7 @@ func (fsys *FS) OpenContext(ctx context.Context, name string) (fs.File, error) {
 
 	file, err := jsutil.AwaitErr(dirHandle.Call("getFileHandle", path.Base(name), map[string]any{"create": false}))
 	if err == nil {
-		if cached, _, ok := fsys.getCachedStat(name); ok && fs.FollowSymlinks(ctx) && fs.IsSymlink(cached.Mode()) {
+		if cached, _, ok := fsys.getCachedStat(name); ok && fs.FollowSymlinks(ctx) && fs.IsSymlinkMode(cached.Mode()) {
 			if origin, fullname, ok := fs.Origin(ctx); ok {
 				target, err := fs.Readlink(fsys, name)
 				if err != nil {
