@@ -16,6 +16,7 @@ GOARCH			?= $(shell go env GOARCH)
 WASM_DEBUG 		?= true
 LINK_BIN 		?= /usr/local/bin
 DIST_DIR		?= dist
+DIST_IMAGE		?= wanix-artifacts:dev
 DIST_OS			?= darwin windows linux
 DIST_ARCH		?= arm64 amd64
 
@@ -61,6 +62,12 @@ build-docker:
 	ls -lah $(DIST_DIR)
 	ls -lah .local/bin/wanix
 .PHONY: build-docker
+
+## Build the Wanix artifacts image (for downstream Docker builds)
+docker/dist:
+	$(DOCKER_CMD) build \
+		--target dist -t $(DIST_IMAGE) -f Dockerfile .
+.PHONY: docker/dist
 
 ## Build Wanix command
 cmd:
