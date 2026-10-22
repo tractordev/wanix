@@ -1,6 +1,9 @@
 package api
 
 import (
+	"fmt"
+	"log"
+
 	"tractor.dev/toolkit-go/duplex/codec"
 	"tractor.dev/toolkit-go/duplex/mux"
 	"tractor.dev/toolkit-go/duplex/rpc"
@@ -12,44 +15,63 @@ type syscaller struct {
 	task *wanix.Task
 }
 
+// guard recovers panics in syscall handlers (malformed calls, type
+// mismatches) and returns them as errors instead of crashing the kernel.
+func guard(h rpc.HandlerFunc) rpc.HandlerFunc {
+	return func(r rpc.Responder, c *rpc.Call) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("api: recovered panic in %s: %v", c.Selector(), rec)
+				_ = r.Return(fmt.Errorf("internal error: %v", rec))
+			}
+		}()
+		h(r, c)
+	}
+}
+
 func Responder(sess mux.Session, task *wanix.Task) {
 	syscaller := &syscaller{
 		task: task,
 	}
 
 	peer := talk.NewPeer(sess, codec.CBORCodec{})
-	peer.Handle("Open", rpc.HandlerFunc(syscaller.open))
-	peer.Handle("OpenFile", rpc.HandlerFunc(syscaller.openFile))
-	peer.Handle("Create", rpc.HandlerFunc(syscaller.create))
-	peer.Handle("Close", rpc.HandlerFunc(syscaller.close))
-	peer.Handle("Sync", rpc.HandlerFunc(syscaller.sync))
-	peer.Handle("Read", rpc.HandlerFunc(syscaller.read))
-	peer.Handle("Write", rpc.HandlerFunc(syscaller.write))
-	peer.Handle("WriteAt", rpc.HandlerFunc(syscaller.writeAt))
-	peer.Handle("ReadDir", rpc.HandlerFunc(syscaller.readDir))
-	peer.Handle("Mkdir", rpc.HandlerFunc(syscaller.mkdir))
-	peer.Handle("MkdirAll", rpc.HandlerFunc(syscaller.mkdirAll))
-	peer.Handle("Bind", rpc.HandlerFunc(syscaller.bind))
-	peer.Handle("Unbind", rpc.HandlerFunc(syscaller.unbind))
-	peer.Handle("Stat", rpc.HandlerFunc(syscaller.stat))
-	peer.Handle("Truncate", rpc.HandlerFunc(syscaller.truncate))
-	peer.Handle("WaitFor", rpc.HandlerFunc(syscaller.waitFor))
-	peer.Handle("Rename", rpc.HandlerFunc(syscaller.rename))
-	peer.Handle("Copy", rpc.HandlerFunc(syscaller.copy))
-	peer.Handle("Remove", rpc.HandlerFunc(syscaller.remove))
-	peer.Handle("RemoveAll", rpc.HandlerFunc(syscaller.removeAll))
-	peer.Handle("ReadFile", rpc.HandlerFunc(syscaller.readFile))
-	peer.Handle("WriteFile", rpc.HandlerFunc(syscaller.writeFile))
-	peer.Handle("AppendFile", rpc.HandlerFunc(syscaller.appendFile))
-	peer.Handle("Fstat", rpc.HandlerFunc(syscaller.fstat))
-	peer.Handle("Lstat", rpc.HandlerFunc(syscaller.lstat))
-	peer.Handle("Chmod", rpc.HandlerFunc(syscaller.chmod))
-	peer.Handle("Chown", rpc.HandlerFunc(syscaller.chown))
-	peer.Handle("Fchmod", rpc.HandlerFunc(syscaller.fchmod))
-	peer.Handle("Fchown", rpc.HandlerFunc(syscaller.fchown))
-	peer.Handle("Ftruncate", rpc.HandlerFunc(syscaller.ftruncate))
-	peer.Handle("Readlink", rpc.HandlerFunc(syscaller.readlink))
-	peer.Handle("Symlink", rpc.HandlerFunc(syscaller.symlink))
-	peer.Handle("Chtimes", rpc.HandlerFunc(syscaller.chtimes))
+	handlers := map[string]rpc.HandlerFunc{
+		"Open":       syscaller.open,
+		"OpenFile":   syscaller.openFile,
+		"Create":     syscaller.create,
+		"Close":      syscaller.close,
+		"Sync":       syscaller.sync,
+		"Read":       syscaller.read,
+		"Write":      syscaller.write,
+		"WriteAt":    syscaller.writeAt,
+		"ReadDir":    syscaller.readDir,
+		"Mkdir":      syscaller.mkdir,
+		"MkdirAll":   syscaller.mkdirAll,
+		"Bind":       syscaller.bind,
+		"Unbind":     syscaller.unbind,
+		"Stat":       syscaller.stat,
+		"Truncate":   syscaller.truncate,
+		"WaitFor":    syscaller.waitFor,
+		"Rename":     syscaller.rename,
+		"Copy":       syscaller.copy,
+		"Remove":     syscaller.remove,
+		"RemoveAll":  syscaller.removeAll,
+		"ReadFile":   syscaller.readFile,
+		"WriteFile":  syscaller.writeFile,
+		"AppendFile": syscaller.appendFile,
+		"Fstat":      syscaller.fstat,
+		"Lstat":      syscaller.lstat,
+		"Chmod":      syscaller.chmod,
+		"Chown":      syscaller.chown,
+		"Fchmod":     syscaller.fchmod,
+		"Fchown":     syscaller.fchown,
+		"Ftruncate":  syscaller.ftruncate,
+		"Readlink":   syscaller.readlink,
+		"Symlink":    syscaller.symlink,
+		"Chtimes":    syscaller.chtimes,
+	}
+	for selector, handler := range handlers {
+		peer.Handle(selector, guard(handler))
+	}
 	peer.Respond()
 }
