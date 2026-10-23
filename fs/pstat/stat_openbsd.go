@@ -8,7 +8,10 @@ func SysToStat(sys any) *Stat {
 	if sys == nil {
 		return &Stat{}
 	}
-	nativeStat := sys.(*syscall.Stat_t)
+	nativeStat, ok := sys.(*syscall.Stat_t)
+	if !ok {
+		return &Stat{}
+	}
 	return &Stat{
 		Dev:     uint64(nativeStat.Dev),
 		Ino:     nativeStat.Ino,
