@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/hugelgupf/p9/fsimpl/templatefs"
@@ -320,7 +319,7 @@ func (l *p9file) Renamed(parent p9.File, newName string) {
 // UnlinkAt implements p9.File.UnlinkAt
 func (l *p9file) UnlinkAt(name string, flags uint32) error {
 	// Construct the full path
-	fullPath := filepath.Join(l.path, name)
+	fullPath := path.Join(l.path, name)
 
 	// Check if the target is a directory
 	info, err := fs.StatContext(fs.WithNoFollow(context.Background()), l.fsys, fullPath)

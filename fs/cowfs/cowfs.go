@@ -34,7 +34,7 @@ import (
 	"log"
 	"os"
 	"path"
-	"path/filepath"
+	pathpkg "path"
 	"sort"
 	"strings"
 	"sync"
@@ -286,7 +286,7 @@ func (u *FS) copyIfNeeded(name string) (string, error) {
 // copied to the overlay before changing the times.
 func (u *FS) Chtimes(name string, atime, mtime time.Time) error {
 	// log.Println("Chtimes", name, atime, mtime)
-	name = filepath.Clean(name)
+	name = pathpkg.Clean(name)
 	name, err := u.copyIfNeeded(name)
 	if err != nil {
 		return err
@@ -299,7 +299,7 @@ func (u *FS) Chtimes(name string, atime, mtime time.Time) error {
 // copied to the overlay before changing the mode.
 func (u *FS) Chmod(name string, mode os.FileMode) error {
 	// log.Println("Chmod", name, mode)
-	name = filepath.Clean(name)
+	name = pathpkg.Clean(name)
 	name, err := u.copyIfNeeded(name)
 	if err != nil {
 		return err
@@ -312,7 +312,7 @@ func (u *FS) Chmod(name string, mode os.FileMode) error {
 // copied to the overlay before changing ownership.
 func (u *FS) Chown(name string, uid, gid int) error {
 	// log.Println("Chown", name, uid, gid)
-	name = filepath.Clean(name)
+	name = pathpkg.Clean(name)
 	name, err := u.copyIfNeeded(name)
 	if err != nil {
 		return err
@@ -339,8 +339,8 @@ func (u *FS) Chown(name string, uid, gid int) error {
 //   - Only base origins are tombstoned; overlay-only files are not
 func (u *FS) Rename(oldname, newname string) error {
 	// 0. Normalize paths
-	oldname = filepath.Clean(oldname)
-	newname = filepath.Clean(newname)
+	oldname = pathpkg.Clean(oldname)
+	newname = pathpkg.Clean(newname)
 	// log.Println("Rename", oldname, newname)
 
 	// 1. Resolve source path (oldname) through rename chain
@@ -400,7 +400,7 @@ func (u *FS) Rename(oldname, newname string) error {
 	}
 
 	// 5. Ensure destination parent directories exist (scaffold in overlay)
-	if dir := filepath.Dir(newname); dir != "." {
+	if dir := pathpkg.Dir(newname); dir != "." {
 		if _, statErr := fs.Stat(u.Overlay, dir); errors.Is(statErr, fs.ErrNotExist) {
 			if mkdirErr := fs.MkdirAll(u.Overlay, dir, 0o755); mkdirErr != nil {
 				return mkdirErr
@@ -475,7 +475,7 @@ func (u *FS) Rename(oldname, newname string) error {
 //   - Returns fs.ErrNotExist if the file doesn't exist in either layer
 func (u *FS) Remove(name string) error {
 	// 0. Normalize path
-	name = filepath.Clean(name)
+	name = pathpkg.Clean(name)
 	// log.Println("Remove", name)
 
 	// 1. Resolve to terminal path (following rename chains)
@@ -578,7 +578,7 @@ func (u *FS) Remove(name string) error {
 		// Build a map of all entries, considering tombstones
 		entries := make(map[string]struct{})
 		for _, e := range baseEntries {
-			name := filepath.Join(target, e.Name())
+			name := pathpkg.Join(target, e.Name())
 			if _, ok := u.tombstones.Load(name); !ok {
 				entries[e.Name()] = struct{}{}
 			}
@@ -630,11 +630,11 @@ func (u *FS) Remove(name string) error {
 //   - Tombstone is cleared after successful creation
 func (u *FS) Symlink(oldname, newname string) error {
 	// 1. Use raw path for new symlink (don't follow renames for create-destination)
-	newpath := filepath.Clean(newname)
+	newpath := pathpkg.Clean(newname)
 	// log.Println("Symlink", oldname, newname)
 
 	// 2. Check and prepare parent directory
-	dir := filepath.Dir(newpath)
+	dir := pathpkg.Dir(newpath)
 	if dir != "." {
 		// Check if parent exists in overlay
 		parentInOverlay := false
@@ -707,7 +707,7 @@ func (u *FS) Symlink(oldname, newname string) error {
 //   - Tombstone is cleared after successful creation
 func (u *FS) Mkdir(name string, perm os.FileMode) error {
 	// 1. Use raw path for new directory (don't follow renames for create-destination)
-	path := filepath.Clean(name)
+	path := pathpkg.Clean(name)
 	// log.Println("Mkdir", name, perm)
 
 	// 2. Check if directory already exists in either layer
@@ -726,7 +726,7 @@ func (u *FS) Mkdir(name string, perm os.FileMode) error {
 	}
 
 	// 3. Check parent directory existence and create if needed
-	dir := filepath.Dir(path)
+	dir := pathpkg.Dir(path)
 	if dir != "." {
 		// Check if parent exists in overlay
 		parentInOverlay := false
@@ -795,7 +795,7 @@ func (u *FS) Stat(name string) (os.FileInfo, error) {
 // Prefers overlay, falls back to base. Returns fs.ErrNotExist if tombstoned.
 func (u *FS) StatContext(ctx context.Context, name string) (os.FileInfo, error) {
 	// 0. Normalize path
-	name = filepath.Clean(name)
+	name = pathpkg.Clean(name)
 	// log.Println("StatContext", name, "follow:", fs.FollowSymlinks(ctx))
 
 	// 1. Resolve rename chain
@@ -835,7 +835,7 @@ func (u *FS) StatContext(ctx context.Context, name string) (os.FileInfo, error) 
 // Prefers overlay, falls back to base. Returns fs.ErrNotExist if tombstoned.
 func (u *FS) Readlink(name string) (string, error) {
 	// 0. Normalize path
-	name = filepath.Clean(name)
+	name = pathpkg.Clean(name)
 
 	// 1. Resolve rename chain first
 	path, err := u.resolvePath(name)
@@ -903,7 +903,7 @@ func (u *FS) Deleted() []string {
 //   - Returns fs.ErrNotExist if tombstoned
 func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) {
 	// 0. Normalize path
-	name = filepath.Clean(name)
+	name = pathpkg.Clean(name)
 	// log.Println("OpenFile", name, flag, perm)
 
 	// 1. Resolve rename chain and check tombstone
@@ -958,7 +958,7 @@ func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) 
 	writeMode := flag&(os.O_WRONLY|os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0
 	if writeMode {
 		// Check parent directory existence
-		dir := filepath.Dir(path)
+		dir := pathpkg.Dir(path)
 		if dir != "." {
 			// Check if parent exists in overlay
 			parentInOverlay := false
@@ -1048,7 +1048,7 @@ func (u *FS) OpenFile(name string, flag int, perm os.FileMode) (fs.File, error) 
 //   - Provides unified ReadDir across both layers
 func (u *FS) Open(name string) (fs.File, error) {
 	// 0. Normalize path
-	name = filepath.Clean(name)
+	name = pathpkg.Clean(name)
 	// log.Println("Open", name)
 
 	// 1. Resolve rename chain
@@ -1095,7 +1095,7 @@ func (u *FS) Open(name string) (fs.File, error) {
 				Overlay: lfile,
 				HideFn: func(name string) bool {
 					// Hide entry if it's tombstoned
-					fullPath := filepath.Join(path, name)
+					fullPath := pathpkg.Join(path, name)
 					_, hidden := u.tombstones.Load(fullPath)
 					return hidden
 				},
@@ -1116,7 +1116,7 @@ func (u *FS) Open(name string) (fs.File, error) {
 			Overlay: nil,
 			HideFn: func(name string) bool {
 				// Hide entry if it's tombstoned
-				fullPath := filepath.Join(path, name)
+				fullPath := pathpkg.Join(path, name)
 				_, hidden := u.tombstones.Load(fullPath)
 				return hidden
 			},

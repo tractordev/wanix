@@ -7,7 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"sort"
 )
 
@@ -18,13 +18,12 @@ type Reader struct {
 }
 
 func splitpath(name string) (dir, file string) {
-	name = filepath.ToSlash(name)
 	if len(name) == 0 || name[0] != '/' {
 		name = "/" + name
 	}
-	name = filepath.Clean(name)
-	dir, file = filepath.Split(name)
-	dir = filepath.Clean(dir)
+	name = path.Clean(name)
+	dir, file = path.Split(name)
+	dir = path.Clean(dir)
 	return
 }
 
@@ -187,7 +186,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f *File) Name() string {
-	return filepath.Join(splitpath(f.h.Name))
+	return path.Join(splitpath(f.h.Name))
 }
 
 func (f *File) getDirectoryNames() ([]string, error) {

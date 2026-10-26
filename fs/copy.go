@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
+	"path"
 )
 
 // CopyAll recursively copies the file, directory or symbolic link at src
@@ -90,8 +90,8 @@ func copyDirNewer(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileM
 		return err
 	}
 	for _, entry := range entries {
-		srcEntry := filepath.Join(srcPath, entry.Name())
-		dstEntry := filepath.Join(dstPath, entry.Name())
+		srcEntry := path.Join(srcPath, entry.Name())
+		dstEntry := path.Join(dstPath, entry.Name())
 		info, err := entry.Info()
 		if err != nil {
 			return err
@@ -181,7 +181,7 @@ func copyDir(srcFS FS, srcPath string, dstFS FS, dstPath string, mode FileMode) 
 		return fmt.Errorf("error reading directory %q: %v", srcPath, err)
 	}
 	for _, entry := range entries {
-		if err := CopyFS(srcFS, filepath.Join(srcPath, entry.Name()), dstFS, filepath.Join(dstPath, entry.Name())); err != nil {
+		if err := CopyFS(srcFS, path.Join(srcPath, entry.Name()), dstFS, path.Join(dstPath, entry.Name())); err != nil {
 			return err
 		}
 	}
