@@ -3,7 +3,30 @@ package shlex
 import (
 	"fmt"
 	"log"
+	"slices"
+	"testing"
 )
+
+func TestSplitQuotedEmpty(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want []string
+	}{
+		{"a '' b", []string{"a", "", "b"}},
+		{"''", []string{""}},
+		{"a \"\" b", []string{"a", "", "b"}},
+		{"  ", nil},
+		{"a b", []string{"a", "b"}},
+	} {
+		got, err := Split(tc.in, true)
+		if err != nil {
+			t.Fatalf("%q: %v", tc.in, err)
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%q: got %q want %q", tc.in, got, tc.want)
+		}
+	}
+}
 
 func ExampleSplit() {
 	cmd := `cp -Rdp "file name" 'file name2' dir\ name`
