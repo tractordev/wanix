@@ -2,6 +2,7 @@ package wanix
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -290,7 +291,11 @@ func (r *Task) taskMap() fskit.MapFS {
 		}),
 		"cmd": misc.FieldFile(r.cmd, func(in []byte) error {
 			if len(in) > 0 {
-				r.cmd = strings.TrimSpace(string(in))
+				cmd := strings.TrimSpace(string(in))
+				if strings.ContainsRune(cmd, '\x00') {
+					return errors.New("embedded NUL in cmd")
+				}
+				r.cmd = cmd
 				args, err := shlex.Split(r.cmd, true)
 				if err != nil {
 					return err

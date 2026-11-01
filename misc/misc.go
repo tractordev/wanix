@@ -169,6 +169,8 @@ func JoinArgs(v []string) string {
 }
 
 // VectorFile is FieldFile for NUL vectors: it adds no trailing newline.
+// Each open seeds the node from the literal value (nil unless one is given),
+// so the setter replaces the whole vector: a second open+write drops the first.
 func VectorFile(args ...any) fs.FS {
 	var (
 		mode   fs.FileMode = 0555

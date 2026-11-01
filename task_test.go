@@ -51,8 +51,8 @@ func TestTaskArgvVector(t *testing.T) {
 
 func TestTaskArgvUpdatesCmd(t *testing.T) {
 	root := newTestRoot(t)
-	want := []string{"prog", "line one\nline two", "", "a b"}
-	writeTaskFile(t, root, "argv", "prog\x00line one\nline two\x00\x00a b\x00")
+	want := []string{"prog", "line one\nline two", "", "a b", "it's", `a\b`}
+	writeTaskFile(t, root, "argv", "prog\x00line one\nline two\x00\x00a b\x00it's\x00a\\b\x00")
 	got, err := shlex.Split(root.Cmd(), true)
 	if err != nil {
 		t.Fatal(err)
@@ -68,6 +68,23 @@ func TestTaskCmdKeepsQuotedEmpty(t *testing.T) {
 	want := []string{"prog", "", "x y"}
 	if got := root.Args(); !slices.Equal(got, want) {
 		t.Fatalf("args got %q want %q", got, want)
+	}
+}
+
+func TestTaskCmdRejectsNUL(t *testing.T) {
+	root := newTestRoot(t)
+	f, err := root.Open("cmd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fs.Write(f, []byte("a\x00b")); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err == nil {
+		t.Fatal("want error for embedded NUL in cmd")
+	}
+	if got := root.Args(); len(got) != 0 {
+		t.Fatalf("args got %q after rejected cmd", got)
 	}
 }
 

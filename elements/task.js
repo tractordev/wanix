@@ -49,7 +49,7 @@ export class TaskElement extends WanixElement {
         this.taskRoot = this._kernel.openHandle(this.rid);
 
         await this._kernel.root.writeFile([this.path, "cmd"].join("/"), this.cmd);
-        if (this.env) {
+        if (this.env && this.env.length) {
             await this._kernel.root.writeFile([this.path, "env"].join("/"), this.env.join("\0") + "\0");
         }
         if (this.wd) {
