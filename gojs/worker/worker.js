@@ -4,6 +4,13 @@ import {
 
 const TASKNS = "#task";
 
+function splitVector(text) {
+    if (!text) return [];
+    const parts = text.split("\0");
+    if (parts[parts.length - 1] === "") parts.pop();
+    return parts;
+}
+
 self.addEventListener("message", async (e) => {
     if (!e.data.worker) return;
 
@@ -12,8 +19,8 @@ self.addEventListener("message", async (e) => {
     globalThis.worker = e.data.worker;
     globalThis.sys = fs; // deprecated
     const tid = e.data.worker.tid;
-    const env = (await fs.readText(`${TASKNS}/${tid}/env`)).trim().split("\n");
-    const args = (await fs.readText(`${TASKNS}/${tid}/args`)).trim().split("\n");
+    const env = splitVector(await fs.readText(`${TASKNS}/${tid}/env`));
+    const args = splitVector(await fs.readText(`${TASKNS}/${tid}/argv`));
     globalThis.cwd = (await fs.readText(`${TASKNS}/${tid}/dir`)).trim() || "/";
     const bin = await fs.readFile(args[0]); 
 
