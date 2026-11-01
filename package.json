@@ -10,6 +10,7 @@
     ],
     "scripts": {
         "build": "make js",
+        "test": "node --test elements/linedisc.test.js",
         "prepublishOnly": "npm run build"
     },
     "dependencies": {

@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import xtermCss from "@xterm/xterm/css/xterm.css";
 import { WanixElement } from "./base.js";
+import { editInput } from "./linedisc.js";
 
 if (typeof document !== "undefined" && !document.getElementById("wanix-xterm-css")) {
     const style = document.createElement("style");
@@ -156,27 +157,13 @@ export class TerminalElement extends WanixElement {
                 }
                 // may add line discipline as mode to terminals but for now we
                 // do as plan 9 and handle it here in "userspace"
-                if (data === '\x03') {          // Ctrl-C
-                    buffer = '';
-                    this._term.write('^C\r\n');
-                    if (this.#writer) {
-                        // send ETX now; newline wakes line-oriented readers
-                        this.#writer.write(encoder.encode('\x03\n'));
-                    }
-                } else if (data === '\r') {
-                    this._term.write('\r\n');           // echo newline
-                    if (this.#writer) {
-                        this.#writer.write(encoder.encode(buffer+"\n"));
-                    }
-                    buffer = '';
-                } else if (data === '\x7f') {   // backspace
-                    if (buffer.length > 0) {
-                      buffer = buffer.slice(0, -1);
-                      this._term.write('\b \b');
-                    }
-                } else {
-                    buffer += data;
-                    this._term.write(data);             // echo
+                const r = editInput(buffer, data, this._term.buffer.active.cursorX);
+                buffer = r.buffer;
+                if (r.echo) {
+                    this._term.write(r.echo);
+                }
+                if (r.submit !== null && this.#writer) {
+                    this.#writer.write(encoder.encode(r.submit));
                 }
             });
         } catch (err) {
