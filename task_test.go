@@ -88,6 +88,24 @@ func TestTaskCmdRejectsNUL(t *testing.T) {
 	}
 }
 
+func TestTaskEnvRejectsNonNUL(t *testing.T) {
+	root := newTestRoot(t)
+	writeTaskFile(t, root, "env", "A=1\x00")
+	f, err := root.Open("env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fs.Write(f, []byte("A=1\nB=2\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err == nil {
+		t.Fatal("want error for non-NUL-terminated env")
+	}
+	if got := root.Env(); !slices.Equal(got, []string{"A=1"}) {
+		t.Fatalf("env got %q want [\"A=1\"]", got)
+	}
+}
+
 func TestTaskEnvVector(t *testing.T) {
 	root := newTestRoot(t)
 	writeTaskFile(t, root, "env", "A=1\x00A=2\x00")

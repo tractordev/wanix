@@ -2,9 +2,11 @@ package misc
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"strings"
 	"sync/atomic"
+	"unicode"
 
 	"errors"
 	"io"
@@ -159,10 +161,10 @@ func JoinArgs(v []string) string {
 		switch {
 		case s == "":
 			quoted[i] = "''"
-		case !strings.ContainsAny(s, " \t\n'\"\\"):
-			quoted[i] = s
-		default:
+		case strings.ContainsAny(s, "'\"\\") || strings.IndexFunc(s, unicode.IsSpace) >= 0:
 			quoted[i] = "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+		default:
+			quoted[i] = s
 		}
 	}
 	return strings.Join(quoted, " ")
@@ -211,7 +213,11 @@ func VectorFile(args ...any) fs.FS {
 			},
 			CloseFunc: func(n *fskit.Node) error {
 				if setter != nil && !wasRead.Load() {
-					return setter(DecodeVector(n.Data()))
+					data := n.Data()
+					if len(data) > 0 && data[len(data)-1] != '\x00' {
+						return fmt.Errorf("%s: vector data must end with NUL", name)
+					}
+					return setter(DecodeVector(data))
 				}
 				return nil
 			},

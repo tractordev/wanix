@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"tractor.dev/wanix/fs"
+	"tractor.dev/wanix/misc/shlex"
 )
 
 func TestEncodeVectorRoundTrip(t *testing.T) {
@@ -65,6 +66,27 @@ func TestVectorFileWriteThenRead(t *testing.T) {
 	}
 }
 
+func TestVectorFileRejectsNonNUL(t *testing.T) {
+	called := false
+	ff := VectorFile(func() []string { return nil }, func([]string) error {
+		called = true
+		return nil
+	})
+	f, err := ff.Open("env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fs.Write(f, []byte("A=1\nB=2\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err == nil {
+		t.Fatal("want error for non-NUL-terminated data")
+	}
+	if called {
+		t.Fatal("setter called for non-NUL-terminated data")
+	}
+}
+
 func TestVectorFileReadAndMode(t *testing.T) {
 	called := false
 	ff := VectorFile([]string{"seed"}, func() []string { return []string{"a", "b c"} }, func([]string) error {
@@ -94,6 +116,17 @@ func TestVectorFileReadAndMode(t *testing.T) {
 	}
 	if called {
 		t.Fatal("setter called after read")
+	}
+}
+
+func TestJoinArgsWhitespaceRoundTrip(t *testing.T) {
+	in := []string{"a\rb", "a\u00a0b", "a\vb", "a\"b", "plain"}
+	got, err := shlex.Split(JoinArgs(in), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, in) {
+		t.Fatalf("got %q want %q", got, in)
 	}
 }
 
