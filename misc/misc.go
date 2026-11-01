@@ -131,6 +131,92 @@ func FieldFile(args ...any) fs.FS {
 	})
 }
 
+// EncodeVector encodes v as NUL-terminated entries; an empty vector is empty data.
+func EncodeVector(v []string) ([]byte, error) {
+	if len(v) == 0 {
+		return nil, nil
+	}
+	for _, s := range v {
+		if strings.Contains(s, "\x00") {
+			return nil, errors.New("embedded NUL in vector entry")
+		}
+	}
+	return []byte(strings.Join(v, "\x00") + "\x00"), nil
+}
+
+// DecodeVector decodes NUL-terminated entries; empty data is an empty vector.
+func DecodeVector(b []byte) []string {
+	if len(b) == 0 {
+		return nil
+	}
+	return strings.Split(strings.TrimSuffix(string(b), "\x00"), "\x00")
+}
+
+// JoinArgs shell-quotes each entry and joins them with one space.
+func JoinArgs(v []string) string {
+	quoted := make([]string, len(v))
+	for i, s := range v {
+		switch {
+		case s == "":
+			quoted[i] = "''"
+		case !strings.ContainsAny(s, " \t\n'\"\\"):
+			quoted[i] = s
+		default:
+			quoted[i] = "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+		}
+	}
+	return strings.Join(quoted, " ")
+}
+
+// VectorFile is FieldFile for NUL vectors: it adds no trailing newline.
+func VectorFile(args ...any) fs.FS {
+	var (
+		mode   fs.FileMode = 0555
+		value  []string
+		getter func() []string
+		setter func([]string) error
+	)
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case []string:
+			value = v
+		case func() []string:
+			getter = v
+		case func([]string) error:
+			setter = v
+		case fs.FileMode:
+			mode = v
+		}
+	}
+	if setter != nil && mode == 0555 {
+		mode = 0755
+	}
+	return fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
+		var wasRead atomic.Bool
+		data, _ := EncodeVector(value)
+		return &fskit.FuncFile{
+			Node: fskit.Entry(name, mode, -1, data),
+			ReadFunc: func(n *fskit.Node) error {
+				wasRead.Store(true)
+				if getter != nil {
+					// shortcut: the read path drops EncodeVector's error, so a
+					// getter entry with an embedded NUL reads as an empty file,
+					// upgrade if a getter can hold raw bytes.
+					b, _ := EncodeVector(getter())
+					fskit.SetData(n, b)
+				}
+				return nil
+			},
+			CloseFunc: func(n *fskit.Node) error {
+				if setter != nil && !wasRead.Load() {
+					return setter(DecodeVector(n.Data()))
+				}
+				return nil
+			},
+		}, nil
+	})
+}
+
 func ControlFile(cmd *cli.Command) fs.FS {
 	return fskit.OpenFunc(func(ctx context.Context, name string) (fs.File, error) {
 		return &fskit.FuncFile{
