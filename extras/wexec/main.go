@@ -51,13 +51,14 @@ func main() {
 	}
 	pid := strings.TrimSpace(string(pidRaw))
 
-	debug("writing cmd")
-	if err := appendFile(fmt.Sprintf("/task/%s/cmd", pid), []byte(strings.Join(args, " "))); err != nil {
+	// wexec is a tinygo guest (stdlib only), so it inlines the NUL vector encoding.
+	debug("writing argv")
+	if err := appendFile(fmt.Sprintf("/task/%s/argv", pid), []byte(strings.Join(args, "\x00")+"\x00")); err != nil {
 		log.Fatal(err)
 	}
 
 	debug("writing env")
-	env := strings.Join(append(os.Environ(), ""), "\n")
+	env := strings.Join(os.Environ(), "\x00") + "\x00"
 	if err := appendFile(fmt.Sprintf("/task/%s/env", pid), []byte(env)); err != nil {
 		log.Fatal(err)
 	}

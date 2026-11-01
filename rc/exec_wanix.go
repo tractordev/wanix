@@ -58,10 +58,10 @@ func runExternalCommand(ctx context.Context, hc interp.HandlerContext, path stri
 	taskPath := filepath.Join("#task", taskID)
 
 	// todo: these should be os.WriteFile but truncating synthetic files isnt allowed yet
-	if err := AppendFile(filepath.Join(taskPath, "cmd"), []byte(joinTaskArgs(argv))); err != nil {
+	if err := AppendFile(filepath.Join(taskPath, "argv"), encodeVector(argv)); err != nil {
 		return 1, err
 	}
-	if err := AppendFile(filepath.Join(taskPath, "env"), []byte(joinTaskEnv(hc))); err != nil {
+	if err := AppendFile(filepath.Join(taskPath, "env"), encodeVector(exportedEnvPairs(hc.Env))); err != nil {
 		return 1, err
 	}
 	if err := AppendFile(filepath.Join(taskPath, "dir"), []byte(hc.Dir)); err != nil {
@@ -163,28 +163,6 @@ func waitExitCode(ctx context.Context, path string) (int, error) {
 			return code, nil
 		}
 	}
-}
-
-func joinTaskEnv(hc interp.HandlerContext) string {
-	return strings.Join(append(exportedEnvPairs(hc.Env), ""), "\n")
-}
-
-func joinTaskArgs(args []string) string {
-	quoted := make([]string, len(args))
-	for i, arg := range args {
-		quoted[i] = quoteArg(arg)
-	}
-	return strings.Join(quoted, " ")
-}
-
-func quoteArg(in string) string {
-	if in == "" {
-		return "''"
-	}
-	if !strings.ContainsAny(in, " \t\n'\"\\") {
-		return in
-	}
-	return "'" + strings.ReplaceAll(in, "'", `'"'"'`) + "'"
 }
 
 func AppendFile(path string, data []byte) error {
