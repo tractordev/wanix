@@ -22,7 +22,7 @@ export class TaskElement extends WanixElement {
         this.type = this.getAttribute("type") || "auto";
         this.role = this.getAttribute("role");
         this.cmd = this.getAttribute("cmd");
-        this.env = spaceToNewline(this.getAttribute("env"));
+        this.env = parseEnv(this.getAttribute("env"));
         this.stdout = this.getAttribute("stdout");
         this.stderr = this.getAttribute("stderr");
         this.stdin = this.getAttribute("stdin");
@@ -49,8 +49,8 @@ export class TaskElement extends WanixElement {
         this.taskRoot = this._kernel.openHandle(this.rid);
 
         await this._kernel.root.writeFile([this.path, "cmd"].join("/"), this.cmd);
-        if (this.env) {
-            await this._kernel.root.writeFile([this.path, "env"].join("/"), this.env);
+        if (this.env && this.env.length) {
+            await this._kernel.root.writeFile([this.path, "env"].join("/"), this.env.join("\0") + "\0");
         }
         if (this.wd) {
             await this._kernel.root.writeFile([this.path, "dir"].join("/"), this.wd);
@@ -101,7 +101,7 @@ if (typeof window !== "undefined") {
     customElements.define("wanix-task", TaskElement);
 }
 
-function spaceToNewline(input) {
+function parseEnv(input) {
     if (!input) return null;
     const tokens = [];
     let current = "";
@@ -110,7 +110,7 @@ function spaceToNewline(input) {
     for (const char of input) {
         if (char === "'") {
             inQuotes = !inQuotes;
-        } else if (char === " " && !inQuotes) {
+        } else if (/\s/.test(char) && !inQuotes) {
             if (current) {
                 tokens.push(current);
                 current = "";
@@ -121,5 +121,5 @@ function spaceToNewline(input) {
     }
     if (current) tokens.push(current);
 
-    return tokens.join("\n");
+    return tokens;
 }

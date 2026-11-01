@@ -16,6 +16,13 @@ import {
 
 const TASKNS = "#task";
 
+function splitVector(text) {
+    if (!text) return [];
+    const parts = text.split("\0");
+    if (parts[parts.length - 1] === "") parts.pop();
+    return parts;
+}
+
 self.onmessage = async (e) => {
     if (e.data.worker) {
         console.log("wasi worker started");
@@ -29,8 +36,8 @@ self.onmessage = async (e) => {
 async function initializeSyncWorker(e) {
     const fs = new WanixHandle(e.data.worker.port);
     const tid = e.data.worker.tid;
-    const env = (await fs.readText(`${TASKNS}/${tid}/env`)).trim().split("\n").filter(line => line.includes("="));
-    const args = (await fs.readText(`${TASKNS}/${tid}/cmd`)).trim().split(" ");
+    const env = splitVector(await fs.readText(`${TASKNS}/${tid}/env`)).filter(line => line.includes("="));
+    const args = splitVector(await fs.readText(`${TASKNS}/${tid}/argv`));
     const bin = await fs.readFile(args[0]);
     const buffer = new SharedArrayBuffer(16384);
     const call = new CallBuffer(buffer);

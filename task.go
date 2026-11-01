@@ -2,6 +2,7 @@ package wanix
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -167,6 +168,10 @@ func (r *Task) Arg(idx int) string {
 	return r.args[idx]
 }
 
+func (r *Task) Args() []string {
+	return r.args
+}
+
 func (r *Task) Env() []string {
 	return r.env
 }
@@ -279,10 +284,18 @@ func (r *Task) taskMap() fskit.MapFS {
 		}),
 		"id":   misc.FieldFile(r.ID()),
 		"kind": misc.FieldFile(r.kind),
-		"args": misc.FieldFile(strings.Join(r.args, "\n")),
+		"argv": misc.VectorFile(func() []string { return r.args }, func(v []string) error {
+			r.args = v
+			r.cmd = misc.JoinArgs(v)
+			return nil
+		}),
 		"cmd": misc.FieldFile(r.cmd, func(in []byte) error {
 			if len(in) > 0 {
-				r.cmd = strings.TrimSpace(string(in))
+				cmd := strings.TrimSpace(string(in))
+				if strings.ContainsRune(cmd, '\x00') {
+					return errors.New("embedded NUL in cmd")
+				}
+				r.cmd = cmd
 				args, err := shlex.Split(r.cmd, true)
 				if err != nil {
 					return err
@@ -304,10 +317,8 @@ func (r *Task) taskMap() fskit.MapFS {
 			}
 			return nil
 		}),
-		"env": misc.FieldFile(strings.Join(r.env, "\n"), func(in []byte) error {
-			if len(in) > 0 {
-				r.env = strings.Split(strings.TrimSpace(string(in)), "\n")
-			}
+		"env": misc.VectorFile(func() []string { return r.env }, func(v []string) error {
+			r.env = v
 			return nil
 		}),
 		"dir": misc.FieldFile(r.dir, func(in []byte) error {

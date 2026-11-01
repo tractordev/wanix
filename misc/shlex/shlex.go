@@ -88,8 +88,8 @@ func (l *Lexer) SetTokenizer(t Tokenizer) {
 func (l *Lexer) Split() ([]string, error) {
 	result := make([]string, 0)
 	for {
-		token, err := l.readToken()
-		if token != "" {
+		token, quoted, err := l.readToken()
+		if token != "" || (l.posix && quoted) {
 			result = append(result, token)
 		}
 
@@ -102,7 +102,7 @@ func (l *Lexer) Split() ([]string, error) {
 	return result, nil
 }
 
-func (l *Lexer) readToken() (string, error) {
+func (l *Lexer) readToken() (string, bool, error) {
 	t := l.tokenizer
 	token := ""
 	quoted := false
@@ -113,11 +113,11 @@ scanning:
 		next, _, err := l.reader.ReadRune()
 		if err != nil {
 			if t.IsQuote(state) {
-				return token, ErrNoClosing
+				return token, quoted, ErrNoClosing
 			} else if t.IsEscape(state) {
-				return token, ErrNoEscaped
+				return token, quoted, ErrNoEscaped
 			}
-			return token, err
+			return token, quoted, err
 		}
 
 		switch {
@@ -189,5 +189,5 @@ scanning:
 			}
 		}
 	}
-	return token, nil
+	return token, quoted, nil
 }

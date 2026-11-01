@@ -55,9 +55,9 @@ export class VMElement extends WanixElement {
 
         this.task.type = "gojs";
         if (this.hasAttribute("append")) {
-            this.task.env = `VM_APPEND=${this.getAttribute("append")}\n`;
+            this.task.env = [`VM_APPEND=${this.getAttribute("append")}`];
         } else {
-            this.task.env = "";
+            this.task.env = [];
         }
         this.task.cmd = `#vm/${this.type}/${this.type}-vm.wasm ${args.join(" ")}`;
     }
@@ -103,7 +103,7 @@ export class VMElement extends WanixElement {
         this.task._taskpath = this._taskpath;
         this.task._termpath = this._termpath;
         this.task.ns = this.ns;
-        this.task.env += `vm=${this.rid}\n`;
+        this.task.env.push(`vm=${this.rid}`);
         await this.task.allocate(this._childBinds());
 
         if (this._term) {

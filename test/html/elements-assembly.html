@@ -48,6 +48,9 @@
     </wanix-namespace>
     <wanix-term id="for-term" for="ns-for" style="height:40px"></wanix-term>
 
+    <!-- 7. env attribute becomes a NUL vector -->
+    <wanix-task id="env-task" wasm="../../dist/wanix.debug.wasm" cmd="true" env="A=1 B='x y'"></wanix-task>
+
     <script type="module">
         const logEl = document.getElementById("log");
         function log(msg) {
@@ -186,6 +189,15 @@
             // for-term has no path and no child task. This will fail!
             // Fix: set path on for-term in HTML, or resolve from for-target's tasks.
             log("ok: for= attribute");
+        }
+
+        // 7. env attribute is written as a NUL vector
+        {
+            const task = document.getElementById("env-task");
+            await waitReady(task);
+            const env = await task.root.readText([task.path, "env"].join("/"));
+            assert(env === "A=1\0B=x y\0", `env vector: ${JSON.stringify(env)}`);
+            log("ok: task env NUL vector");
         }
 
         log("ALL PASSED");

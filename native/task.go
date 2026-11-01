@@ -32,7 +32,7 @@ func (d *ExecDriver) Check(t *wanix.Task) bool {
 }
 
 func (d *ExecDriver) Start(t *wanix.Task) error {
-	args := splitCmd(t.Cmd())
+	args := t.Args()
 	if len(args) == 0 || args[0] == "" {
 		return fmt.Errorf("task cmd is empty")
 	}
@@ -110,19 +110,4 @@ func (d *ExecDriver) waitAndRecordExit(t *wanix.Task, cmd *exec.Cmd) {
 	}
 	_, _ = fs.Write(f, []byte(strconv.Itoa(code)))
 	_ = f.Close()
-}
-
-// splitCmd mirrors wanix.Task.Arg (space-separated) but drops empty tokens so
-// multiple spaces do not become bogus argv entries.
-func splitCmd(cmd string) []string {
-	if strings.TrimSpace(cmd) == "" {
-		return nil
-	}
-	var out []string
-	for _, p := range strings.Split(cmd, " ") {
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
 }

@@ -129,13 +129,15 @@ a task driver. Tasks run in their own namespace, by default inheriting the curre
 | `type` | Task driver: `auto`, `gojs`, `wasi`, `js`, etc. Default: `auto`. |
 | `role` | Semantic role. Use `shell` for workbench shell templates. |
 | `id` / `alias` | Optional name for referencing the task at `#task/<id>/…`. |
-| `env` | Environment variables, space-separated `KEY=VALUE` pairs (use quotes for values with spaces). |
+| `env` | Environment variables, whitespace-separated `KEY=VALUE` pairs (single-quote values containing spaces or newlines). |
 | `wd` | Working directory within the task namespace. |
 | `fsys` | Base filesystem path for the task namespace. |
 | `stdin` / `stdout` / `stderr` | Namespace paths for I/O redirection. |
 | `term` | Allocate a terminal device for this task. |
 | `start` | Start the task automatically when the system is ready. |
 | `for` | ID of a `<wanix-namespace>` to attach to (instead of being a direct child). |
+
+`#task/<id>/argv` and `#task/<id>/env` are NUL-terminated vectors; `cmd` is the shell-quoted form that parses into `argv`.
 
 Terminal path after allocation: `#task/<id>/term` (or `#task/<rid>/term` without alias).
 

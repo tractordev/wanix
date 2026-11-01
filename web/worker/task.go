@@ -3,7 +3,6 @@
 package worker
 
 import (
-	"strings"
 	"syscall/js"
 
 	"tractor.dev/wanix"
@@ -22,6 +21,6 @@ func StartTaskWorker(svc *Device, t *wanix.Task, blobURL string) error {
 	if err != nil {
 		return err
 	}
-	args := append([]string{blobURL}, strings.Split(t.Cmd(), " ")...)
+	args := append([]string{blobURL}, t.Args()...)
 	return w.Start(args...)
 }
