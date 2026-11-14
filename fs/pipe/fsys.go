@@ -3,6 +3,7 @@ package pipe
 import (
 	"context"
 	iofs "io/fs"
+	"time"
 
 	"tractor.dev/wanix/fs"
 	"tractor.dev/wanix/fs/fskit"
@@ -40,9 +41,24 @@ func NewFS(block bool) (iofs.FS, *PortFile, *PortFile) {
 
 var _ fs.FS = (*PipeFS)(nil)
 var _ fs.OpenContextFS = (*PipeFS)(nil)
+var _ fs.OpenFileContextFS = (*PipeFS)(nil)
+var _ fs.ChtimesFS = (*PipeFS)(nil)
 
 func (p *PipeFS) Open(name string) (iofs.File, error) {
 	return p.OpenContext(context.Background(), name)
+}
+
+// OpenFileContext opens an end of the pipe whatever the flags: creating,
+// truncating and appending mean nothing for a pipe, as for a Unix FIFO.
+// Without it, the namespace's own handling of those flags fails on a pipe.
+func (p *PipeFS) OpenFileContext(ctx context.Context, name string, flag int, perm fs.FileMode) (fs.File, error) {
+	return p.OpenContext(ctx, name)
+}
+
+// Chtimes does nothing: a pipe keeps no times. Opening with truncation
+// (shell ">") sets them, and without this fails.
+func (p *PipeFS) Chtimes(name string, atime time.Time, mtime time.Time) error {
+	return nil
 }
 
 func (p *PipeFS) OpenContext(ctx context.Context, name string) (iofs.File, error) {

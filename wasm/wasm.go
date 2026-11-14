@@ -55,7 +55,6 @@ func main() {
 		{"#term", term.New(root)},
 		{"#web", web.New(root)},
 		{"#vm", vm.New(root)},
-		{"#pipe", &pipe.Allocator{}},
 		{"#signal", &signal.Allocator{}},
 		// {"#ramfs", &memfs.Allocator{}},
 		{"#js", jsfs.NewFS(js.Global())},
@@ -64,6 +63,17 @@ func main() {
 		if err := root.NS().Bind(b.fsys, ".", b.dst); err != nil {
 			log.Fatal(err)
 		}
+	}
+
+	// A fresh pipe for each bind of #pipe/new. (Bound directly, a
+	// pipe.Allocator is allocated once, when it is bound here, so every
+	// later bind of #pipe got that same pipe.)
+	pipes := allocfs.New(func(ctx context.Context, id string, opts map[string]string) (fs.FS, error) {
+		fsys, _, _ := pipe.NewFS(true)
+		return fsys, nil
+	})
+	if err := root.NS().Bind(pipes, ".", "#pipe"); err != nil {
+		log.Fatal(err)
 	}
 
 	ramfs := allocfs.New(func(ctx context.Context, id string, opts map[string]string) (fs.FS, error) {

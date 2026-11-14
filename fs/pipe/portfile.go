@@ -43,3 +43,8 @@ func (pf *PortFile) ReadAt(b []byte, off int64) (int, error) {
 func (pf *PortFile) Write(b []byte) (int, error) { return pf.Port.Write(b) }
 
 func (pf *PortFile) WriteAt(b []byte, off int64) (int, error) { return pf.Write(b) }
+
+// Truncate is a no-op: a pipe holds nothing to discard. Without it, opening
+// with truncation (shell ">") falls back to reading the file to its end
+// first, which on a pipe blocks forever.
+func (pf *PortFile) Truncate(size int64) error { return nil }
