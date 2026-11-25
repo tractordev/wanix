@@ -5,7 +5,6 @@ package main
 import (
 	"embed"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -199,14 +198,36 @@ func main() {
 		return nil
 	}))
 
+	// Console output arrives as one event per write in the guest, often a
+	// single byte (busybox's line editing redraws a character at a time), and
+	// each write to stdout costs over a millisecond. So the listener only
+	// queues the bytes, in order, and one goroutine writes out whatever has
+	// built up since its last write.
+	var consoleMu sync.Mutex
+	var consolePending []byte
+	consoleWake := make(chan struct{}, 1)
+	go func() {
+		for range consoleWake {
+			consoleMu.Lock()
+			buf := consolePending
+			consolePending = nil
+			consoleMu.Unlock()
+			if len(buf) > 0 {
+				os.Stdout.Write(buf)
+			}
+		}
+	}()
 	vm.Call("add_listener", "virtio-console0-output-bytes", js.FuncOf(func(this js.Value, args []js.Value) any {
-		// ugh, these events are still one byte at a time?!?
-		go func() {
-			jsBuf := args[0]
-			buf := make([]byte, jsBuf.Get("byteLength").Int())
-			js.CopyBytesToGo(buf, jsBuf)
-			fmt.Fprint(os.Stdout, string(buf))
-		}()
+		jsBuf := args[0]
+		buf := make([]byte, jsBuf.Get("byteLength").Int())
+		js.CopyBytesToGo(buf, jsBuf)
+		consoleMu.Lock()
+		consolePending = append(consolePending, buf...)
+		consoleMu.Unlock()
+		select {
+		case consoleWake <- struct{}{}:
+		default:
+		}
 		return nil
 	}))
 
