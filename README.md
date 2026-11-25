@@ -213,7 +213,7 @@ These `#` paths are provided by the kernel and can be bound into your namespace:
 | `#term` | Terminal devices. |
 | `#vm` | Virtual machine control. |
 | `#ramfs` | In-memory filesystem (cloned per bind). |
-| `#pipe` | Pipe pairs (cloned per bind). |
+| `#pipe` | Pipe pairs (bind `#pipe/new` for a fresh pair). |
 | `#signal` | Signal devices (cloned per bind). |
 | `#web` | Browser integration — OPFS (`#web/opfs`), DOM, workers, caches, etc. |
 | `#wanix` | Internal Wanix devices. |
