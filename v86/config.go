@@ -71,7 +71,11 @@ func parseFlags(args []string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmdline := "console=hvc0 loglevel=3 init=/bin/init"
+	// noirqdebug: v86's virtio console raises an interrupt for nearly every
+	// byte of output, most with no new work, and after 100,000 of those Linux
+	// disables the line ("nobody cared"), leaving the console to
+	// polling and keyboard echo slow for the rest of the session.
+	cmdline := "console=hvc0 loglevel=3 noirqdebug init=/bin/init"
 	if append != "" {
 		cmdline += " " + append
 	}
